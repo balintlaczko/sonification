@@ -231,4 +231,64 @@ for image in images:
     elif stage == "st":
         image2sines(os.path.join(target_folder, image), os.path.join(target_folder, outname),
                     st_steps * 3, num_sines=64, lowest_freq=110, harmonic=True, normalize=True, time_dim=timedim)
+
+
 # %%
+#########################################################################################
+#################################### New proto stuff ####################################
+
+
+# %%
+# attempt to work with RGB images by removing the legend overlay
+# (that prevents the stretch contrast algorithm to work)
+
+rgb_img_path = r"E:\Sonification\210223_tiff images\Fed\20210223_BST_MIP_ESF1_RGB.tif"
+img_matrix = cv2.imread(rgb_img_path)
+
+# %%
+# view it
+
+view(img_matrix)
+
+# %%
+# histogram of cell values
+
+from matplotlib import pyplot as plt 
+import numpy as np  
+
+plt.hist(img_matrix.flatten(), bins = np.arange(256)) 
+plt.title("histogram") 
+plt.show()
+
+# %%
+# erase fully white cells
+
+white_cell_indices = np.where(np.all(img_matrix == (255, 255, 255), axis=-1))
+print(np.transpose(white_cell_indices))
+
+# %%
+# get bounding box of affected area and view it
+
+y, x = white_cell_indices
+min_y, max_y = np.min(y), np.max(y)
+min_x, max_x = np.min(x), np.max(x)
+print(min_y, max_y, min_x, max_x)
+affected_area = img_matrix[min_y:max_y+1, min_x:max_x+1]
+view(affected_area)
+
+# %%
+# removing legend overlay
+
+img_matrix_nolegend = img_matrix.copy()
+img_matrix_nolegend[y, x] = 0
+
+# %%
+# now we can stretch contrast
+
+img_matrix_stretched = stretch_contrast(img_matrix_nolegend, out_max=255, in_percentile=99.9)
+view(img_matrix_stretched, swap_rb=False, scale=0.5, text="autophagy")
+
+
+# %%
+# TODO:
+# - integrate RGB processing into existing pipeline, be able to generate videos en mass
