@@ -139,15 +139,13 @@ for i, dset in enumerate(datasets):
 
 # %%
 # make motiongrams for each video
-videos = [video for video in os.listdir(
-    target_folder) if video.endswith(".avi")]
+videos = [video for video in sorted(os.listdir(target_folder)) if video.endswith(".avi")]
 for video in videos:
     musicalgestures.MgVideo(os.path.join(target_folder, video)).motiongrams()
 
 # %%
 # or make videograms for each video
-videos = [video for video in os.listdir(
-    target_folder) if video.endswith(".avi")]
+videos = [video for video in sorted(os.listdir(target_folder)) if video.endswith(".avi")]
 for video in videos:
     musicalgestures.MgVideo(os.path.join(target_folder, video)).videograms()
 
@@ -156,8 +154,7 @@ for video in videos:
 st_steps = 9
 rf_steps = 16
 
-images = [image for image in os.listdir(
-    target_folder) if image.endswith("png")]
+images = [image for image in sorted(os.listdir(target_folder)) if image.endswith("png")]
 
 for image in images:
     fname_parts = os.path.splitext(image)[0].split("_")
@@ -172,8 +169,7 @@ for image in images:
                     st_steps * 3, num_sines=16, lowest_freq=110, harmonic=True, normalize=False, time_dim=timedim)
 
 # %%
-videos = [video for video in os.listdir(
-    target_folder) if video.endswith(".avi")]
+videos = [video for video in sorted(os.listdir(target_folder)) if video.endswith(".avi")]
 num_tiles_w = 8
 num_tiles_h = 8
 
@@ -208,8 +204,7 @@ for video in videos:
 testy = np.load(r"C:\Users\Balint Laczko\Desktop\cell_videos\esf_gfp_rf_1.npy")
 
 # %%
-tile_files = [file for file in os.listdir(
-    target_folder) if file.endswith(".npy")]
+tile_files = [file for file in sorted(os.listdir(target_folder)) if file.endswith(".npy")]
 
 for tile_file in tile_files[:1]:
     tiles = np.load(os.path.join(target_folder, tile_file))
@@ -223,8 +218,7 @@ for tile_file in tile_files[:1]:
 st_steps = 9
 rf_steps = 16
 
-images = [image for image in os.listdir(
-    target_folder) if image.endswith("_img.png")]
+images = [image for image in sorted(os.listdir(target_folder)) if image.endswith("_img.png")]
 
 for image in images:
     fname_parts = os.path.splitext(image)[0].split("_")[:-1]

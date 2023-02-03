@@ -24,7 +24,7 @@ def folder2dataset(folder: str, image_extension: str = ".tif") -> pd.DataFrame:
         pd.DataFrame: The dataset of the images.
     """
     # list all files in the folder, filter for files that have the same extension as `image:extension`
-    images = [file for file in os.listdir(folder) if os.path.splitext(file)[
+    images = [file for file in sorted(os.listdir(folder)) if os.path.splitext(file)[
         1].lower() == image_extension]
     # prefix all file names in the list with the folder path to create full paths
     images_abspath = [os.path.join(folder, image) for image in images]
