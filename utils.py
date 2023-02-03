@@ -1,3 +1,6 @@
+# %%
+# imports 
+
 import scipy.io.wavfile as wav
 from scipy import interpolate
 import os
@@ -5,11 +8,13 @@ import pandas as pd
 import numpy as np
 import cv2
 import librosa
-# import pyo
 from numba import jit, njit, prange
 from musicalgestures._utils import roundup, generate_outfilename, MgProgressbar
 from typing import List
 
+
+# %%
+# function: folder2dataset
 
 def folder2dataset(folder: str, image_extension: str = ".tif") -> pd.DataFrame:
     """
@@ -31,6 +36,9 @@ def folder2dataset(folder: str, image_extension: str = ".tif") -> pd.DataFrame:
     # pass the list to `images2dataset` that will return a pd.DataFrame
     return images2dataset(images_abspath)
 
+
+# %%
+# function: image2dataset
 
 def images2dataset(images: List[str]) -> pd.DataFrame:
     """
@@ -105,6 +113,9 @@ def images2dataset(images: List[str]) -> pd.DataFrame:
         df = pd.concat([df, new_sample_df], ignore_index=True)
     return df
 
+# %%
+# function: group_by_colorspace
+
 
 def group_by_colorspace(images: List[str]) -> dict:
     """
@@ -146,6 +157,33 @@ def group_by_colorspace(images: List[str]) -> dict:
         "rgb": images_rgb
     }
 
+
+# %%
+# function: view
+
+def view(matrix: np.ndarray, text: str = None, swap_rb: bool = True) -> None:
+    """
+    Quickly view a matrix.
+
+    Args:
+        matrix (np.ndarray): The matrix to view.
+        test (str, optional): The text to display at the bottom left corner as an overlay.
+        swap_rb (bool, optional): Whether to swap red and blue channels before displaying the matrix. Defaults to True.
+    """
+    # opencv needs bgr order, so swap it if input matrix is colored
+    to_show = matrix.copy()
+    if swap_rb and len(to_show.shape) > 2:
+        to_show[:, :, [0, -1]] = to_show[:, :, [-1, 0]]
+    if text != None:
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(
+            to_show, text, (12, to_show.shape[1] -12), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.imshow("view", to_show.astype(np.uint8))
+    cv2.waitKey(0)
+
+
+# %%
+# function: stretch_contrast
 
 def stretch_contrast(
     matrix: np.ndarray,
@@ -204,6 +242,9 @@ def stretch_contrast(
     else:
         return (matrix - in_min)*(((out_max-out_min)/(in_max-in_min))+out_min)
 
+
+# %%
+# class: ImageSequence
 
 class ImageSequence():
     """
@@ -491,6 +532,9 @@ class ImageSequence():
         self.sequence.to_csv(target_name)
 
 
+# %%
+# class: Sinetable
+
 class Sinetable():
     """
     A wavetable oscillator that can generate arbitrary length sine buffers or wav files, with a chosen 
@@ -621,6 +665,9 @@ class Sinetable():
         return target_name
 
 
+# %%
+# function: image2sines
+
 def image2sines(
     image_path: str,
     target_name: str,
@@ -710,6 +757,9 @@ def image2sines(
     wav.write(target_name, sr, all_rows.astype(np.float32))
 
 
+# %%
+# function: generate_harmonic_series
+
 @jit(nopython=True)
 def generate_harmonic_series(num_freqs, base_freq):
     out_freqs = np.zeros(num_freqs)
@@ -717,6 +767,9 @@ def generate_harmonic_series(num_freqs, base_freq):
         out_freqs[i] = base_freq * (i+1)
     return out_freqs
 
+
+# %%
+# function: fill_indices
 
 @jit(nopython=True)
 def fill_indices(
@@ -750,6 +803,9 @@ def fill_indices(
     # return indices buffer
     return output
 
+
+# %%
+# function: generate_sine
 
 @jit(nopython=True)
 def generate_sine(
@@ -792,6 +848,9 @@ def generate_sine(
     return buffer * amp * window_buf
 
 
+# %%
+# function: generate_sine_no_window
+
 @jit(nopython=True)
 def generate_sine_no_window(
     sr: int = 44100,
@@ -830,13 +889,18 @@ def generate_sine_no_window(
     return buffer * amp
 
 
-# apply curve
+# %%
+# function: apply_curve
+
 @jit(nopython=True)
 def apply_curve(row, curve):
     curve_x = np.arange(0, len(curve))
     interp_points = scale_array(np.arange(0, len(row)), 0, len(curve)-1)
     return row * np.interp(interp_points, curve_x, curve)
 
+
+# %%
+# function: generate_row
 
 @jit(nopython=True)
 def generate_row(
@@ -897,6 +961,9 @@ def generate_row(
     return output_row
 
 
+# %%
+# function: generate_row_fast
+
 @jit(nopython=True)
 def generate_row_fast(
     row_samples: np.ndarray,
@@ -913,7 +980,9 @@ def generate_row_fast(
     return apply_curve(sine_buffer, row_amp)
 
 
-# generate rows / parallel version
+# %%
+# function: generate_rows_fast
+
 @njit(parallel=True)
 def generate_rows_fast(
     num_rows: int,
@@ -941,7 +1010,9 @@ def generate_rows_fast(
     return output_rows
 
 
-# generate rows / parallel version
+# %%
+# function: generate_rows
+
 @njit(parallel=True)
 def generate_rows(
     num_rows: int,
@@ -992,6 +1063,9 @@ def generate_rows(
     return output_rows
 
 
+# %%
+# function: overlap_add
+
 @jit(nopython=True)
 def overlap_add(a1: np.ndarray, a2: np.ndarray, insertion_index: int) -> np.ndarray:
     """
@@ -1030,6 +1104,9 @@ def overlap_add(a1: np.ndarray, a2: np.ndarray, insertion_index: int) -> np.ndar
         return np.concatenate((a1, a2))
 
 
+# %%
+# function: scale_array
+
 @jit(nopython=True)
 def scale_array(
     array: np.ndarray,
@@ -1057,6 +1134,9 @@ def scale_array(
         b = out_low - m * minimum
         return m * array + b
 
+
+# %%
+# function: scale_array_custom
 
 @jit(nopython=True)
 def scale_array_custom(
