@@ -161,19 +161,24 @@ def group_by_colorspace(images: List[str]) -> dict:
 # %%
 # function: view
 
-def view(matrix: np.ndarray, text: str = None, swap_rb: bool = True) -> None:
+def view(matrix: np.ndarray, scale: float = 1.0, text: str = None, swap_rb: bool = True) -> None:
     """
     Quickly view a matrix.
 
     Args:
         matrix (np.ndarray): The matrix to view.
-        test (str, optional): The text to display at the bottom left corner as an overlay.
+        scale (float, optional): Scale the matrix (image) axes. 0.5 corresponds to halving the width and height, 2 corresponds to a 2x zoom. Defaults to 1.
+        text (str, optional): The text to display at the bottom left corner as an overlay.
         swap_rb (bool, optional): Whether to swap red and blue channels before displaying the matrix. Defaults to True.
     """
     # opencv needs bgr order, so swap it if input matrix is colored
     to_show = matrix.copy()
     if swap_rb and len(to_show.shape) > 2:
         to_show[:, :, [0, -1]] = to_show[:, :, [-1, 0]]
+    if scale != 1:
+        h, w = to_show.shape[:2]
+        h_scaled, w_scaled = [int(np.ceil(ax * scale)) for ax in [h, w]]
+        to_show = cv2.resize(to_show, (h_scaled, w_scaled))
     if text != None:
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(
