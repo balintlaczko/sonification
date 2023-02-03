@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import cv2
 import librosa
-import pyo
+# import pyo
 from numba import jit, njit, prange
 from musicalgestures._utils import roundup, generate_outfilename, MgProgressbar
 from typing import List
@@ -1086,78 +1086,3 @@ def scale_array_custom(
         return ((array - in_low) * (out_high - out_low)) / (in_high - in_low) + out_low
 
 
-def image2spectrum(
-    image_path: str,
-    target_name: str,
-    out_length: float = 4.0,
-    fft_size: int = 1024,
-    overlap: int = 4,
-    sr: int = 44100,
-    time_dim: str = "width",
-    overwrite: bool = False,
-) -> None:
-    """
-    Sonify an image as an FFT spectrum using pyo.IFFTMatrix and write the result to a file. The function will read an image,
-    scale its height or width (depending on `time_dim`) to the number of FFT bins (`fft_size` / 2) and then perform inverse
-    FFT to synthesize the image as a spectrum of frequencies.
-
-    Args:
-        image_path (str): The path to the image to sonify.
-        target_name (str): The target name of the rendered wav file. Can end up being different from what was specified if `overwrite=False`.
-        out_length (float, optional): The target length of the output wav file in seconds. Defaults to 4.0.
-        fft_size (int, optional): The FFT size in samples. Defaults to 1024.
-        overlap (int, optional): The amount of temporal overlaps to make. Affects temporal resolution of the result. Defaults to 4.
-        sr (int, optional): The sample rate to use. Defaults to 44100.
-        time_dim (str, optional): The dimension of the input image to interpret as the time dimension. Can be "width" or "height". If it is "width", then the width of the image will be mapped to `out_length` and the height to `fft_size` / 2. Defaults to "width".
-        overwrite (bool, optional): If False, the method will avoid overwriting existing files by incrementing `target_name`. Defaults to False.
-    """
-    # get image
-    image_matrix = cv2.imread(image_path)
-    # if it's rgb, convert to grayscale
-    if len(image_matrix.shape) > 2:
-        image_matrix = cv2.cvtColor(image_matrix, cv2.COLOR_BGR2GRAY)
-    if time_dim.lower() == "height":
-        image_matrix = np.transpose(image_matrix)
-
-    # scale height to number of bins (fft_size/2)
-    image_matrix_scaled = cv2.resize(
-        image_matrix, (image_matrix.shape[1], int(fft_size/2)))
-
-    # scale it into the range of -1...1
-    image_scaled_sn = image_matrix_scaled / 255 * 2 - 1
-
-    # convert to list of lists - necessary for pyo.NewMatrix.replace
-    image_scaled_sn_list = list(image_scaled_sn)
-    image_scaled_sn_list = [list(row) for row in image_scaled_sn_list]
-
-    # boot server in offline mode
-    s = pyo.Server(audio="offline", sr=sr).boot()
-
-    # avoid overwriting existing files if necessary
-    if not overwrite:
-        target_name = generate_outfilename(target_name)
-
-    # set up recording
-    s.recordOptions(dur=out_length, filename=target_name,
-                    fileformat=0, sampletype=1)
-
-    # create new matrix container
-    fft_matrix = pyo.NewMatrix(
-        len(image_scaled_sn_list[0]), len(image_scaled_sn_list))
-    # populate container with the image
-    fft_matrix.replace(image_scaled_sn_list)
-    # define the index that will ramp from 0 to 1 over the course of out_length
-    index = pyo.Linseg([(0, 0), (out_length, 1)]).play()
-    # define the phase of the iFFT synthesis - from pyo.IFFTMatrix docs:
-    # "Try different signals like white noise or an oscillator with a frequency slightly
-    # detuned in relation to the frequency of the FFT (sr / fftsize)."
-    phase = pyo.Sine(freq=sr/fft_size*0.999, mul=1)
-    # synthesize
-    fout = pyo.IFFTMatrix(fft_matrix, index, phase, size=fft_size,
-                          overlaps=overlap, wintype=2).mix(1).out()
-
-    # starts the recording
-    s.start()
-    # using return seems to abruptly terminate the recording process,
-    # that's why we print instead
-    print(target_name)
