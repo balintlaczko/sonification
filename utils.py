@@ -818,10 +818,10 @@ def fill_indices(
 
 
 # %%
-# function: generate_sine
+# function: generate_sine_windowed
 
 @jit(nopython=True)
-def generate_sine(
+def generate_sine_windowed(
     sr: int = 44100,
     length_s: float = 1,
     freq: float = 440,
@@ -862,10 +862,10 @@ def generate_sine(
 
 
 # %%
-# function: generate_sine_no_window
+# function: generate_sine
 
 @jit(nopython=True)
-def generate_sine_no_window(
+def generate_sine(
     sr: int = 44100,
     length_s: float = 1,
     freq: float = 440,
@@ -908,21 +908,18 @@ def generate_sine_no_window(
 @jit(nopython=True)
 def apply_curve(row, curve):
     curve_x = np.arange(0, len(curve))
-    interp_points = scale_array(np.arange(0, len(row)), 0, len(curve)-1)
+    interp_points = scale_array_auto(np.arange(0, len(row)), 0, len(curve)-1)
     return row * np.interp(interp_points, curve_x, curve)
 
 
 # %%
-# function: generate_row
+# function: generate_row_fast
 
 @jit(nopython=True)
-def generate_row(
-    num_hops: int,
-    num_cols: int,
-    hop_size_samps: int,
+def generate_row_fast(
     row_samples: np.ndarray,
     sr: int,
-    sine_length: float,
+    row_length: float,
     frequency: float,
     db_range: float
 ) -> np.ndarray:
@@ -942,53 +939,9 @@ def generate_row(
     Returns:
         np.ndarray: The generated sine buffer.
     """
-    # the indices for row_samples
-    x = np.arange(0, row_samples.shape[0])
-    # the insertion index for the overlap-add
-    insertion_index = 0
-    # translate hops to interpolated columns
-    hops_as_cols = scale_array(np.arange(num_hops), 0, num_cols-1)
-    # generate sine only once
-    sine_buffer = generate_sine_no_window(sr, sine_length, frequency, 0, 4096)
-    # for each hop,
-    for hop in range(num_hops):
-        # get linearly interpolated cell value from input
-        cell_val = np.interp(hops_as_cols[hop], x, row_samples)
-        # calculate gain
-        gain_db_scaled = cell_val * db_range - db_range
-        # generate sine buffer for hop
-        # buffer = generate_sine(
-        #     sr, sine_length, frequency, gain_db_scaled, 4096)
-        amp = 10 ** (gain_db_scaled / 20)
-        # if this is the first hop, then just add, else overlap-add
-        if hop == 0:
-            # output_row = buffer
-            output_row = sine_buffer * amp
-        else:
-            # output_row = overlap_add(output_row, buffer, insertion_index)
-            output_row = overlap_add(
-                output_row, sine_buffer * amp, insertion_index)
-        # increment insertion_index for next hop
-        insertion_index += hop_size_samps
-    # return row buffer
-    return output_row
-
-
-# %%
-# function: generate_row_fast
-
-@jit(nopython=True)
-def generate_row_fast(
-    row_samples: np.ndarray,
-    sr: int,
-    row_length: float,
-    frequency: float,
-    db_range: float
-) -> np.ndarray:
-
-    sine_buffer = generate_sine_no_window(sr, row_length, frequency, 0, 4096)
+    sine_buffer = generate_sine(sr, row_length, frequency, 0, 4096)
     # row_db = scale_array(row_samples, -db_range, 0)
-    row_db = scale_array_custom(row_samples, 0, 1, -db_range, 0)
+    row_db = scale_array(row_samples, 0, 1, -db_range, 0)
     row_amp = np.power(10, row_db / 20)
     return apply_curve(sine_buffer, row_amp)
 
@@ -1002,39 +955,6 @@ def generate_rows_parallel(
     matrix: np.ndarray,
     sr: int,
     row_length: float,
-    hz_range: np.ndarray,
-    db_range: float
-) -> np.ndarray:
-    # create container
-    output_rows = np.zeros(int(np.ceil(row_length * sr)), dtype=np.float64)
-    # for each row,
-    for row in prange(num_rows):
-        # take the row from the matrix
-        y = matrix[:, row]
-        # if row is empty, just skip
-        if np.sum(y) == 0:
-            continue
-        # otherwise generate the row
-        output_row = generate_row_fast(
-            y, sr, row_length, hz_range[row], db_range)
-        # accumulate result to output
-        output_rows += output_row
-    # return accumulated result
-    return output_rows
-
-
-# %%
-# function: generate_rows
-
-@njit(parallel=True)
-def generate_rows(
-    num_rows: int,
-    matrix: np.ndarray,
-    num_hops: int,
-    num_cols: int,
-    hop_size_samps: int,
-    sr: int,
-    sine_length: float,
     hz_range: np.ndarray,
     db_range: float
 ) -> np.ndarray:
@@ -1058,8 +978,7 @@ def generate_rows(
         np.ndarray: The buffer accumulated from all rows.
     """
     # create container
-    output_rows = np.zeros(
-        int(np.ceil(sine_length * sr) + (num_hops-1) * hop_size_samps), dtype=np.float64)
+    output_rows = np.zeros(int(np.ceil(row_length * sr)), dtype=np.float64)
     # for each row,
     for row in prange(num_rows):
         # take the row from the matrix
@@ -1068,8 +987,8 @@ def generate_rows(
         if np.sum(y) == 0:
             continue
         # otherwise generate the row
-        output_row = generate_row(
-            num_hops, num_cols, hop_size_samps, y, sr, sine_length, hz_range[row], db_range)
+        output_row = generate_row_fast(
+            y, sr, row_length, hz_range[row], db_range)
         # accumulate result to output
         output_rows += output_row
     # return accumulated result
@@ -1118,16 +1037,17 @@ def overlap_add(a1: np.ndarray, a2: np.ndarray, insertion_index: int) -> np.ndar
 
 
 # %%
-# function: scale_array
+# function: scale_array_auto
 
 @jit(nopython=True)
-def scale_array(
+def scale_array_auto(
     array: np.ndarray,
     out_low: float,
     out_high: float
 ) -> np.ndarray:
     """
-    Scales an array linearly. Optimized by Numba.
+    Scales an array linearly. The input range is automatically 
+    retrieved from the array. Optimized by Numba.
 
     Args:
         array (np.ndarray): The array to be scaled.
@@ -1149,10 +1069,10 @@ def scale_array(
 
 
 # %%
-# function: scale_array_custom
+# function: scale_array
 
 @jit(nopython=True)
-def scale_array_custom(
+def scale_array(
     array: np.ndarray,
     in_low: float,
     in_high: float,
@@ -1160,8 +1080,7 @@ def scale_array_custom(
     out_high: float
 ) -> np.ndarray:
     """
-    Scales an array linearly using a custom input range 
-    (ignoring the arrays own range). Optimized by Numba.
+    Scales an array linearly. Optimized by Numba.
 
     Args:
         array (np.ndarray): The array to be scaled.
@@ -1177,5 +1096,3 @@ def scale_array_custom(
         return np.ones_like(array, dtype=np.float64) * out_high
     else:
         return ((array - in_low) * (out_high - out_low)) / (in_high - in_low) + out_low
-
-

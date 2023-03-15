@@ -142,7 +142,7 @@ def image2sines_semi_optimized(
 
     for row in range(num_sines):
         y = image_norm[:, row]
-        output_row = generate_row(
+        output_row = generate_row_with_hops(
             num_hops, num_cols, hop_size_samps, y, sr, sine_length, hz_range, row)
         if row == 0:
             output_rows = np.zeros_like(output_row)
@@ -163,7 +163,7 @@ def generate_rows_serial(num_rows, matrix, num_hops, num_cols, hop_size_samps, s
         int(sine_length * sr + (num_hops-1) * hop_size_samps), dtype=np.float64)
     for row in range(num_rows):
         y = matrix[:, row]
-        output_row = generate_row(
+        output_row = generate_row_with_hops(
             num_hops, num_cols, hop_size_samps, y, sr, sine_length, hz_range[row])
         output_rows += output_row
     return output_rows
@@ -244,3 +244,116 @@ def image2spectrum(
     # using return seems to abruptly terminate the recording process,
     # that's why we print instead
     print(target_name)
+
+
+# function: generate_rows_with_hops
+
+@njit(parallel=True)
+def generate_rows_with_hops(
+    num_rows: int,
+    matrix: np.ndarray,
+    num_hops: int,
+    num_cols: int,
+    hop_size_samps: int,
+    sr: int,
+    sine_length: float,
+    hz_range: np.ndarray,
+    db_range: float
+) -> np.ndarray:
+    """
+    Generate sine rows from a 2D matrix. The process is parallelized, to take advantage of CPU-s with multiple cores.
+    For every row in the `matrix` (for `num_rows`) call `generate_row` in a parallel thread. Then accumulate rows
+    in an output row that is returned at the end of the process.
+
+    Args:
+        num_rows (int): Number or rows to be generated.
+        matrix (np.ndarray): The 2D matrix to generate sine rows from.
+        num_hops (int): Number of hops (the number of sines that will be generated in each row).
+        num_cols (int): Number of columns (the number of cells in one row of the matrix).
+        hop_size_samps (int): The hop size in samples.
+        sr (int): The sample rate to use.
+        sine_length (float): The length of the internal sine wave (in seconds) at each hop in each row.
+        hz_range (np.ndarray): The array of frequencies to use for generating the rows.
+        db_range (float): The decibel range to map each row to.
+
+    Returns:
+        np.ndarray: The buffer accumulated from all rows.
+    """
+    # create container
+    output_rows = np.zeros(
+        int(np.ceil(sine_length * sr) + (num_hops-1) * hop_size_samps), dtype=np.float64)
+    # for each row,
+    for row in prange(num_rows):
+        # take the row from the matrix
+        y = matrix[:, row]
+        # if row is empty, just skip
+        if np.sum(y) == 0:
+            continue
+        # otherwise generate the row
+        output_row = generate_row_with_hops(
+            num_hops, num_cols, hop_size_samps, y, sr, sine_length, hz_range[row], db_range)
+        # accumulate result to output
+        output_rows += output_row
+    # return accumulated result
+    return output_rows
+
+
+# function: generate_row_with_hops
+
+@jit(nopython=True)
+def generate_row_with_hops(
+    num_hops: int,
+    num_cols: int,
+    hop_size_samps: int,
+    row_samples: np.ndarray,
+    sr: int,
+    sine_length: float,
+    frequency: float,
+    db_range: float
+) -> np.ndarray:
+    """
+    Generate a sine "row" buffer (a sequence of overlapped sines of varying amplitudes) of a given frequency and length.
+
+    Args:
+        num_hops (int): Number of hops (the number of sines that will be generated).
+        num_cols (int): Number of columns (the number of cells in row_samples).
+        hop_size_samps (int): The hop size in samples.
+        row_samples (np.ndarray): The 1D row to synthesize as sines.
+        sr (int): The sample rate to use.
+        sine_length (float): The length of the internal sine wave (in seconds) at each hop.
+        frequency (float): The frequency of the sine wave.
+        db_range (float): The decibel range to map row_samples to.
+
+    Returns:
+        np.ndarray: The generated sine buffer.
+    """
+    # the indices for row_samples
+    x = np.arange(0, row_samples.shape[0])
+    # the insertion index for the overlap-add
+    insertion_index = 0
+    # translate hops to interpolated columns
+    hops_as_cols = scale_array(np.arange(num_hops), 0, num_cols-1)
+    # generate sine only once
+    sine_buffer = generate_sine(sr, sine_length, frequency, 0, 4096)
+    # for each hop,
+    for hop in range(num_hops):
+        # get linearly interpolated cell value from input
+        cell_val = np.interp(hops_as_cols[hop], x, row_samples)
+        # calculate gain
+        gain_db_scaled = cell_val * db_range - db_range
+        # generate sine buffer for hop
+        # buffer = generate_sine(
+        #     sr, sine_length, frequency, gain_db_scaled, 4096)
+        amp = 10 ** (gain_db_scaled / 20)
+        # if this is the first hop, then just add, else overlap-add
+        if hop == 0:
+            # output_row = buffer
+            output_row = sine_buffer * amp
+        else:
+            # output_row = overlap_add(output_row, buffer, insertion_index)
+            output_row = overlap_add(
+                output_row, sine_buffer * amp, insertion_index)
+        # increment insertion_index for next hop
+        insertion_index += hop_size_samps
+    # return row buffer
+    return output_row
