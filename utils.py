@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import cv2
 import librosa
+import platform
 from numba import jit, njit, prange
 from musicalgestures._utils import roundup, generate_outfilename, MgProgressbar
 from typing import List
@@ -183,8 +184,15 @@ def view(matrix: np.ndarray, scale: float = 1.0, text: str = None, swap_rb: bool
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(
             to_show, text, (12, to_show.shape[1] -12), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    # avoid hanging windows on Mac OS
+    if platform.system() == "Darwin":
+        cv2.startWindowThread()
     cv2.imshow("view", to_show.astype(np.uint8))
     cv2.waitKey(0)
+    # avoid hanging windows on Mac OS
+    if platform.system() == "Darwin":
+        cv2.destroyAllWindows()
+        cv2.waitKey(1)
 
 
 # %%
