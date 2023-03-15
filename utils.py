@@ -774,10 +774,24 @@ def image2sines(
 # function: generate_harmonic_series
 
 @jit(nopython=True)
-def generate_harmonic_series(num_freqs, base_freq):
+def generate_harmonic_series(num_freqs: int, base_freq: float) -> np.ndarray:
+    """
+    Generate a harmonic series of frequencies.
+
+    Args:
+        num_freqs (int): The number of frequencies to generate.
+        base_freq (float): The base frequency to use.
+
+    Returns:
+        np.ndarray: The generated harmonic series.
+    """
+    # create output buffer
     out_freqs = np.zeros(num_freqs)
+    # for each frequency,
     for i in range(num_freqs):
+        # calculate and write to output
         out_freqs[i] = base_freq * (i+1)
+    
     return out_freqs
 
 
@@ -906,17 +920,32 @@ def generate_sine(
 # function: apply_curve
 
 @jit(nopython=True)
-def apply_curve(row, curve):
+def apply_curve(row: np.ndarray, curve: np.ndarray) -> np.ndarray:
+    """
+    Apply a curve to a row of samples. The curve is scaled to the length of the row.
+
+    Args:
+        row (np.ndarray): The row of samples to apply the curve to.
+        curve (np.ndarray): The curve to apply to the row.
+
+    Returns:
+        np.ndarray: The row of samples with the curve applied.
+    """
+    # create x axis for curve
     curve_x = np.arange(0, len(curve))
-    interp_points = scale_array_auto(np.arange(0, len(row)), 0, len(curve)-1)
+    # create x axis for row
+    row_x = np.arange(0, len(row))
+    # scale row x axis to curve x axis
+    interp_points = scale_array_auto(row_x, 0, len(curve)-1)
+    # return interpolated curve applied to row
     return row * np.interp(interp_points, curve_x, curve)
 
 
 # %%
-# function: generate_row_fast
+# function: generate_row
 
 @jit(nopython=True)
-def generate_row_fast(
+def generate_row(
     row_samples: np.ndarray,
     sr: int,
     row_length: float,
@@ -939,10 +968,13 @@ def generate_row_fast(
     Returns:
         np.ndarray: The generated sine buffer.
     """
+    # generate sine buffer
     sine_buffer = generate_sine(sr, row_length, frequency, 0, 4096)
-    # row_db = scale_array(row_samples, -db_range, 0)
+    # map row_samples to decibel range
     row_db = scale_array(row_samples, 0, 1, -db_range, 0)
+    # convert db to amp
     row_amp = np.power(10, row_db / 20)
+    # apply curve to sine buffer and return
     return apply_curve(sine_buffer, row_amp)
 
 
@@ -987,7 +1019,7 @@ def generate_rows_parallel(
         if np.sum(y) == 0:
             continue
         # otherwise generate the row
-        output_row = generate_row_fast(
+        output_row = generate_row(
             y, sr, row_length, hz_range[row], db_range)
         # accumulate result to output
         output_rows += output_row
