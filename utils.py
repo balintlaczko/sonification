@@ -754,7 +754,7 @@ def image2sines(
     image_norm = np.fliplr(image_norm)
 
     # call parallelized generator function
-    output_rows = generate_rows_fast(
+    output_rows = generate_rows_parallel(
         num_sines, image_norm, sr, out_length, hz_range, db_range)
 
     # rescale after summation
@@ -994,10 +994,10 @@ def generate_row_fast(
 
 
 # %%
-# function: generate_rows_fast
+# function: generate_rows_parallel
 
 @njit(parallel=True)
-def generate_rows_fast(
+def generate_rows_parallel(
     num_rows: int,
     matrix: np.ndarray,
     sr: int,
