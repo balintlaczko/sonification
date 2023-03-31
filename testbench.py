@@ -133,6 +133,31 @@ carrier *= am_module(samples, sr, np.array([8]), np.array([0.15]))
 target_name = "/Users/balintl/Desktop/test_fm_assignment42.wav"
 wav.write(target_name, sr, carrier.astype(np.float32))
 
+# %%
+
+# test history function
+
+test_signal = np.array([1, 2, 3, 4, 5])
+test_history = history(test_signal)
+assert np.array_equal(test_history, np.array([0, 1, 2, 3, 4]))
+
+# %%
+
+# test ramp2trigger function
+
+sr = 48000
+test_ramp = phasor(sr*10, sr, np.array([2]))
+test_trigger = ramp2trigger(test_ramp)
+assert np.sum(test_trigger) == 20
+
+# %%
+
+# test ramp2slope
+
+ramp = phasor(48000 * 10, 48000, np.array([1]))
+slope = ramp2slope(ramp)
+slope
+
 
 # %%
 # flucoma test stuff
