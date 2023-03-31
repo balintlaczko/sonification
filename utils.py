@@ -1128,3 +1128,280 @@ def scale_array(
         return np.ones_like(array, dtype=np.float64) * out_high
     else:
         return ((array - in_low) * (out_high - out_low)) / (in_high - in_low) + out_low
+
+# %%
+
+# function: wrap
+
+
+@jit(nopython=True)
+def wrap(
+    x: float,
+    min: float,
+    max: float,
+) -> float:
+    """
+    Wrap a value between a minimum and maximum value.
+
+    Args:
+        x (float): The value to wrap.
+        min (float): The minimum value.
+        max (float): The maximum value.
+
+    Returns:
+        float: The wrapped value.
+    """
+    return (x - min) % (max - min) + min
+
+# %%
+
+# function: resize_interp
+
+
+@jit(nopython=True)
+def resize_interp(
+    input: np.ndarray,
+    size: int,
+) -> np.ndarray:
+    """
+    Resize an array. Uses linear interpolation.
+
+    Args:
+        input (np.ndarray): Array to resize.
+        size (int): The new size of the array.
+
+    Returns:
+        np.ndarray: The resized array.
+    """
+    # create x axis for input
+    input_x = np.arange(0, len(input))
+    # create array with sampling indices
+    output_x = scale_array_auto(np.arange(size), 0, len(input_x)-1)
+    # interpolate
+    return np.interp(output_x, input_x, input).astype(np.float64)
+
+# %%
+
+# function: phasor
+
+
+@jit(nopython=True)
+def phasor(
+    samples: int,
+    sr: int,
+    frequency: np.ndarray,
+) -> np.ndarray:
+    """
+    Generate a phasor.
+
+    Args:
+        samples (int): The number of samples to generate.
+        sr (int): The sample rate to use.
+        frequency (np.ndarray): The frequency to use. Can be a single value or an array.
+
+    Returns:
+        np.ndarray: The generated phasor.
+    """
+    # create array to hold output
+    output = np.zeros(samples, dtype=np.float64)
+    frequency_resized = np.array([0], dtype=np.float64)
+    if len(frequency) == 1:
+        frequency_resized = np.repeat(frequency[0], samples).astype(np.float64)
+    elif len(frequency) == samples:
+        frequency_resized = frequency.astype(np.float64)
+    else:
+        # resize frequency array to match number of samples (-1 because we start at 0)
+        frequency_resized = resize_interp(frequency, samples-1)
+    # for each sample after the first
+    for i in range(samples-1):
+        # calculate increment
+        increment = frequency_resized[i] / sr
+        # calculate phasor value from last sample and increment
+        output[i+1] = wrap(increment + output[i], 0, 1)
+    return output
+
+# %%
+
+# function: samples2seconds
+
+
+@jit(nopython=True)
+def samples2seconds(
+    samples: int,
+    sr: int,
+) -> float:
+    """
+    Convert samples to seconds.
+
+    Args:
+        samples (int): The number of samples.
+        sr (int): The sample rate.
+
+    Returns:
+        float: The number of seconds.
+    """
+    return samples / sr
+
+# %%
+
+# function: seconds2samples
+
+
+@jit(nopython=True)
+def seconds2samples(
+    seconds: float,
+    sr: int,
+) -> int:
+    """
+    Convert seconds to samples.
+
+    Args:
+        seconds (float): The number of seconds.
+        sr (int): The sample rate.
+
+    Returns:
+        int: The number of samples.
+    """
+    return int(seconds * sr)
+
+# %%
+
+# function: sinewave
+
+
+@jit(nopython=True)
+def sinewave(
+    samples: int,
+    sr: int,
+    frequency: np.ndarray,
+) -> np.ndarray:
+    """
+    Generate a sine wave.
+
+    Args:
+        samples (int): The number of samples to generate.
+        sr (int): The sample rate to use.
+        frequency (np.ndarray): The frequency to use. Can be a single value or an array.
+
+    Returns:
+        np.ndarray: The generated sine wave.
+    """
+    # create phasor buffer
+    phasor_buf = phasor(samples, sr, frequency)
+    # calculate sine wave and return sine buffer
+    return np.sin(2 * np.pi * phasor_buf)
+
+# %%
+
+# function: fm_synth
+
+
+def fm_synth(
+        samples: int,
+        sr: int,
+        carrier_frequency: np.ndarray,
+        modulator_frequency: np.ndarray,
+        modulator_amplitude: np.ndarray,
+) -> np.ndarray:
+    """
+    Generate a frequency modulated signal.
+
+    Args:
+        samples (int): The number of samples to generate.
+        sr (int): The sample rate to use.
+        carrier_frequency (np.ndarray): The carrier frequency to use. Can be a single value or an array.
+        modulator_frequency (np.ndarray): The modulator frequency to use. Can be a single value or an array.
+        modulator_amplitude (np.ndarray): The modulator amplitude to use. Can be a single value or an array.
+
+    Returns:
+        np.ndarray: The generated frequency modulated signal.
+    """
+    # create modulator buffer
+    modulator_buf = sinewave(samples, sr, modulator_frequency)
+    # if modulator amplitude is a single value, multiply modulator buffer by that value
+    if len(modulator_amplitude) == 1:
+        modulator_buf *= modulator_amplitude[0]
+    # if modulator amplitude is an array, resize it to match number of samples and multiply modulator buffer by it
+    else:
+        modulator_buf *= resize_interp(
+            modulator_amplitude.astype(np.float64), samples)
+    # calculate frequency modulated signal and return fm buffer
+    return sinewave(samples, sr, carrier_frequency + modulator_buf)
+
+# %%
+
+# function: am_synth
+
+
+def am_synth(
+        samples: int,
+        sr: int,
+        carrier_frequency: np.ndarray,
+        modulator_frequency: np.ndarray,
+        modulator_amplitude: np.ndarray,
+) -> np.ndarray:
+    """
+    Generate an amplitude modulated signal.
+
+    Args:
+        samples (int): The number of samples to generate.
+        sr (int): The sample rate to use.
+        carrier_frequency (np.ndarray): The carrier frequency to use. Can be a single value or an array.
+        modulator_frequency (np.ndarray): The modulator frequency to use. Can be a single value or an array.
+        modulator_amplitude (np.ndarray): The modulator amplitude to use. Can be a single value or an array.
+
+    Returns:
+        np.ndarray: The generated amplitude modulated signal.
+    """
+    # create modulator buffer
+    modulator_buf = sinewave(samples, sr, modulator_frequency)
+    mod_amp_resized = np.zeros(1, dtype=np.float64)
+    # if modulator amplitude is a single value, multiply modulator buffer by that value
+    if len(modulator_amplitude) == 1:
+        mod_amp_resized = modulator_amplitude[0]
+        modulator_buf *= modulator_amplitude[0]
+    # if modulator amplitude is an array, resize it to match number of samples and multiply modulator buffer by it
+    else:
+        mod_amp_resized = resize_interp(
+            modulator_amplitude.astype(np.float64), samples)
+        modulator_buf *= mod_amp_resized
+    # calculate amplitude modulated signal and return am buffer
+    return sinewave(samples, sr, carrier_frequency) * (modulator_buf + 1 - mod_amp_resized)
+
+# %%
+
+# function: am_module
+
+
+def am_module(
+        samples: int,
+        sr: int,
+        modulator_frequency: np.ndarray,
+        modulator_amplitude: np.ndarray,
+) -> np.ndarray:
+    """
+    Generate an amplitude modulator signal.
+
+    Args:
+        samples (int): The number of samples to generate.
+        sr (int): The sample rate to use.
+        modulator_frequency (np.ndarray): The modulator frequency to use. Can be a single value or an array.
+        modulator_amplitude (np.ndarray): The modulator amplitude to use. Can be a single value or an array.
+
+    Returns:
+        np.ndarray: The generated amplitude modulator signal.
+    """
+    # create modulator buffer
+    modulator_buf = sinewave(samples, sr, modulator_frequency)
+    mod_amp_resized = np.zeros(1, dtype=np.float64)
+    # if modulator amplitude is a single value, multiply modulator buffer by that value
+    if len(modulator_amplitude) == 1:
+        mod_amp_resized = modulator_amplitude[0]
+        modulator_buf *= modulator_amplitude[0]
+    # if modulator amplitude is an array, resize it to match number of samples and multiply modulator buffer by it
+    else:
+        mod_amp_resized = resize_interp(
+            modulator_amplitude.astype(np.float64), samples)
+        modulator_buf *= mod_amp_resized
+    # calculate amplitude modulator signal and return am buffer
+    return modulator_buf + 1 - mod_amp_resized
