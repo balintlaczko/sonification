@@ -1,5 +1,7 @@
 # %%
 # imports
+import numpy as np
+from matplotlib import pyplot as plt
 from utils import *
 import musicalgestures
 
@@ -139,13 +141,15 @@ for i, dset in enumerate(datasets):
 
 # %%
 # make motiongrams for each video
-videos = [video for video in sorted(os.listdir(target_folder)) if video.endswith(".avi")]
+videos = [video for video in sorted(
+    os.listdir(target_folder)) if video.endswith(".avi")]
 for video in videos:
     musicalgestures.MgVideo(os.path.join(target_folder, video)).motiongrams()
 
 # %%
 # or make videograms for each video
-videos = [video for video in sorted(os.listdir(target_folder)) if video.endswith(".avi")]
+videos = [video for video in sorted(
+    os.listdir(target_folder)) if video.endswith(".avi")]
 for video in videos:
     musicalgestures.MgVideo(os.path.join(target_folder, video)).videograms()
 
@@ -154,7 +158,8 @@ for video in videos:
 st_steps = 9
 rf_steps = 16
 
-images = [image for image in sorted(os.listdir(target_folder)) if image.endswith("png")]
+images = [image for image in sorted(
+    os.listdir(target_folder)) if image.endswith("png")]
 
 for image in images:
     fname_parts = os.path.splitext(image)[0].split("_")
@@ -169,7 +174,8 @@ for image in images:
                     st_steps * 3, num_sines=16, lowest_freq=110, harmonic=True, normalize=False, time_dim=timedim)
 
 # %%
-videos = [video for video in sorted(os.listdir(target_folder)) if video.endswith(".avi")]
+videos = [video for video in sorted(
+    os.listdir(target_folder)) if video.endswith(".avi")]
 num_tiles_w = 8
 num_tiles_h = 8
 
@@ -182,7 +188,7 @@ for video in videos:
     h_increment = int(height / num_tiles_h)
     tile_sums = np.zeros((num_tiles_w * num_tiles_h, num_frames))
     frame_id = 0
-    while(cap.isOpened()):
+    while (cap.isOpened()):
         ret, frame = cap.read()
         if not ret:
             break
@@ -204,11 +210,12 @@ for video in videos:
 testy = np.load(r"C:\Users\Balint Laczko\Desktop\cell_videos\esf_gfp_rf_1.npy")
 
 # %%
-tile_files = [file for file in sorted(os.listdir(target_folder)) if file.endswith(".npy")]
+tile_files = [file for file in sorted(
+    os.listdir(target_folder)) if file.endswith(".npy")]
 
 for tile_file in tile_files[:1]:
     tiles = np.load(os.path.join(target_folder, tile_file))
-    tiles_8bit = scale_array(tiles, 0, 255).astype(np.uint8)
+    tiles_8bit = scale_array_auto(tiles, 0, 255).astype(np.uint8)
     target_name = os.path.join(
         target_folder, f'{os.path.splitext(tile_file)[0]}_img.png')
     cv2.imwrite(target_name, tiles_8bit)
@@ -218,7 +225,8 @@ for tile_file in tile_files[:1]:
 st_steps = 9
 rf_steps = 16
 
-images = [image for image in sorted(os.listdir(target_folder)) if image.endswith("_img.png")]
+images = [image for image in sorted(os.listdir(
+    target_folder)) if image.endswith("_img.png")]
 
 for image in images:
     fname_parts = os.path.splitext(image)[0].split("_")[:-1]
@@ -242,8 +250,8 @@ for image in images:
 # attempt to work with RGB images by removing the legend overlay
 # (that prevents the stretch contrast algorithm to work)
 
-rgb_img_path = r"E:\Sonification\210223_tiff images\Fed\20210223_BST_MIP_ESF1_RGB.tif"
-img_matrix = cv2.imread(rgb_img_path)
+rgb_img_path = "/Volumes/T7 Touch/Sonification/210223_tiff images/Fed/20210223_BST_MIP_ESF1_GFP.tif"
+img_matrix = cv2.imread(rgb_img_path, -1)
 
 # %%
 # view it
@@ -253,12 +261,16 @@ view(img_matrix)
 # %%
 # histogram of cell values
 
-from matplotlib import pyplot as plt 
-import numpy as np  
 
-plt.hist(img_matrix.flatten(), bins = np.arange(256)) 
-plt.title("histogram") 
+plt.hist(img_matrix.flatten(), bins=np.arange(256))
+plt.title("histogram")
 plt.show()
+
+# %%
+# try stretch contrast
+test_stretched = stretch_contrast(img_matrix, out_max=255, in_percentile=99.9)
+view(test_stretched, swap_rb=False, scale=0.5, text="autophagy")
+
 
 # %%
 # erase fully white cells
@@ -285,10 +297,8 @@ img_matrix_nolegend[y, x] = 0
 # %%
 # now we can stretch contrast
 
-img_matrix_stretched = stretch_contrast(img_matrix_nolegend, out_max=255, in_percentile=99.9)
+img_matrix_stretched = stretch_contrast(
+    img_matrix_nolegend, out_max=255, in_percentile=99.9)
 view(img_matrix_stretched, swap_rb=False, scale=0.5, text="autophagy")
 
-
 # %%
-# TODO:
-# - integrate RGB processing into existing pipeline, be able to generate videos en mass
