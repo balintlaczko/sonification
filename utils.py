@@ -1405,3 +1405,25 @@ def am_module(
         modulator_buf *= mod_amp_resized
     # calculate amplitude modulator signal and return am buffer
     return modulator_buf + 1 - mod_amp_resized
+
+# %%
+
+# function: midi2frequency
+
+
+@jit(nopython=True)
+def midi2frequency(
+        midi: np.ndarray,
+        base_frequency: float = 440.0,
+) -> np.ndarray:
+    """
+    Convert MIDI note number to frequency.
+
+    Args:
+        midi (np.ndarray): The MIDI note number. Can be a scalar or an array.
+        base_frequency (float, optional): The base frequency (or "tuning") to use. Defaults to 440.0.
+
+    Returns:
+        np.ndarray: The frequency in Hz.
+    """
+    return base_frequency * 2 ** ((midi.astype(np.float64) - 69) / 12)
