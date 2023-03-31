@@ -1,5 +1,5 @@
 # %%
-# imports 
+# imports
 
 import scipy.io.wavfile as wav
 from scipy import interpolate
@@ -183,7 +183,7 @@ def view(matrix: np.ndarray, scale: float = 1.0, text: str = None, swap_rb: bool
     if text != None:
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(
-            to_show, text, (12, to_show.shape[1] -12), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+            to_show, text, (12, to_show.shape[1] - 12), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
     # avoid hanging windows on Mac OS
     if platform.system() == "Darwin":
         cv2.startWindowThread()
@@ -791,7 +791,7 @@ def generate_harmonic_series(num_freqs: int, base_freq: float) -> np.ndarray:
     for i in range(num_freqs):
         # calculate and write to output
         out_freqs[i] = base_freq * (i+1)
-    
+
     return out_freqs
 
 
@@ -884,7 +884,7 @@ def generate_sine(
     length_s: float = 1,
     freq: float = 440,
     gain_db: float = 0,
-    table_samples: int = 4096
+    table_length: int = 4096
 ) -> np.ndarray:
     """
     Generate a sine wave buffer based on an internal sine table using linear interpolation.
@@ -894,20 +894,20 @@ def generate_sine(
         length_s (float, optional): The length of the generated buffer in seconds. Defaults to 1.
         freq (float, optional): The frequency of the sine wave. Defaults to 440.
         gain_db (float, optional): The gain of the sine wave in dB. Defaults to 0.
-        table_samples (int, optional): The length of the internal wavetable in samples. Defaults to 4096.
+        table_length (int, optional): The length of the internal wavetable in samples. Defaults to 4096.
 
     Returns:
         np.ndarray: The generated sine buffer.
     """
     # generate internal sine table
-    x = np.arange(0, table_samples)
+    x = np.arange(0, table_length)
     y = np.sin(2 * np.pi * x / np.max(x))
     # create index variable and increment factor
     index = 0
-    increment = freq * table_samples / sr
+    increment = freq * table_length / sr
     # generate indices buffer for sampling
     indices = fill_indices(int(np.ceil(length_s * sr)),
-                           index, increment, table_samples)
+                           index, increment, table_length)
     # generate linearly interpolated sample buffer
     buffer = np.interp(indices, x, y)
     # apply gain
