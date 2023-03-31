@@ -1450,3 +1450,77 @@ def frequency2midi(
     """
 
     return 69 + 12 * np.log2(frequency.astype(np.float64) / base_frequency)
+
+# %%
+
+# function: history
+
+
+@jit(nopython=True)
+def history(
+        signal: np.ndarray,
+) -> np.ndarray:
+    """
+    History signal. Shifts the input array by one sample to the right.
+
+    Args:
+        signal (np.ndarray): A signal.
+
+    Returns:
+        np.ndarray: A history signal.
+    """
+    # make history array
+    history = np.zeros_like(signal, dtype=np.float64)
+    history[1:] = signal[:-1]
+    return history
+
+# %%
+
+
+# function: ramp2trigger
+
+def ramp2trigger(
+        ramp: np.ndarray,
+) -> np.ndarray:
+    """
+    Convert a ramp to a trigger signal.
+
+    Args:
+        ramp (np.ndarray): A ramp signal.
+
+    Returns:
+        np.ndarray: A trigger signal.
+    """
+    # make output array
+    trigger = np.zeros_like(ramp)
+    # make history array
+    history_sig = history(ramp)
+    # calculate absolute proportional change
+    abs_proportional_change = np.abs(np.divide(
+        (ramp - history_sig), (ramp + history_sig), out=trigger, where=(ramp + history_sig) != 0))
+    # convert to trigger
+    trigger[abs_proportional_change > 0.5] = 1
+    # remove duplicates
+    trigger[1:] = np.diff(trigger)
+    trigger = np.where(trigger > 0, 1, 0)
+
+    return trigger
+
+# %%
+
+# function: ramp2slope
+
+
+def ramp2slope(ramp: np.ndarray) -> np.ndarray:
+    """
+    Converts a ramp (0...1) to a slope (-0.5...0.5).
+
+    Args:
+        ramp (np.ndarray): ramp (0...1)
+
+    Returns:
+        np.ndarray: slope (-0.5...0.5)
+    """
+    delta = np.zeros_like(ramp)
+    delta[1:] = np.diff(ramp)
+    return wrap(delta, -0.5, 0.5)
