@@ -1427,3 +1427,26 @@ def midi2frequency(
         np.ndarray: The frequency in Hz.
     """
     return base_frequency * 2 ** ((midi.astype(np.float64) - 69) / 12)
+
+# %%
+
+# function: frequency2midi
+
+
+@jit(nopython=True)
+def frequency2midi(
+        frequency: np.ndarray,
+        base_frequency: float = 440.0,
+) -> np.ndarray:
+    """
+    Converts a frequency in Hz to a MIDI note number.
+
+    Args:
+        frequency: Frequency in Hz. Can be a scalar or a numpy array.
+        base_frequency: Frequency of MIDI note 69. Defaults to 440.0.
+
+    Returns:
+        np.ndarray: MIDI note number.
+    """
+
+    return 69 + 12 * np.log2(frequency.astype(np.float64) / base_frequency)
