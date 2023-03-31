@@ -1,4 +1,5 @@
 {
   "editor.fontFamily": "Consolas, 'Courier New', monospace",
-  "editor.fontSize": 16
+  "editor.fontSize": 16,
+  "editor.defaultFormatter": "ms-python.python"
 }
