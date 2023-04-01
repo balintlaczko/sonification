@@ -158,6 +158,16 @@ ramp = phasor(48000 * 10, 48000, np.array([1]))
 slope = ramp2slope(ramp)
 slope
 
+# %%
+
+# test scale_array_exp
+
+test_array = np.arange(0, 1.1, 0.1)
+print(test_array)
+print(scale_array_exp(test_array, 0, 1, 0, 1))
+print(scale_array_exp(test_array, 0, 1, 0, 1, 2))
+print(scale_array_exp(test_array, 0, 1, 0, 1, 0.5))
+
 
 # %%
 # flucoma test stuff

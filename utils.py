@@ -1112,7 +1112,7 @@ def scale_array(
     out_high: float
 ) -> np.ndarray:
     """
-    Scales an array linearly. Optimized by Numba.
+    Scales an array linearly.
 
     Args:
         array (np.ndarray): The array to be scaled.
@@ -1128,6 +1128,49 @@ def scale_array(
         return np.ones_like(array, dtype=np.float64) * out_high
     else:
         return ((array - in_low) * (out_high - out_low)) / (in_high - in_low) + out_low
+
+# %%
+
+# function scale_array_exp
+
+
+@jit(nopython=True)
+def scale_array_exp(
+    x: np.ndarray,
+    in_low: float,
+    in_high: float,
+    out_low: float,
+    out_high: float,
+    exp: float = 1.0,
+) -> np.ndarray:
+    """
+    Scales an array of values from one range to another. Based on the Max/MSP scale~ object.
+
+    Args:
+        x (np.ndarray): The array of values to scale.
+        in_low (float): The lower bound of the input range.
+        in_high (float): The upper bound of the input range.
+        out_low (float): The lower bound of the output range.
+        out_high (float): The upper bound of the output range.
+        exp (float, optional): The exponent to use for the scaling. Defaults to 1.0.
+
+    Returns:
+        np.ndarray: The scaled array.
+    """
+    if in_high == in_low:
+        return np.ones_like(x, dtype=np.float64) * out_high
+    else:
+        return np.where(
+            (x-in_low)/(in_high-in_low) == 0,
+            out_low,
+            np.where(
+                (x-in_low)/(in_high-in_low) > 0,
+                out_low + (out_high-out_low) *
+                ((x-in_low)/(in_high-in_low))**exp,
+                out_low + (out_high-out_low) * -
+                ((((-x+in_low)/(in_high-in_low)))**(exp))
+            )
+        )
 
 # %%
 
