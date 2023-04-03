@@ -3,9 +3,8 @@
 
 import numpy as np
 import shutil
+import platform
 from pathlib import Path
-from flucoma import fluid
-from flucoma.utils import cleanup, get_buffer
 from scipy.io import wavfile as wav
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from utils import *
@@ -20,6 +19,10 @@ from torchvision import datasets, transforms
 # dataset parameters
 
 dataset_folder = "/Volumes/T7/synth_dataset"
+# if on Windows, use this path
+if platform.system() == "Windows":
+    dataset_folder = "D:/synth_dataset"
+
 num_samples = 100000
 num_params = 3
 sr = 48000
@@ -131,8 +134,8 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # define dataloader
 
-spectral_shape_std_tensor = torch.from_numpy(spectral_shape_std).float()
-params_scaled_std_tensor = torch.from_numpy(params_scaled_std).float()
+spectral_shape_std_tensor = torch.from_numpy(spectral_shape_std).float().to(device)
+params_scaled_std_tensor = torch.from_numpy(params_scaled_std).float().to(device)
 # spectral_shape_mm_tensor = torch.from_numpy(spectral_shape_mm).float()
 # params_scaled_mm_tensor = torch.from_numpy(params_scaled_mm).float()
 
@@ -188,7 +191,7 @@ def test_loop(dataloader, model, loss_fn):
 # train model
 
 
-epochs = 50
+epochs = 5000
 
 for t in range(epochs):
     train_loop(train_loader, model, loss_fn, optimizer, t)
