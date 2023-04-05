@@ -3,17 +3,23 @@
 
 import numpy as np
 import shutil
+import platform
 from pathlib import Path
 from flucoma import fluid
 from flucoma.utils import cleanup, get_buffer
 from scipy.io import wavfile as wav
 from utils import *
+import torch
+import torchaudio
 
 # %%
 
 # dataset parameters
 
 dataset_folder = "/Volumes/T7/synth_dataset"
+# if on Windows, use this path
+if platform.system() == "Windows":
+    dataset_folder = "D:/synth_dataset"
 num_samples = 100000
 num_params = 3
 sr = 48000
@@ -97,5 +103,103 @@ np.save(os.path.join(os.path.dirname(dataset_folder),
 # delete temporary files
 cleanup()
 
+
+# %%
+
+##########################################################
+# create new dataset without file I/O and using torchaudio
+
+# %%
+
+# dataset parameters
+
+dataset_folder = "/Volumes/T7/synth_dataset_2"
+# if on Windows, use this path
+if platform.system() == "Windows":
+    dataset_folder = "D:/synth_dataset_2"
+num_samples = 1000000
+num_params = 3
+sr = 48000
+
+# %%
+
+# generate uniform random parameter values
+
+params = np.random.uniform(0, 1, (num_samples, num_params))
+carrfreq = midi2frequency(scale_array(params[:, 0], 0, 1, 20, 100))[..., None]
+modfreq = scale_array_exp(params[:, 1], 0, 1, 1, 1000, 2)[..., None]
+modamp = scale_array_exp(params[:, 2], 0, 1, 1, 1000, 2)[..., None]
+
+# %%
+
+# save parameter values to npy file
+np.save(os.path.join(dataset_folder, "params_unscaled.npy"), params)
+
+# save scaled parameter values to npy file
+
+params_scaled = np.transpose(
+    np.array([carrfreq[:, 0], modfreq[:, 0], modamp[:, 0]]))
+np.save(os.path.join(dataset_folder, "params_scaled.npy"), params_scaled)
+
+# %%
+
+# initialize torch device
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
+
+# %%
+
+# for each sample generate a 1 second audio buffer, save it to a tensor and extract MFCCs
+
+# initialize MFCC transform
+mfcc_transform = torchaudio.transforms.MFCC(sample_rate=sr, n_mfcc=40, melkwargs={"n_fft": 2048, "hop_length": 512, "n_mels": 200}).to(device)
+
+# initialize MelSpectrogram transform
+mel_transform = torchaudio.transforms.MelSpectrogram(sample_rate=sr, n_fft=2048, hop_length=512, n_mels=200).to(device)
+
+# create tensor container for mfccs
+ds_mfccs = torch.zeros((num_samples, 40, 1)).to(device)
+
+# create tensor container for mel spectrograms
+ds_melspec = torch.zeros((num_samples, 200, 1)).to(device)
+
+for i in range(num_samples):
+    # generate the audio buffer
+    fm_buffer = fm_synth(sr * 1, sr, carrfreq[i], modfreq[i], modamp[i])
+    # save the audio buffer to a tensor
+    audio_tensor = torch.from_numpy(fm_buffer).float().to(device)
+    # extract MFCCs
+    # mfccs = mfcc_transform(audio_tensor)
+    # take the mean across the time dimension
+    # mfccs = torch.mean(mfccs, dim=1, keepdim=True)
+    # save the MFCCs to the tensor container
+    # ds_mfccs[i] = mfccs
+    # extract mel spectrogram
+    melspec = mel_transform(audio_tensor)
+    # take the mean across the time dimension
+    melspec = torch.mean(melspec, dim=1, keepdim=True)
+    # save the mel spectrogram to the tensor container
+    ds_melspec[i] = melspec
+
+# %%
+
+# convert the tensor container to a numpy array
+ds_melspec_np = ds_melspec.cpu().numpy()
+
+# save the dataset to a npy file
+np.save(os.path.join(dataset_folder, "melspec.npy"), ds_melspec_np)
+
+# %%
+
+# convert the tensor container to a numpy array
+ds_mfccs_np = ds_mfccs.cpu().numpy()
+
+# save the dataset to a npy file
+np.save(os.path.join(dataset_folder, "mfccs.npy"), ds_mfccs_np)
+
+# %%
+
+ds_mfccs_np.shape
 
 # %%
