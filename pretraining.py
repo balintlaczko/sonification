@@ -7,6 +7,7 @@ import platform
 from pathlib import Path
 from scipy.io import wavfile as wav
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.model_selection import train_test_split
 from utils import *
 import os
 import torch
@@ -129,20 +130,31 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # %%
 
-# define dataloader
+# train test split
 
-melspec_std_tensor = torch.from_numpy(melspec_std).float().to(device)
-params_scaled_std_tensor = torch.from_numpy(params_scaled_std).float().to(device)
-# melspec_mm_tensor = torch.from_numpy(melspec_mm).float()
-# params_scaled_mm_tensor = torch.from_numpy(params_scaled_mm).float()
+melspec_std_train, melspec_std_test, params_scaled_std_train, params_scaled_std_test = train_test_split(
+    melspec_std, params_scaled_std, test_size=0.2, random_state=42)
 
+# %%
+
+# define dataloaders
+
+# train loader
+melspec_std_train_tensor = torch.from_numpy(
+    melspec_std_train).float().to(device)
+params_scaled_std_train_tensor = torch.from_numpy(
+    params_scaled_std_train).float().to(device)
 train_ds = torch.utils.data.TensorDataset(
-    melspec_std_tensor, params_scaled_std_tensor)
-
-# train_ds = torch.utils.data.TensorDataset(
-#     melspec_mm_tensor, params_scaled_mm_tensor)
-
+    melspec_std_train_tensor, params_scaled_std_train_tensor)
 train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size)
+
+# test loader
+melspec_std_test_tensor = torch.from_numpy(melspec_std_test).float().to(device)
+params_scaled_std_test_tensor = torch.from_numpy(
+    params_scaled_std_test).float().to(device)
+test_ds = torch.utils.data.TensorDataset(
+    melspec_std_test_tensor, params_scaled_std_test_tensor)
+test_loader = torch.utils.data.DataLoader(test_ds, batch_size=batch_size)
 
 
 # %%
@@ -170,18 +182,17 @@ def train_loop(dataloader, model, loss_fn, optimizer, epoch):
 def test_loop(dataloader, model, loss_fn):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
-    test_loss, correct = 0, 0
+    test_loss = 0
 
     with torch.no_grad():
         for X, y in dataloader:
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
 
     test_loss /= num_batches
-    correct /= size
+
     print(
-        f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+        f"\nTest Avg loss: {test_loss:>8f} \n")
 
 # %%
 
@@ -192,7 +203,7 @@ epochs = 10
 
 for t in range(epochs):
     train_loop(train_loader, model, loss_fn, optimizer, t)
-    # test_loop(train_loader, model, loss_fn)
+    test_loop(train_loader, model, loss_fn)
 
 
 # %%
