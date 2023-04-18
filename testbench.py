@@ -89,6 +89,38 @@ wav.write(target_name, sr, testy.astype(np.float32))
 
 # %%
 
+# test array2broadcastable
+
+a = np.arange(10, dtype=np.float64)
+print(a)
+print(array2broadcastable(a, 10))
+b = np.array([42], dtype=np.float64)
+print(b)
+print(array2broadcastable(b, 10))
+
+
+# %%
+
+# test fm_synth_2
+
+sr = 48000
+carrfreq = np.array([440])
+harmratio = np.array([42.42])
+modindex = np.array([10])
+samples = sr * 10
+testy = fm_synth_2(samples, sr, carrfreq, harmratio, modindex)
+target_name = "/Users/balintl/Desktop/test_fm_2.wav"
+wav.write(target_name, sr, testy.astype(np.float32))
+
+# %%
+
+# time fm_synth_2
+
+%timeit fm_synth_2(48000 * 60, 48000, np.array([440]), np.array([1]), np.array([10]))
+
+
+# %%
+
 # test am_synth
 
 sr = 48000
