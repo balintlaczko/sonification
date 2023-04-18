@@ -14,6 +14,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from torch.utils.tensorboard import SummaryWriter
 
 # %%
 
@@ -84,15 +85,15 @@ print(f"Using {device} device")
 class FMNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.fc1 = nn.Linear(200, 512)
+        self.fc1 = nn.Linear(200, 1024)
         self.act1 = nn.Tanh()
-        self.fc2 = nn.Linear(512, 1024)
+        self.fc2 = nn.Linear(1024, 2048)
         self.act2 = nn.Tanh()
-        self.fc3 = nn.Linear(1024, 1024)
+        self.fc3 = nn.Linear(2048, 2048)
         self.act3 = nn.Tanh()
-        self.fc4 = nn.Linear(1024, 512)
+        self.fc4 = nn.Linear(2048, 1024)
         self.act4 = nn.Tanh()
-        self.fc5 = nn.Linear(512, 3)
+        self.fc5 = nn.Linear(1024, 3)
         self.act_out = nn.Tanh()
 
     def forward(self, x):
@@ -112,8 +113,8 @@ print(model)
 
 # initialize hyperparameters
 
-learning_rate = 1e-4
-batch_size = 4096 * 8
+learning_rate = 1e-3
+batch_size = 4096 * 16
 
 
 # %%
@@ -159,8 +160,10 @@ test_loader = torch.utils.data.DataLoader(test_ds, batch_size=batch_size)
 
 # %%
 
-def train_loop(dataloader, model, loss_fn, optimizer, epoch):
+def train_loop(dataloader, model, loss_fn, optimizer, epoch, writer):
     size = len(dataloader.dataset)
+    num_batches = len(dataloader)
+    batch_loss = 0
     for batch, (X, y) in enumerate(dataloader):
         # Clear gradient buffers
         optimizer.zero_grad()
@@ -168,6 +171,7 @@ def train_loop(dataloader, model, loss_fn, optimizer, epoch):
         # Compute prediction and loss
         pred = model(X)
         loss = loss_fn(pred, y)
+        batch_loss += loss.item()
 
         # Backpropagation
         loss.backward()
@@ -176,10 +180,14 @@ def train_loop(dataloader, model, loss_fn, optimizer, epoch):
         if batch % 1 == 0:
             loss, current = loss.item(), (batch + 1) * len(X)
             print(
-                f"Epoch {epoch+1} loss: {loss:>7f}  [{current:>5d}/{size:>5d}]", end="\r")
+                f"\rEpoch {epoch+1} loss: {loss:>7f}  [{current:>5d}/{size:>5d}]", end=" ")
+
+    # Log to tensorboard
+    epoch_loss = batch_loss / num_batches
+    writer.add_scalar("Loss/train", epoch_loss, epoch)
 
 
-def test_loop(dataloader, model, loss_fn):
+def test_loop(dataloader, model, loss_fn, epoch, writer):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     test_loss = 0
@@ -192,18 +200,38 @@ def test_loop(dataloader, model, loss_fn):
     test_loss /= num_batches
 
     print(
-        f"\nTest avg loss: {test_loss:>8f} \n")
+        f"Test avg loss: {test_loss:>8f}")
+    
+    # Log to tensorboard
+    writer.add_scalar("Loss/test", test_loss, epoch)
+
+
+# %%
+
+# set up tensorboard
+
+# default `log_dir` is "runs" - we'll be more specific here
+writer = SummaryWriter('runs/fmnet')
+
 
 # %%
 
 # train model
 
-
-epochs = 5
+global_counter = 0
+epochs = 100
 
 for t in range(epochs):
-    train_loop(train_loader, model, loss_fn, optimizer, t)
-    test_loop(test_loader, model, loss_fn)
+    train_loop(train_loader, model, loss_fn, optimizer, global_counter+t, writer)
+    test_loop(test_loader, model, loss_fn, global_counter+t, writer)
+
+
+# %%
+
+# flush tensorboard writer
+writer.flush()
+# close tensorboard writer
+writer.close()
 
 
 # %%
