@@ -1309,6 +1309,33 @@ def seconds2samples(
 
 # %%
 
+# function: array2broadcastable
+
+
+@jit(nopython=True)
+def array2broadcastable(
+    array: np.ndarray,
+    samples: int
+) -> np.ndarray:
+    """
+    Convert an array to a broadcastable array. If the array has a single value or has
+    the size == samples, the array is returned. Otherwise the array is resized with 
+    linear interpolation (calling resize_interp) to match the number of samples.
+
+    Args:
+        array (np.ndarray): The array to convert.
+        samples (int): The number of samples to generate.
+
+    Returns:
+        np.ndarray: The converted array.
+    """
+    if array.size == 1 or array.size == samples:
+        return array
+    else:
+        return resize_interp(array, samples)
+
+# %%
+
 # function: sinewave
 
 
@@ -1370,6 +1397,48 @@ def fm_synth(
             modulator_amplitude.astype(np.float64), samples)
     # calculate frequency modulated signal and return fm buffer
     return sinewave(samples, sr, carrier_frequency + modulator_buf)
+
+# %%
+
+# function: fm_synth_2 (with harmonicity)
+
+
+def fm_synth_2(
+        samples: int,
+        sr: int,
+        carrier_frequency: np.ndarray,
+        harmonicity_ratio: np.ndarray,
+        modulation_index: np.ndarray,
+) -> np.ndarray:
+    """
+    Generate a frequency modulated signal.
+
+    Args:
+        samples (int): The number of samples to generate.
+        sr (int): The sample rate to use.
+        carrier_frequency (np.ndarray): The carrier frequency to use. Can be a single value or an array.
+        harmonicity_ratio (np.ndarray): The harmonicity ratio to use. Can be a single value or an array.
+        modulation_index (np.ndarray): The modulation index to use. Can be a single value or an array.
+
+    Returns:
+        np.ndarray: The generated frequency modulated signal.
+    """
+    # initialize parameter arrays
+    _carrier_frequency = array2broadcastable(
+        carrier_frequency.astype(np.float64), samples)
+    _harmonicity_ratio = array2broadcastable(
+        harmonicity_ratio.astype(np.float64), samples)
+    _modulation_index = array2broadcastable(
+        modulation_index.astype(np.float64), samples)
+
+    # calculate modulator frequency
+    modulator_frequency = _carrier_frequency * _harmonicity_ratio
+    # create modulator buffer
+    modulator_buf = sinewave(samples, sr, modulator_frequency)
+    # create modulation amplitude buffer
+    modulation_amplitude = modulator_frequency * _modulation_index
+    # calculate frequency modulated signal and return fm buffer
+    return sinewave(samples, sr, _carrier_frequency + (modulator_buf * modulation_amplitude))
 
 # %%
 
