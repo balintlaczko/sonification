@@ -192,18 +192,18 @@ def test_loop(dataloader, model, loss_fn):
     test_loss /= num_batches
 
     print(
-        f"\nTest Avg loss: {test_loss:>8f} \n")
+        f"\nTest avg loss: {test_loss:>8f} \n")
 
 # %%
 
 # train model
 
 
-epochs = 10
+epochs = 5
 
 for t in range(epochs):
     train_loop(train_loader, model, loss_fn, optimizer, t)
-    test_loop(train_loader, model, loss_fn)
+    test_loop(test_loader, model, loss_fn)
 
 
 # %%
