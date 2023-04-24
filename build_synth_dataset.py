@@ -11,6 +11,7 @@ from scipy.io import wavfile as wav
 from utils import *
 import torch
 import torchaudio
+import umap
 
 # %%
 
@@ -153,10 +154,12 @@ print(device)
 # for each sample generate a 1 second audio buffer, save it to a tensor and extract MFCCs
 
 # initialize MFCC transform
-mfcc_transform = torchaudio.transforms.MFCC(sample_rate=sr, n_mfcc=40, melkwargs={"n_fft": 2048, "hop_length": 512, "n_mels": 200}).to(device)
+mfcc_transform = torchaudio.transforms.MFCC(sample_rate=sr, n_mfcc=40, melkwargs={
+                                            "n_fft": 2048, "hop_length": 512, "n_mels": 200}).to(device)
 
 # initialize MelSpectrogram transform
-mel_transform = torchaudio.transforms.MelSpectrogram(sample_rate=sr, n_fft=2048, hop_length=512, n_mels=200).to(device)
+mel_transform = torchaudio.transforms.MelSpectrogram(
+    sample_rate=sr, n_fft=2048, hop_length=512, n_mels=200).to(device)
 
 # create tensor container for mfccs
 ds_mfccs = torch.zeros((num_samples, 40, 1)).to(device)
@@ -201,5 +204,33 @@ np.save(os.path.join(dataset_folder, "mfccs.npy"), ds_mfccs_np)
 # %%
 
 ds_mfccs_np.shape
+
+# %%
+# dataset parameters
+
+dataset_folder = "/Volumes/T7/synth_dataset_2"
+# if on Windows, use this path
+if platform.system() == "Windows":
+    dataset_folder = "D:/synth_dataset_2"
+num_samples = 100000
+num_params = 3
+sr = 48000
+
+# %%
+
+# load the dataset from the npy file
+
+melspec = np.load(os.path.join(dataset_folder, "melspec.npy"))
+
+# %%
+melspec[..., 0].shape
+
+# %%
+
+# fit umap to the dataset
+
+reducer = umap.UMAP(n_neighbors=100, min_dist=0.1,
+                    n_components=2, metric="euclidean", random_state=42)
+embedding = reducer.fit_transform(melspec[..., 0])
 
 # %%
