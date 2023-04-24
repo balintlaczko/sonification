@@ -1,6 +1,8 @@
 # %%
 # imports
 
+import json
+import matplotlib.pyplot as plt
 import numpy as np
 import shutil
 import platform
@@ -229,8 +231,76 @@ melspec[..., 0].shape
 
 # fit umap to the dataset
 
-reducer = umap.UMAP(n_neighbors=100, min_dist=0.1,
+reducer = umap.UMAP(n_neighbors=400, min_dist=0.1,
                     n_components=2, metric="euclidean", random_state=42)
 embedding = reducer.fit_transform(melspec[..., 0])
+
+# %%
+embedding.shape
+
+# %%
+embedding[0]
+
+# %%
+
+# save the embedding to a npy file
+np.save(os.path.join(dataset_folder, "melspec_umap_200.npy"), embedding)
+
+# %%
+
+# load the embedding from the npy file
+embedding = np.load(os.path.join(dataset_folder, "melspec_umap_200.npy"))
+
+# %%
+
+# plot the embedding
+plt.scatter(embedding[:, 0], embedding[:, 1], s=0.1)
+plt.show()
+
+# %%
+
+# function: array2fluid_dataset
+
+
+def array2fluid_dataset(
+        array: np.ndarray,
+) -> dict:
+    """
+    Convert a numpy array to a json format that's compatible with fluid.dataset~.
+
+    Args:
+        array (np.ndarray): The numpy array to convert. Should be a 2D array of (num_samples, num_features).
+
+    Returns:
+        dict: The json dataset.
+    """
+    num_cols = array.shape[1]
+    out_dict = {}
+    out_dict["cols"] = num_cols
+    out_dict["data"] = {}
+    for i in range(len(array)):
+        out_dict["data"][str(i)] = array[i].tolist()
+    return out_dict
+
+# %%
+
+
+# create json dataset with umap embedding
+umap_ds = array2fluid_dataset(embedding)
+
+# save the umap_ds dataset to a json file
+with open(os.path.join(dataset_folder, "melspec_umap_200.json"), "w") as f:
+    json.dump(umap_ds, f)
+
+# %%
+
+# load the scaled parameters from the npy file
+params_scaled = np.load(os.path.join(dataset_folder, "params_scaled.npy"))
+# create json dataset with scaled parameters
+params_ds = array2fluid_dataset(params_scaled)
+
+# save the params_ds dataset to a json file
+with open(os.path.join(dataset_folder, "params_scaled.json"), "w") as f:
+    json.dump(params_ds, f)
 
 # %%
