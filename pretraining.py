@@ -85,15 +85,15 @@ print(f"Using {device} device")
 class FMNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.fc1 = nn.Linear(200, 1024)
+        self.fc1 = nn.Linear(200, 2048)
         self.act1 = nn.Tanh()
-        self.fc2 = nn.Linear(1024, 2048)
+        self.fc2 = nn.Linear(2048, 4096)
         self.act2 = nn.Tanh()
-        self.fc3 = nn.Linear(2048, 2048)
+        self.fc3 = nn.Linear(4096, 4096)
         self.act3 = nn.Tanh()
-        self.fc4 = nn.Linear(2048, 1024)
+        self.fc4 = nn.Linear(4096, 2048)
         self.act4 = nn.Tanh()
-        self.fc5 = nn.Linear(1024, 3)
+        self.fc5 = nn.Linear(2048, 3)
         self.act_out = nn.Tanh()
 
     def forward(self, x):
