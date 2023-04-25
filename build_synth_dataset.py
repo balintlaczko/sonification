@@ -244,12 +244,12 @@ embedding[0]
 # %%
 
 # save the embedding to a npy file
-np.save(os.path.join(dataset_folder, "melspec_umap_200.npy"), embedding)
+np.save(os.path.join(dataset_folder, "melspec_umap_400.npy"), embedding)
 
 # %%
 
 # load the embedding from the npy file
-embedding = np.load(os.path.join(dataset_folder, "melspec_umap_200.npy"))
+embedding = np.load(os.path.join(dataset_folder, "melspec_umap_400.npy"))
 
 # %%
 
