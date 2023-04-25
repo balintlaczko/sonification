@@ -44,7 +44,7 @@ if platform.system() == "Windows":
 
 # load the dataset from the npy file
 
-melspec = np.load(os.path.join(dataset_folder, "melspec.npy"))
+melspec = np.load(os.path.join(dataset_folder, "melspec_2_mean_std.npy"))
 
 # %%
 
@@ -57,7 +57,7 @@ embedding = reducer.fit_transform(melspec[..., 0])
 # %%
 
 # save the embedding to a npy file
-np.save(os.path.join(dataset_folder, "melspec_umap_500.npy"), embedding)
+np.save(os.path.join(dataset_folder, "melspec_2_umap_500.npy"), embedding)
 
 # %%
 

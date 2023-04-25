@@ -136,13 +136,13 @@ modamp = scale_array_exp(params[:, 2], 0, 1, 1, 1000, 2)[..., None]
 # %%
 
 # save parameter values to npy file
-np.save(os.path.join(dataset_folder, "params_unscaled.npy"), params)
+np.save(os.path.join(dataset_folder, "params_unscaled_2.npy"), params)
 
 # save scaled parameter values to npy file
 
 params_scaled = np.transpose(
     np.array([carrfreq[:, 0], modfreq[:, 0], modamp[:, 0]]))
-np.save(os.path.join(dataset_folder, "params_scaled.npy"), params_scaled)
+np.save(os.path.join(dataset_folder, "params_scaled_2.npy"), params_scaled)
 
 # %%
 
@@ -151,23 +151,38 @@ np.save(os.path.join(dataset_folder, "params_scaled.npy"), params_scaled)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
 
+
+# %%
+
+# test shape of mean and std
+
+test_tensor = torch.rand((100, 10)).to(device)
+test_mean = torch.mean(test_tensor, dim=1, keepdim=True)
+print(test_mean.shape)
+test_std = torch.std(test_tensor, dim=1, keepdim=True)
+print(test_std.shape)
+test_concat = torch.cat((test_mean, test_std), dim=0)
+print(test_concat.shape)
+
+
 # %%
 
 # for each sample generate a 1 second audio buffer, save it to a tensor and extract MFCCs
 
 # initialize MFCC transform
+n_mels = 200
 mfcc_transform = torchaudio.transforms.MFCC(sample_rate=sr, n_mfcc=40, melkwargs={
-                                            "n_fft": 2048, "hop_length": 512, "n_mels": 200}).to(device)
+                                            "n_fft": 2048, "hop_length": 512, "n_mels": n_mels}).to(device)
 
 # initialize MelSpectrogram transform
 mel_transform = torchaudio.transforms.MelSpectrogram(
-    sample_rate=sr, n_fft=2048, hop_length=512, n_mels=200).to(device)
+    sample_rate=sr, n_fft=2048, hop_length=512, n_mels=n_mels, normalized=True).to(device)
 
 # create tensor container for mfccs
 ds_mfccs = torch.zeros((num_samples, 40, 1)).to(device)
 
-# create tensor container for mel spectrograms
-ds_melspec = torch.zeros((num_samples, 200, 1)).to(device)
+# create tensor container for mel spectrograms (mean + std)
+ds_melspec = torch.zeros((num_samples, n_mels * 2, 1)).to(device)
 
 for i in range(num_samples):
     # generate the audio buffer
@@ -183,9 +198,11 @@ for i in range(num_samples):
     # extract mel spectrogram
     melspec = mel_transform(audio_tensor)
     # take the mean across the time dimension
-    melspec = torch.mean(melspec, dim=1, keepdim=True)
-    # save the mel spectrogram to the tensor container
-    ds_melspec[i] = melspec
+    melspec_mean = torch.mean(melspec, dim=1, keepdim=True)
+    # take the standard deviation across the time dimension
+    melspec_std = torch.std(melspec, dim=1, keepdim=True)
+    # save the mean + std to the tensor container
+    ds_melspec[i] = torch.cat((melspec_mean, melspec_std), dim=0)
 
 # %%
 
@@ -193,7 +210,7 @@ for i in range(num_samples):
 ds_melspec_np = ds_melspec.cpu().numpy()
 
 # save the dataset to a npy file
-np.save(os.path.join(dataset_folder, "melspec.npy"), ds_melspec_np)
+np.save(os.path.join(dataset_folder, "melspec_2_mean_std.npy"), ds_melspec_np)
 
 # %%
 
@@ -295,12 +312,12 @@ with open(os.path.join(dataset_folder, "melspec_umap_200.json"), "w") as f:
 # %%
 
 # load the scaled parameters from the npy file
-params_scaled = np.load(os.path.join(dataset_folder, "params_scaled.npy"))
+params_scaled = np.load(os.path.join(dataset_folder, "params_scaled_2.npy"))
 # create json dataset with scaled parameters
 params_ds = array2fluid_dataset(params_scaled)
 
 # save the params_ds dataset to a json file
-with open(os.path.join(dataset_folder, "params_scaled.json"), "w") as f:
+with open(os.path.join(dataset_folder, "params_scaled_2.json"), "w") as f:
     json.dump(params_ds, f)
 
 # %%
