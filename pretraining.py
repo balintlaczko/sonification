@@ -34,11 +34,11 @@ sr = 48000
 # load datasets
 
 # read unscaled parameter values
-params_unscaled = np.load(os.path.join(dataset_folder, "params_unscaled.npy"))
+params_unscaled = np.load(os.path.join(dataset_folder, "params_unscaled_2.npy"))
 # read scaled parameter values
-params_scaled = np.load(os.path.join(dataset_folder, "params_scaled.npy"))
+params_scaled = np.load(os.path.join(dataset_folder, "params_scaled_2.npy"))
 # read spectral shape values
-melspec = np.load(os.path.join(dataset_folder, "melspec.npy"))
+melspec = np.load(os.path.join(dataset_folder, "melspec_2_mean_std.npy"))
 
 # %%
 
@@ -51,9 +51,9 @@ params_unscaled_std = params_unscaled_stdscaler.transform(params_unscaled)
 params_scaled_stdscaler = StandardScaler().fit(params_scaled)
 params_scaled_std = params_scaled_stdscaler.transform(params_scaled)
 # standardize spectral shape
-melspec_stdscaler = StandardScaler().fit(melspec.reshape(-1, 200))
+melspec_stdscaler = StandardScaler().fit(melspec.reshape(-1, 400))
 melspec_std = melspec_stdscaler.transform(
-    melspec.reshape(-1, 200))
+    melspec.reshape(-1, 400))
 
 # %%
 
@@ -85,15 +85,15 @@ print(f"Using {device} device")
 class FMNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.fc1 = nn.Linear(200, 2048)
+        self.fc1 = nn.Linear(400, 1024)
         self.act1 = nn.Tanh()
-        self.fc2 = nn.Linear(2048, 4096)
+        self.fc2 = nn.Linear(1024, 2048)
         self.act2 = nn.Tanh()
-        self.fc3 = nn.Linear(4096, 4096)
+        self.fc3 = nn.Linear(2048, 2048)
         self.act3 = nn.Tanh()
-        self.fc4 = nn.Linear(4096, 2048)
+        self.fc4 = nn.Linear(2048, 1024)
         self.act4 = nn.Tanh()
-        self.fc5 = nn.Linear(2048, 3)
+        self.fc5 = nn.Linear(1024, 3)
         self.act_out = nn.Tanh()
 
     def forward(self, x):
@@ -218,7 +218,7 @@ writer = SummaryWriter('runs/fmnet')
 
 # train model
 
-global_counter = 0
+global_counter = 200
 epochs = 100
 
 for t in range(epochs):
