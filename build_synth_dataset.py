@@ -33,7 +33,7 @@ sr = 48000
 
 params = np.random.uniform(0, 1, (num_samples, num_params))
 carrfreq = midi2frequency(scale_array(params[:, 0], 0, 1, 20, 100))[..., None]
-modfreq = scale_array_exp(params[:, 1], 0, 1, 1, 1000, 2)[..., None]
+modfreq = scale_array_exp(params[:, 1], 0, 1, 10, 1000, 2)[..., None]
 modamp = scale_array_exp(params[:, 2], 0, 1, 1, 1000, 2)[..., None]
 
 # %%
