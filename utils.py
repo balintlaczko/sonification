@@ -1636,3 +1636,53 @@ def ramp2slope(ramp: np.ndarray) -> np.ndarray:
     delta = np.zeros_like(ramp)
     delta[1:] = np.diff(ramp)
     return wrap(delta, -0.5, 0.5)
+
+# %%
+
+# function: array2fluid_dataset
+
+
+def array2fluid_dataset(
+        array: np.ndarray,
+) -> dict:
+    """
+    Convert a numpy array to a json format that's compatible with fluid.dataset~.
+
+    Args:
+        array (np.ndarray): The numpy array to convert. Should be a 2D array of (num_samples, num_features).
+
+    Returns:
+        dict: The json dataset.
+    """
+    num_cols = array.shape[1]
+    out_dict = {}
+    out_dict["cols"] = num_cols
+    out_dict["data"] = {}
+    for i in range(len(array)):
+        out_dict["data"][str(i)] = array[i].tolist()
+    return out_dict
+
+
+# %%
+
+# function: fluid_dataset2array
+
+
+def fluid_dataset2array(
+        dataset: dict,
+) -> np.ndarray:
+    """
+    Convert a json dataset to a numpy array.
+
+    Args:
+        dataset (dict): The json dataset to convert.
+
+    Returns:
+        np.ndarray: The numpy array.
+    """
+    num_cols = dataset["cols"]
+    num_rows = len(dataset["data"])
+    out_array = np.zeros((num_rows, num_cols))
+    for i in range(num_rows):
+        out_array[i] = np.array(dataset["data"][str(i)])
+    return out_array
