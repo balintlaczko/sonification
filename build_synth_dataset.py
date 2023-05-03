@@ -276,31 +276,6 @@ plt.show()
 
 # %%
 
-# function: array2fluid_dataset
-
-
-def array2fluid_dataset(
-        array: np.ndarray,
-) -> dict:
-    """
-    Convert a numpy array to a json format that's compatible with fluid.dataset~.
-
-    Args:
-        array (np.ndarray): The numpy array to convert. Should be a 2D array of (num_samples, num_features).
-
-    Returns:
-        dict: The json dataset.
-    """
-    num_cols = array.shape[1]
-    out_dict = {}
-    out_dict["cols"] = num_cols
-    out_dict["data"] = {}
-    for i in range(len(array)):
-        out_dict["data"][str(i)] = array[i].tolist()
-    return out_dict
-
-# %%
-
 
 # create json dataset with umap embedding
 umap_ds = array2fluid_dataset(embedding)
@@ -321,3 +296,63 @@ with open(os.path.join(dataset_folder, "params_scaled_2.json"), "w") as f:
     json.dump(params_ds, f)
 
 # %%
+############################################################################################################
+# read dataset from Max, compute UMAP, save to json
+
+# %%
+
+# dataset parameters
+
+dataset_folder = "/Volumes/T7/synth_dataset_4"
+# if on Windows, use this path
+if platform.system() == "Windows":
+    dataset_folder = "D:/synth_dataset_4"
+
+# %%
+
+# load the dataset from the json
+
+fm_descriptors_merged_json = os.path.join(
+    dataset_folder, "fm_descriptors_merged.json")
+
+fm_decriptors_merged_dict = dict()
+with open(fm_descriptors_merged_json, "r") as f:
+    fm_decriptors_merged_dict = json.load(f)
+
+fm_decriptors_merged_array = fluid_dataset2array(fm_decriptors_merged_dict)
+fm_decriptors_merged_array.shape
+
+# %%
+
+# fit umap to the dataset
+
+reducer = umap.UMAP(n_neighbors=400, min_dist=0.1,
+                    n_components=2, metric="euclidean", random_state=42)
+embedding = reducer.fit_transform(fm_decriptors_merged_array)
+
+# %%
+
+# save the embedding to a npy file
+np.save(os.path.join(dataset_folder, "fm_descriptors_umap_400.npy"), embedding)
+
+# %%
+
+# load the embedding from the npy file
+embedding = np.load(os.path.join(
+    dataset_folder, "fm_descriptors_umap_400.npy"))
+
+# %%
+
+# plot the embedding
+plt.scatter(embedding[:, 0], embedding[:, 1], s=0.1)
+plt.show()
+
+# %%
+
+
+# create json dataset with umap embedding
+umap_ds = array2fluid_dataset(embedding)
+
+# save the umap_ds dataset to a json file
+with open(os.path.join(dataset_folder, "fm_descriptors_umap_400.json"), "w") as f:
+    json.dump(umap_ds, f)
