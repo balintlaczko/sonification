@@ -356,3 +356,5 @@ umap_ds = array2fluid_dataset(embedding)
 # save the umap_ds dataset to a json file
 with open(os.path.join(dataset_folder, "fm_descriptors_umap_400.json"), "w") as f:
     json.dump(umap_ds, f)
+
+# %%
