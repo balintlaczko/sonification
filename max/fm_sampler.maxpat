@@ -10,7 +10,7 @@
 		}
 ,
 		"classnamespace" : "box",
-		"rect" : [ 0.0, 100.0, 1694.0, 983.0 ],
+		"rect" : [ 0.0, 84.0, 2527.0, 1282.0 ],
 		"bglocked" : 0,
 		"openinpresentation" : 0,
 		"default_fontsize" : 12.0,
@@ -39,6 +39,30 @@
 		"subpatcher_template" : "",
 		"assistshowspatchername" : 0,
 		"boxes" : [ 			{
+				"box" : 				{
+					"id" : "obj-3",
+					"maxclass" : "message",
+					"numinlets" : 2,
+					"numoutlets" : 1,
+					"outlettype" : [ "" ],
+					"patching_rect" : [ 2574.5, 225.453573346138, 34.0, 22.0 ],
+					"text" : "write"
+				}
+
+			}
+, 			{
+				"box" : 				{
+					"id" : "obj-67",
+					"maxclass" : "message",
+					"numinlets" : 2,
+					"numoutlets" : 1,
+					"outlettype" : [ "" ],
+					"patching_rect" : [ 2534.0, 225.453573346138, 33.0, 22.0 ],
+					"text" : "read"
+				}
+
+			}
+, 			{
 				"box" : 				{
 					"id" : "obj-203",
 					"maxclass" : "message",
@@ -118,7 +142,6 @@
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
 					"patching_rect" : [ 978.0, 793.0, 361.0, 22.0 ],
-					"presentation_linecount" : 2,
 					"text" : "fittransform fm_descriptors_merged fm_descriptors_merged_norm"
 				}
 
@@ -1177,7 +1200,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 1187.072336316108704, 267.983858585357666, 50.0, 35.0 ],
+					"patching_rect" : [ 1187.072336316108704, 267.983858585357666, 50.0, 36.0 ],
 					"text" : "size 90883"
 				}
 
@@ -1190,7 +1213,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 1011.822336316108704, 267.983858585357666, 50.0, 35.0 ],
+					"patching_rect" : [ 1011.822336316108704, 267.983858585357666, 50.0, 36.0 ],
 					"text" : "size 90883"
 				}
 
@@ -1203,7 +1226,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 798.473676800727844, 267.983858585357666, 50.0, 35.0 ],
+					"patching_rect" : [ 798.473676800727844, 267.983858585357666, 50.0, 36.0 ],
 					"text" : "size 90883"
 				}
 
@@ -5287,7 +5310,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 1860.833332240581512, 2211.166724026203156, 50.0, 76.0 ],
+					"patching_rect" : [ 1860.833332240581512, 2211.166724026203156, 50.0, 77.0 ],
 					"text" : "22. 25. 29. 32. 63. 65. 67. 70. 94. 96."
 				}
 
@@ -5312,7 +5335,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 2,
 					"outlettype" : [ "", "" ],
-					"patching_rect" : [ 1876.5, 2016.500055313110352, 123.0, 116.0 ],
+					"patching_rect" : [ 1876.5, 2016.500055313110352, 123.0, 119.0 ],
 					"text" : "fluid.bufampgate~ @onthreshold -28 @offthreshold -37 @minslicelength 2 @minsilencelength 2 @rampup 1 @rampdown 1 @highpassfreq 0"
 				}
 
@@ -6128,7 +6151,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 2321.000044912099838, 1950.000055313110352, 93.33333095908165, 35.0 ],
+					"patching_rect" : [ 2321.000044912099838, 1950.000055313110352, 93.33333095908165, 36.0 ],
 					"text" : "vexpr $f1 * $f2 @scalarmode 1"
 				}
 
@@ -6277,7 +6300,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 2,
 					"outlettype" : [ "", "" ],
-					"patching_rect" : [ 1909.250036925077438, 1613.795685291290283, 162.0, 67.0 ],
+					"patching_rect" : [ 1909.250036925077438, 1613.795685291290283, 162.0, 68.0 ],
 					"text" : "fluid.spectralshape~ @fftsettings 4096 @unit 1 @power 1 @select centroid spread"
 				}
 
@@ -6380,7 +6403,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 1755.999989867210388, 670.0, 50.0, 35.0 ],
+					"patching_rect" : [ 1755.999989867210388, 670.0, 50.0, 36.0 ],
 					"text" : "size 90884"
 				}
 
@@ -7958,7 +7981,7 @@
 					"maxclass" : "comment",
 					"numinlets" : 1,
 					"numoutlets" : 0,
-					"patching_rect" : [ 2637.5, 156.262878000000001, 154.0, 51.0 ],
+					"patching_rect" : [ 2637.5, 156.262878000000001, 154.0, 52.0 ],
 					"text" : "Predict from the normalised input to a new dataset"
 				}
 
@@ -8093,7 +8116,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 2,
 					"outlettype" : [ "", "" ],
-					"patching_rect" : [ 2242.0, 233.0, 265.0, 62.0 ],
+					"patching_rect" : [ 2242.0, 233.0, 265.0, 64.0 ],
 					"text" : "fluid.mlpregressor~ fm_nn @activation 1 @outputactivation 1 @hiddenlayers 605 2 605 @batchsize 256 @maxiter 1 @learnrate 0.001 @momentum 0.1 @validation 0.2 @tapout 2"
 				}
 
@@ -8188,7 +8211,7 @@
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
 					"patching_rect" : [ 1613.980083028475292, 264.453573346138, 50.0, 22.0 ],
-					"text" : "44100"
+					"text" : "48000"
 				}
 
 			}
@@ -8222,7 +8245,7 @@
 					"maxclass" : "comment",
 					"numinlets" : 1,
 					"numoutlets" : 0,
-					"patching_rect" : [ 813.473676800727844, 133.904914259910583, 97.0, 33.0 ],
+					"patching_rect" : [ 813.473676800727844, 133.904914259910583, 97.0, 34.0 ],
 					"text" : "clear datasets, reset ID counter"
 				}
 
@@ -8314,7 +8337,7 @@
 					"maxclass" : "comment",
 					"numinlets" : 1,
 					"numoutlets" : 0,
-					"patching_rect" : [ 50.0, 26.868412852287292, 197.0, 100.0 ],
+					"patching_rect" : [ 50.0, 26.868412852287292, 197.0, 103.0 ],
 					"text" : "Forum TODO:\n- post fluid.bufshape\n- post fluid.buftranspose\n- continue fluid.jit.plotter discussion\n- create fluid.kernel.kdtree~\n- post fluid.kernel.kdtree~\n- ask about umap params weighing"
 				}
 
@@ -10868,7 +10891,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 643.473676800727844, 267.983858585357666, 50.0, 35.0 ],
+					"patching_rect" : [ 643.473676800727844, 267.983858585357666, 50.0, 36.0 ],
 					"text" : "size 90883"
 				}
 
@@ -10881,7 +10904,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 457.947362780570984, 267.983858585357666, 50.0, 35.0 ],
+					"patching_rect" : [ 457.947362780570984, 267.983858585357666, 50.0, 36.0 ],
 					"text" : "size 90883"
 				}
 
@@ -13493,6 +13516,13 @@
 			}
 , 			{
 				"patchline" : 				{
+					"destination" : [ "obj-190", 0 ],
+					"source" : [ "obj-3", 0 ]
+				}
+
+			}
+, 			{
+				"patchline" : 				{
 					"destination" : [ "obj-20", 0 ],
 					"order" : 1,
 					"source" : [ "obj-30", 0 ]
@@ -14895,6 +14925,13 @@
 			}
 , 			{
 				"patchline" : 				{
+					"destination" : [ "obj-190", 0 ],
+					"source" : [ "obj-67", 0 ]
+				}
+
+			}
+, 			{
+				"patchline" : 				{
 					"destination" : [ "obj-488", 0 ],
 					"source" : [ "obj-675", 0 ]
 				}
@@ -15154,8 +15191,8 @@
 				"implicit" : 1
 			}
 , 			{
-				"name" : "fl.audiotrigger~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.audiotrigger~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
 				"name" : "fl.bang~.maxpat",
@@ -15165,12 +15202,12 @@
 				"implicit" : 1
 			}
 , 			{
-				"name" : "fl.biquad~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.biquad~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fl.constant~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.constant~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
 				"name" : "fl.cumsum~.maxpat",
@@ -15180,16 +15217,16 @@
 				"implicit" : 1
 			}
 , 			{
-				"name" : "fl.divide~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.divide~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fl.frommax~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.frommax~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fl.interval~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.interval~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
 				"name" : "fl.phasor~.maxpat",
@@ -15199,12 +15236,12 @@
 				"implicit" : 1
 			}
 , 			{
-				"name" : "fl.plus~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.plus~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fl.samplerate~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.samplerate~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
 				"name" : "fl.sinewave~.maxpat",
@@ -15214,60 +15251,60 @@
 				"implicit" : 1
 			}
 , 			{
-				"name" : "fl.sink~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.sink~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fl.sin~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.sin~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fl.times~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.times~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fl.tomax~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.tomax~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fl.uniform~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.uniform~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fl.wrap~.mxo",
-				"type" : "iLaX"
+				"name" : "fl.wrap~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.buf2list.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.buf2list.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.bufampgate~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufampgate~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.bufcompose~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufcompose~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.bufflatten~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufflatten~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.bufmelbands~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufmelbands~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.bufpitch~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufpitch~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.bufselectevery~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufselectevery~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.bufselect~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufselect~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
 				"name" : "fluid.bufshape.maxpat",
@@ -15277,16 +15314,16 @@
 				"implicit" : 1
 			}
 , 			{
-				"name" : "fluid.bufspectralshape~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufspectralshape~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.bufstats~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufstats~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.bufthresh~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.bufthresh~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
 				"name" : "fluid.buftranspose.maxpat",
@@ -15296,12 +15333,12 @@
 				"implicit" : 1
 			}
 , 			{
-				"name" : "fluid.datasetquery~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.datasetquery~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.dataset~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.dataset~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
 				"name" : "fluid.jit.plotter.maxpat",
@@ -15311,67 +15348,64 @@
 				"implicit" : 1
 			}
 , 			{
-				"name" : "fluid.kdtree~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.kdtree~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.list2buf.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.list2buf.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.melbands~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.melbands~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.mfcc~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.mfcc~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.mlpregressor~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.mlpregressor~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.normalize~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.normalize~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.pitch~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.pitch~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.spectralshape~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.spectralshape~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.standardize~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.standardize~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.stats.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.stats.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "fluid.umap~.mxo",
-				"type" : "iLaX"
+				"name" : "fluid.umap~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "p.kernel.kdtree.maxpat",
-				"bootpath" : "~/Desktop",
-				"patcherrelativepath" : "../../../../Desktop",
-				"type" : "JSON",
-				"implicit" : 1
+				"name" : "jit.pass.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "unsynced.fl.audiotrigger~.mxo",
-				"type" : "iLaX"
+				"name" : "unsynced.fl.audiotrigger~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "unsynced.fl.interval~.mxo",
-				"type" : "iLaX"
+				"name" : "unsynced.fl.interval~.mxe64",
+				"type" : "mx64"
 			}
 , 			{
-				"name" : "unsynced.fl.sink~.mxo",
-				"type" : "iLaX"
+				"name" : "unsynced.fl.sink~.mxe64",
+				"type" : "mx64"
 			}
  ],
 		"autosave" : 0
