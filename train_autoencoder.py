@@ -99,9 +99,10 @@ def main(args):
         # log loss
         writer.add_scalar("Loss/train", recon_loss, epoch)
 
-        # save model
-        torch.save(model.state_dict(), os.path.join(
-            args.ckpt_folder, f"model_{str(epoch + 1).zfill(4)}.pt"))
+        # save model at checkpoint interval
+        if (epoch + 1) % args.ckpt_interval == 0:
+            torch.save(model.state_dict(), os.path.join(
+                args.ckpt_folder, f"model_{str(epoch + 1).zfill(4)}.pt"))
 
 
 if __name__ == "__main__":
@@ -113,6 +114,8 @@ if __name__ == "__main__":
     parser.add_argument("--num_epochs", type=int, default=100)
     parser.add_argument("--ckpt_folder", type=str,
                         default="ckpt/simple_autoencoder")
+    parser.add_argument("--ckpt_interval", type=int,
+                        default=10)
     parser.add_argument("--log_folder", type=str,
                         default="logs/simple_autoencoder")
 
