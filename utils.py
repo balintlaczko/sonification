@@ -12,6 +12,7 @@ import platform
 from numba import jit, njit, prange
 from musicalgestures._utils import roundup, generate_outfilename, MgProgressbar
 from typing import List
+import torch
 
 
 # %%
@@ -1562,6 +1563,28 @@ def frequency2midi(
     """
 
     return 69 + 12 * np.log2(frequency.astype(np.float64) / base_frequency)
+
+
+# %%
+
+# function: frequency2midi_tensor
+
+def frequency2midi_tensor(
+        frequency: torch.Tensor,
+        base_frequency: float = 440.0,
+) -> torch.Tensor:
+    """
+    Converts a frequency in Hz to a MIDI note number.
+
+    Args:
+        frequency: Frequency in Hz. Can be a scalar or an array as a torch.tensor.
+        base_frequency: Frequency of MIDI note 69. Defaults to 440.0.
+
+    Returns:
+        np.ndarray: MIDI note number.
+    """
+
+    return 69 + 12 * torch.log2(frequency / base_frequency)
 
 # %%
 
