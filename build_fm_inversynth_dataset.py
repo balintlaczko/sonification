@@ -12,7 +12,7 @@ dataset_folder = "/Volumes/T7/synth_dataset_fm_inversynth"
 # if on Windows, use this path
 if platform.system() == "Windows":
     dataset_folder = "D:/synth_dataset_fm_inversynth"
-num_samples = 10000
+num_samples = 1000000
 num_params = 3
 sr = 48000
 
