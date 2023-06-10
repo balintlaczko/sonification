@@ -10,7 +10,7 @@ from torchsynth.config import SynthConfig
 
 from utils import *
 
-from fm_inversynth import FmSynth, FM_Autoencoder
+from fm_inversynth import FmSynth, FM_Autoencoder, FM_Param_Autoencoder
 
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
@@ -38,23 +38,27 @@ def train(train_loader, model, optimizer, synth, epoch, device):
         data = data.to(device)
 
         # create mel spectrogram
-        carr_freq = data[:, 0]
-        mod_freq = data[:, 1]
-        mod_idx = data[:, 2]
-        mel_spec = synth(carr_freq, mod_freq, mod_idx)
+        # carr_freq = data[:, 0]
+        # mod_freq = data[:, 1]
+        # mod_idx = data[:, 2]
+        # mel_spec = synth(carr_freq, mod_freq, mod_idx)
 
         # forward pass
-        mel_spec_recon, params = model(mel_spec)
+        # mel_spec_recon, params = model(mel_spec)
+        params_recon = model(data)
 
         # calculate loss
-        recon_loss = criterion(mel_spec_recon, mel_spec)
+        # recon_loss = criterion(mel_spec_recon, mel_spec)
+        # param_loss = criterion(params, data)
+        # loss = 0.0 * recon_loss + 1.0 * param_loss
+        loss = criterion(params_recon, data)
 
         # backpropagate
-        recon_loss.backward()
+        loss.backward()
         optimizer.step()
 
         # update loss variables
-        mse_sum += recon_loss.item() * data.shape[0]
+        mse_sum += loss.item() * data.shape[0]
         mse_n += data.shape[0]
 
         # get the learning rate from the optimizer
@@ -94,8 +98,10 @@ def main(args):
     )
 
     # create model and optimizer
-    model = FM_Autoencoder(config, device).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    # model = FM_Autoencoder(config, device).to(device)
+    model = FM_Param_Autoencoder(config, device).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=3e-4)
+    print("Model and optimizer created")
 
     # create synth
     synth = FmSynth(config, device).to(device)
@@ -108,7 +114,7 @@ def main(args):
     os.makedirs(args.ckpt_folder, exist_ok=True)
 
     # train model
-    for epoch in tqdm(range(args.num_epochs)):
+    for epoch in range(args.num_epochs):
         recon_loss = train(train_loader, model, optimizer,
                            synth, epoch, device)
 
@@ -129,11 +135,11 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--sample_rate", type=int, default=48000)
     parser.add_argument("--buffer_length_s", type=float, default=2.0)
-    parser.add_argument("--num_epochs", type=int, default=100)
+    parser.add_argument("--num_epochs", type=int, default=10)
     parser.add_argument("--ckpt_folder", type=str,
                         default="/Volumes/T7/synth_dataset_fm_inversynth/ckpt")
     parser.add_argument("--ckpt_interval", type=int,
-                        default=10)
+                        default=1)
     parser.add_argument("--log_folder", type=str,
                         default="/Volumes/T7/synth_dataset_fm_inversynth/logs")
 
