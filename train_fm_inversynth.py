@@ -8,15 +8,18 @@ from torch.utils.data import DataLoader
 
 from torchsynth.config import SynthConfig
 
+import auraloss
+
 from utils import *
 
-from fm_inversynth import FmSynth, FM_Autoencoder, FM_Param_Autoencoder
+from fm_inversynth import FmSynth, FmSynth2Wave, FM_Autoencoder, FM_Param_Autoencoder, FM_Autoencoder_Wave, FM_Autoencoder_Wave2
 
 from tqdm import tqdm
+from torchsummary import summary
 from torch.utils.tensorboard import SummaryWriter
 
 
-def train(train_loader, model, optimizer, synth, epoch, device):
+def train(train_loader, model, optimizer, loss_fn, synth, epoch, device):
     # set model to train mode
     model.train()
 
@@ -24,7 +27,8 @@ def train(train_loader, model, optimizer, synth, epoch, device):
     train_loader = tqdm(train_loader)
 
     # create loss function
-    criterion = nn.MSELoss()
+    # criterion = nn.MSELoss()
+    criterion = loss_fn
 
     # initialize loss variables for the epoch
     mse_sum = 0
@@ -38,20 +42,28 @@ def train(train_loader, model, optimizer, synth, epoch, device):
         data = data.to(device)
 
         # create mel spectrogram
-        # carr_freq = data[:, 0]
-        # mod_freq = data[:, 1]
-        # mod_idx = data[:, 2]
-        # mel_spec = synth(carr_freq, mod_freq, mod_idx)
+        carr_freq = data[:, 0]
+        mod_freq = data[:, 1]
+        mod_idx = data[:, 2]
+        fm_wave_in = synth(carr_freq, mod_freq, mod_idx)
 
         # forward pass
-        # mel_spec_recon, params = model(mel_spec)
-        params_recon = model(data)
+        fm_wave_out = model(fm_wave_in)
+        # params_recon = model(data)
+        fm_wave_in = fm_wave_in.view(fm_wave_in.shape[0], 1, -1)
+        # print(fm_wave_in.shape)
+        # print(torch.isfinite(fm_wave_in).all())
+        fm_wave_out = fm_wave_out.view(fm_wave_in.shape[0], 1, -1)
+        # print(fm_wave_out.shape)
+        # print(torch.isfinite(fm_wave_out).all())
+        # print(torch.max(fm_wave_out), torch.min(fm_wave_out))
+        # print(fm_wave_out)
 
         # calculate loss
         # recon_loss = criterion(mel_spec_recon, mel_spec)
         # param_loss = criterion(params, data)
         # loss = 0.0 * recon_loss + 1.0 * param_loss
-        loss = criterion(params_recon, data)
+        loss = criterion(fm_wave_out, fm_wave_in)
 
         # backpropagate
         loss.backward()
@@ -66,7 +78,8 @@ def train(train_loader, model, optimizer, synth, epoch, device):
 
         # update progress bar
         train_loader.set_description(
-            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {mse_sum / mse_n:.4f}")
+            # f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {mse_sum / mse_n:.4f}")
+            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {loss.item():.4f}")
 
     # return average loss for the epoch
     return mse_sum / mse_n
@@ -94,17 +107,24 @@ def main(args):
         batch_size=args.batch_size,
         sample_rate=args.sample_rate,
         buffer_size_seconds=args.buffer_length_s,
-        reproducible=False
+        reproducible=False,
+        no_grad=False,
     )
 
     # create model and optimizer
     # model = FM_Autoencoder(config, device).to(device)
-    model = FM_Param_Autoencoder(config, device).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=3e-4)
+    # model = FM_Param_Autoencoder(config, device).to(device)
+    model = FM_Autoencoder_Wave2(config, device, z_dim=512).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)
     print("Model and optimizer created")
 
+    # print model summary
+    # print(config.buffer_size)
+    # summary(model, (1, config.buffer_size))
+
     # create synth
-    synth = FmSynth(config, device).to(device)
+    # synth = FmSynth(config, device).to(device)
+    synth = FmSynth2Wave(config, device).to(device)
 
     # create summary writer
     writer = SummaryWriter(args.log_folder)
@@ -113,9 +133,20 @@ def main(args):
     # create checkpoint folder
     os.makedirs(args.ckpt_folder, exist_ok=True)
 
+    # create loss function
+    loss_fn = auraloss.freq.MultiResolutionSTFTLoss(
+        fft_sizes=[1024, 2048],
+        hop_sizes=[256, 512],
+        win_lengths=[1024, 2048],
+        scale="mel",
+        n_bins=128,
+        sample_rate=args.sample_rate,
+        perceptual_weighting=True,
+    )
+
     # train model
     for epoch in range(args.num_epochs):
-        recon_loss = train(train_loader, model, optimizer,
+        recon_loss = train(train_loader, model, optimizer, loss_fn,
                            synth, epoch, device)
 
         # log loss
@@ -135,7 +166,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--sample_rate", type=int, default=48000)
     parser.add_argument("--buffer_length_s", type=float, default=2.0)
-    parser.add_argument("--num_epochs", type=int, default=10)
+    parser.add_argument("--num_epochs", type=int, default=1)
     parser.add_argument("--ckpt_folder", type=str,
                         default="/Volumes/T7/synth_dataset_fm_inversynth/ckpt")
     parser.add_argument("--ckpt_interval", type=int,

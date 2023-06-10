@@ -61,6 +61,44 @@ class FmSynth(nn.Module):
         return mel_spec
 
 
+class FmSynth2Wave(nn.Module):
+    def __init__(self, config, device):
+        super().__init__()
+        self.fm_vco = FmVCO(
+            tuning=tensor([0.0] * config.batch_size),
+            mod_depth=tensor([0.0] * config.batch_size),
+            synthconfig=config,
+            device=device,
+        )
+        self.modulator = SineVCO(
+            tuning=tensor([0.0] * config.batch_size),
+            mod_depth=tensor([0.0] * config.batch_size),
+            initial_phase=tensor([torch.pi / 2] * config.batch_size),
+            synthconfig=config,
+            device=device,
+        )
+
+    def forward(
+            self,
+            carrier_frequency: torch.Tensor,
+            modulator_frequency: torch.Tensor,
+            modulation_index: torch.Tensor
+    ):
+        # generate modulator signal
+        modulator_signal = self.modulator(
+            frequency2midi_tensor(modulator_frequency))
+
+        # set modulation index
+        self.fm_vco.set_parameter(
+            "mod_depth", torch.clip(modulation_index, -96, 96))
+
+        # generate fm signal
+        fm_signal = self.fm_vco(frequency2midi_tensor(
+            carrier_frequency), modulator_signal)
+
+        return fm_signal
+    
+
 class Mel2Params(nn.Module):
     def __init__(self, num_mels, num_hops, num_params, dim=512):
         super().__init__()
@@ -81,6 +119,7 @@ class Mel2Params(nn.Module):
         params = self.layers(mel_spec)
         return params
     
+
 class Mel2Params2(nn.Module):
     def __init__(self, num_mels, num_hops, num_params, dim=256):
         super().__init__()
@@ -106,6 +145,150 @@ class Mel2Params2(nn.Module):
         # print("mel_flattened.shape", mel_flattened.shape)
         params = self.layers(mel_flattened)
         return params
+
+
+class Wave2MFCCEncoder(nn.Module):
+    def __init__(
+            self, 
+            sr=48000, 
+            n_mels=160, 
+            n_mfcc=40, 
+            n_fft=2048, 
+            hop_length=512, 
+            normalized=True, 
+            f_min=20.0, 
+            f_max=8000.0,
+            z_dim=32
+            ):
+        super().__init__()
+
+        self.mfcc = torchaudio.transforms.MFCC(
+            sample_rate=sr, 
+            n_mfcc=n_mfcc, 
+            melkwargs={
+                    "n_fft": n_fft, 
+                    "hop_length": hop_length, 
+                    "n_mels": n_mels,
+                    "normalized": normalized,
+                    "f_min": f_min,
+                    "f_max": f_max,
+                    })
+        
+        # self.norm = nn.LayerNorm(n_mfcc)
+
+        self.fc = nn.Linear(n_mfcc, z_dim)
+
+    def forward(self, x):
+        mfcc = self.mfcc(x)
+        mfcc_mean = mfcc.mean(dim=-1)
+        # mfcc_norm = self.norm(mfcc_mean)
+        z = self.fc(mfcc_mean)
+        return z
+        
+
+class MLP(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super().__init__()
+
+        self.layers = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, output_dim),
+            # nn.LayerNorm(output_dim),
+            nn.ReLU(),
+        )
+
+    def forward(self, x):
+        return self.layers(x)
+
+
+class FM_Autoencoder_Wave(nn.Module):
+    def __init__(self, config, device, z_dim=32, mlp_dim=512):
+        super().__init__()
+
+        self.encoder = Wave2MFCCEncoder(z_dim=z_dim)
+        self.decoder = MLP(z_dim, mlp_dim, mlp_dim)
+        self.synthparams = nn.Linear(mlp_dim, 3)
+        self.synth_act = nn.ReLU()
+        self.synth = FmSynth2Wave(config, device)
+
+    def forward(self, x):
+        z = self.encoder(x)
+        mlp_out = self.decoder(z)
+        params = self.synthparams(mlp_out)
+        params = self.synth_act(params)
+        # print("params.shape", params.shape)
+        # print("params", params)
+        carrier_frequency = params[:, 0]
+        # print("carrier_frequency", carrier_frequency)
+        modulator_frequency = params[:, 1]
+        # print("modulator_frequency", modulator_frequency)
+        modulation_index = params[:, 2]
+        # print("modulation_index", modulation_index)
+        # print("mod index sum:", modulation_index.sum())
+        fm_signal = self.synth(
+            carrier_frequency, modulator_frequency, modulation_index)
+        return fm_signal
+    
+class FM_Autoencoder_Wave2(nn.Module):
+    def __init__(self, config, device, z_dim=32, mlp_dim=512):
+        super().__init__()
+
+        self.mel_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=config.sample_rate,
+            n_fft=2048,
+            hop_length=512,
+            n_mels=80,
+            normalized=True,
+            f_min=20.0,
+            f_max=8000.0,
+        ).to(device)
+
+        self.spec_encoder = Encoder(input_dim_h=80, input_dim_w=188)
+
+        self.z = nn.Sequential(
+            nn.Linear(128 * 20 * 47, z_dim),
+            nn.ReLU(),
+            nn.Linear(z_dim, z_dim),
+            nn.ReLU(),
+        )
+
+        self.decoder = MLP(z_dim, mlp_dim, mlp_dim)
+        self.synthparams = nn.Linear(mlp_dim, 3)
+        self.synth_act = nn.ReLU()
+        self.synth = FmSynth2Wave(config, device)
+
+    def forward(self, x):
+        # print("x.shape", x.shape)
+        mel_spec = self.mel_transform(x)
+        # print("mel_spec.shape", mel_spec.shape)
+        mel_spec = mel_spec.unsqueeze(1)
+        encoded = self.spec_encoder(mel_spec)
+        # print("encoded.shape", encoded.shape)
+        encoded_flatten = encoded.view(encoded.shape[0], -1)
+        z = self.z(encoded_flatten)
+        # print("z.shape", z.shape)
+        mlp_out = self.decoder(z)
+        # print("mlp_out.shape", mlp_out.shape)
+        params = self.synthparams(mlp_out)
+        params = self.synth_act(params)
+        # print("params.shape", params.shape)
+        # print("params.shape", params.shape)
+        # print("params", params)
+        carrier_frequency = params[:, 0]
+        # print("carrier_frequency", carrier_frequency)
+        modulator_frequency = params[:, 1]
+        # print("modulator_frequency", modulator_frequency)
+        modulation_index = params[:, 2]
+        # print("modulation_index", modulation_index)
+        # print("mod index sum:", modulation_index.sum())
+        fm_signal = self.synth(
+            carrier_frequency, modulator_frequency, modulation_index)
+        return fm_signal
 
 
 class FM_Autoencoder(nn.Module):
