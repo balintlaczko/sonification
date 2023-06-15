@@ -8,6 +8,7 @@ from torchsynth.module import (
 )
 from utils import *
 from functools import reduce
+import ddsp_utils
 
 
 class FmSynth(nn.Module):
@@ -212,6 +213,75 @@ class MLP(nn.Module):
         return self.layers(x)
 
 
+class MFCCEncoder(nn.Module):
+    def __init__(
+            self,
+            sr=48000,
+            n_mels=80,
+            n_mfcc=30,
+            n_fft=2048,
+            hop_length=512,
+            normalized=True,
+            f_min=20.0,
+            f_max=20000.0,
+            gru_hidden_dim=512,
+            mlp_in_dim=16,
+            mlp_out_dim=256,
+            mlp_layers=3
+    ):
+        super().__init__()
+
+        self.mfcc = torchaudio.transforms.MFCC(
+            sample_rate=sr,
+            n_mfcc=n_mfcc,
+            melkwargs={
+                "n_fft": n_fft,
+                "hop_length": hop_length,
+                "n_mels": n_mels,
+                "normalized": normalized,
+                "f_min": f_min,
+                "f_max": f_max,
+            })
+
+        self.layernorm = nn.LayerNorm(n_mfcc)
+        self.gru = nn.GRU(n_mfcc, gru_hidden_dim, batch_first=True)
+        self.linear = nn.Linear(gru_hidden_dim, mlp_in_dim)
+        self.mlp = MLP(mlp_in_dim, mlp_out_dim, mlp_out_dim, mlp_layers)
+
+    def forward(self, y):
+        mfcc = self.mfcc(y)
+        mfcc = self.layernorm(torch.transpose(mfcc, 1, 2))
+        mfcc, _ = self.gru(mfcc)
+        mfcc = self.linear(mfcc)
+        mfcc = self.mlp(mfcc)
+        return mfcc
+
+
+class Wave2Params(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        # feature extraction: Mel spectrogram, MFCCs, pitch
+
+        self.melspec = torchaudio.transforms.MelSpectrogram(
+            sample_rate=48000,
+            n_fft=2048,
+            hop_length=512,
+            n_mels=80,
+            normalized=True,
+            f_min=20.0,
+            f_max=20000.0,
+        )
+
+        self.mfcc_encoder = MFCCEncoder()
+
+        self.pitch = torchaudio.functional.detect_pitch_frequency
+
+    def forward(self, y):
+        params, y_pred = None, None
+        return params, y_pred
+
+
 class FM_Autoencoder_Wave(nn.Module):
     def __init__(self, config, device, z_dim=32, mlp_dim=512):
         super().__init__()
@@ -264,7 +334,7 @@ class FM_Autoencoder_Wave2(nn.Module):
             nn.ReLU(),
         )
 
-        self.decoder = MLP(z_dim, mlp_dim, mlp_dim)
+        self.decoder = MLP(z_dim, mlp_dim, mlp_dim, 3)
         self.synthparams = nn.Linear(mlp_dim, 3)
         self.synth_act = nn.ReLU()
         self.synth = FmSynth2Wave(config, device)
