@@ -97,7 +97,7 @@ class FmSynth2Wave(nn.Module):
             carrier_frequency), modulator_signal)
 
         return fm_signal
-    
+
 
 class Mel2Params(nn.Module):
     def __init__(self, num_mels, num_hops, num_params, dim=512):
@@ -118,7 +118,7 @@ class Mel2Params(nn.Module):
         mel_spec = mel_spec.reshape(-1, self.num_mels * self.num_hops)
         params = self.layers(mel_spec)
         return params
-    
+
 
 class Mel2Params2(nn.Module):
     def __init__(self, num_mels, num_hops, num_params, dim=256):
@@ -149,31 +149,31 @@ class Mel2Params2(nn.Module):
 
 class Wave2MFCCEncoder(nn.Module):
     def __init__(
-            self, 
-            sr=48000, 
-            n_mels=160, 
-            n_mfcc=40, 
-            n_fft=2048, 
-            hop_length=512, 
-            normalized=True, 
-            f_min=20.0, 
+            self,
+            sr=48000,
+            n_mels=160,
+            n_mfcc=40,
+            n_fft=2048,
+            hop_length=512,
+            normalized=True,
+            f_min=20.0,
             f_max=8000.0,
             z_dim=32
-            ):
+    ):
         super().__init__()
 
         self.mfcc = torchaudio.transforms.MFCC(
-            sample_rate=sr, 
-            n_mfcc=n_mfcc, 
+            sample_rate=sr,
+            n_mfcc=n_mfcc,
             melkwargs={
-                    "n_fft": n_fft, 
-                    "hop_length": hop_length, 
-                    "n_mels": n_mels,
-                    "normalized": normalized,
-                    "f_min": f_min,
-                    "f_max": f_max,
-                    })
-        
+                "n_fft": n_fft,
+                "hop_length": hop_length,
+                "n_mels": n_mels,
+                "normalized": normalized,
+                "f_min": f_min,
+                "f_max": f_max,
+            })
+
         # self.norm = nn.LayerNorm(n_mfcc)
 
         self.fc = nn.Linear(n_mfcc, z_dim)
@@ -184,23 +184,29 @@ class Wave2MFCCEncoder(nn.Module):
         # mfcc_norm = self.norm(mfcc_mean)
         z = self.fc(mfcc_mean)
         return z
-        
+
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super().__init__()
 
-        self.layers = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            # nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            # nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim),
-            # nn.LayerNorm(output_dim),
-            nn.ReLU(),
-        )
+        # create a chain of ints for the dimensions of the MLP
+        self.dims = [hidden_dim, ] * (num_layers + 1)
+        # mark first and last as the input and output dimensions
+        self.dims[0], self.dims[-1] = input_dim, output_dim
+        # create a flat list of layers reading the dims pairwise
+        layers = []
+        layers = [layers.extend(self.mlp_layer(
+            self.dims[i], self.dims[i+1])) for i in range(num_layers)]
+
+        self.layers = nn.Sequential(*layers)
+
+    def mlp_layer(self, input_dim, output_dim) -> list:
+        return [
+            nn.Linear(input_dim, output_dim),
+            nn.LayerNorm(output_dim),
+            nn.LeakyReLU(),
+        ]
 
     def forward(self, x):
         return self.layers(x)
@@ -211,7 +217,7 @@ class FM_Autoencoder_Wave(nn.Module):
         super().__init__()
 
         self.encoder = Wave2MFCCEncoder(z_dim=z_dim)
-        self.decoder = MLP(z_dim, mlp_dim, mlp_dim)
+        self.decoder = MLP(z_dim, mlp_dim, mlp_dim, 3)
         self.synthparams = nn.Linear(mlp_dim, 3)
         self.synth_act = nn.ReLU()
         self.synth = FmSynth2Wave(config, device)
@@ -233,7 +239,8 @@ class FM_Autoencoder_Wave(nn.Module):
         fm_signal = self.synth(
             carrier_frequency, modulator_frequency, modulation_index)
         return fm_signal
-    
+
+
 class FM_Autoencoder_Wave2(nn.Module):
     def __init__(self, config, device, z_dim=32, mlp_dim=512):
         super().__init__()
@@ -343,16 +350,16 @@ class FM_Param_Autoencoder(nn.Module):
         self.synth = FmSynth(config, device)
         self.decoder = Mel2Params2(num_mels, num_hops, num_params, dim=dim)
         # self.decoder = Mel2Params(num_mels, num_hops, num_params, dim=dim)
-    
+
     def forward(self, params):
         mel_spec = self.synth(
-            params[:, 0], # carrier_frequency
-            params[:, 1], # modulator_frequency
-            params[:, 2] # modulation_index
+            params[:, 0],  # carrier_frequency
+            params[:, 1],  # modulator_frequency
+            params[:, 2]  # modulation_index
         )
         params_recon = self.decoder(mel_spec)
         return params_recon
-    
+
 
 class ResBlock(nn.Module):
     def __init__(self, in_channel, channel):
@@ -373,7 +380,8 @@ class ResBlock(nn.Module):
         out += input  # skip connection
 
         return out
-    
+
+
 class Encoder(nn.Module):
     def __init__(
             self,
@@ -413,10 +421,10 @@ class Encoder(nn.Module):
                 # base block: in -> out/2 -> out -> out
                 lane = [
                     nn.Conv2d(in_channel, channel // 2, kernel,
-                            stride=2, padding=padding),
+                              stride=2, padding=padding),
                     nn.ReLU(inplace=True),
                     nn.Conv2d(channel // 2, channel, kernel,
-                            stride=2, padding=padding),
+                              stride=2, padding=padding),
                     nn.ReLU(inplace=True),
                     nn.Conv2d(channel, channel, 3, padding=1),
                 ]
@@ -425,7 +433,7 @@ class Encoder(nn.Module):
                 # base block: in -> out/2 -> out
                 lane = [
                     nn.Conv2d(in_channel, channel // 2, kernel,
-                            stride=2, padding=padding),
+                              stride=2, padding=padding),
                     nn.ReLU(inplace=True),
                     nn.Conv2d(channel // 2, channel, 3, padding=1),
                 ]
