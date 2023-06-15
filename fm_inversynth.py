@@ -257,21 +257,78 @@ class MFCCEncoder(nn.Module):
         return mfcc
 
 
+class MelbandsEncoder(nn.Module):
+    def __init__(
+            self,
+            sr=48000,
+            n_mels=80,
+            n_fft=2048,
+            hop_length=512,
+            normalized=True,
+            f_min=20.0,
+            f_max=20000.0,
+            gru_hidden_dim=512,
+            mlp_in_dim=16,
+            mlp_out_dim=256,
+            mlp_layers=3
+    ):
+        super().__init__()
+
+        self.melspec = torchaudio.transforms.MelSpectrogram(
+            sample_rate=sr,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            n_mels=n_mels,
+            normalized=normalized,
+            f_min=f_min,
+            f_max=f_max,
+        )
+
+        self.layernorm = nn.LayerNorm(n_mels)
+        self.gru = nn.GRU(n_mels, gru_hidden_dim, batch_first=True)
+        self.linear = nn.Linear(gru_hidden_dim, mlp_in_dim)
+        self.mlp = MLP(mlp_in_dim, mlp_out_dim, mlp_out_dim, mlp_layers)
+
+    def forward(self, y):
+        melspec = self.melspec(y)
+        melspec = self.layernorm(torch.transpose(melspec, 1, 2))
+        melspec, _ = self.gru(melspec)
+        melspec = self.linear(melspec)
+        melspec = self.mlp(melspec)
+        return melspec
+
+
+class PitchEncoder(nn.Module):
+    def __init__(
+            self,
+            sr=48000,
+            f_min=20.0,
+            f_max=20000.0,
+            mlp_out_dim=256,
+            mlp_layers=3
+    ):
+        super().__init__()
+
+        self.sr = sr
+        self.f_min = f_min
+        self.f_max = f_max
+
+        self.mlp = MLP(1, mlp_out_dim, mlp_out_dim, mlp_layers)
+
+    def forward(self, y):
+        pitch = torchaudio.functional.detect_pitch_frequency(
+            y, self.sr, freq_low=self.f_min, freq_high=self.f_max)
+        pitch = self.mlp(pitch)
+        return pitch
+
+
 class Wave2Params(nn.Module):
     def __init__(self):
         super().__init__()
 
         # feature extraction: Mel spectrogram, MFCCs, pitch
 
-        self.melspec = torchaudio.transforms.MelSpectrogram(
-            sample_rate=48000,
-            n_fft=2048,
-            hop_length=512,
-            n_mels=80,
-            normalized=True,
-            f_min=20.0,
-            f_max=20000.0,
-        )
+        self.melbands_encoder = MelbandsEncoder()
 
         self.mfcc_encoder = MFCCEncoder()
 
