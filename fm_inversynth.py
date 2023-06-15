@@ -327,16 +327,34 @@ class Wave2Params(nn.Module):
         super().__init__()
 
         # feature extraction: Mel spectrogram, MFCCs, pitch
-
         self.melbands_encoder = MelbandsEncoder()
-
         self.mfcc_encoder = MFCCEncoder()
-
-        self.pitch = torchaudio.functional.detect_pitch_frequency
+        self.pitch_encoder = PitchEncoder()
+        # synth params from the concatenated encoded features
+        self.synth_params = nn.Sequential(
+            nn.Linear(3 * 256, 3),
+            nn.ReLU(),
+        )
+        # synth
+        self.synth = ddsp_utils.FMSynth(sr=48000)
 
     def forward(self, y):
-        params, y_pred = None, None
-        return params, y_pred
+        # extract & encode features
+        melbands_encoded = self.melbands_encoder(y)
+        mfcc_encoded = self.mfcc_encoder(y)
+        pitch = self.pitch_encoder(y)
+        # concatenate features
+        encoded = torch.cat(
+            (melbands_encoded, mfcc_encoded, pitch), dim=-1)
+        # predict synth params
+        synth_params = self.synth_params(encoded)
+        # generate synth buffer
+        carr_freq = synth_params[:, 0]
+        harm_ratio = synth_params[:, 1]
+        mod_index = synth_params[:, 2]
+        synth_buffer = self.synth(carr_freq, harm_ratio, mod_index)
+
+        return synth_buffer, synth_params
 
 
 class FM_Autoencoder_Wave(nn.Module):
