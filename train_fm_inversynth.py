@@ -28,8 +28,8 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
     # create progress bar from dataloader
     train_loader = tqdm(train_loader)
 
-    # create loss function
-    # criterion = nn.MSELoss()
+    # create loss functions
+    criterion_mse = nn.MSELoss()
     criterion = loss_fn
 
     # initialize loss variables for the epoch
@@ -71,7 +71,8 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
         y_pred = y_pred.view(y.shape[0], 1, -1)
 
         # calculate reconstruction loss
-        loss = criterion(y_pred, y)
+        assert params_pred.shape == data.shape
+        loss = criterion(y_pred, y) + criterion_mse(params_pred, data)
 
         # backpropagate
         loss.backward()
