@@ -53,6 +53,7 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
 
         # forward pass
         y_pred, params_pred = model(y)
+        # print(float(params_pred.min()), float(params_pred.max()))
 
         # add audio channels dim for loss function
         y = y.view(y.shape[0], 1, -1)
@@ -75,7 +76,7 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
         # update progress bar
         train_loader.set_description(
             # f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {mse_sum / mse_n:.4f}")
-            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {loss.item():.4f}")
+            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {loss.item():.4f} | Params: MIN: {float(params_pred.min()):.4f} MAX: {float(params_pred.max()):.4f}")
 
     # return average loss for the epoch
     return mse_sum / mse_n
@@ -112,7 +113,7 @@ def main(args):
     # model = FM_Param_Autoencoder(config, device).to(device)
     # model = FM_Autoencoder_Wave2(config, device, z_dim=512).to(device)
     model = Wave2Params(buffer_length_s=args.buffer_length_s).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
     print("Model and optimizer created")
 
     # print model summary
