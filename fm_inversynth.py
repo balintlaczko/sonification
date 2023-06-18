@@ -2,6 +2,7 @@
 import torch
 from torch import tensor, nn
 import torchaudio
+import torchyin
 from torchsynth.module import (
     SineVCO,
     FmVCO,
@@ -197,8 +198,8 @@ class MLP(nn.Module):
         self.dims[0], self.dims[-1] = input_dim, output_dim
         # create a flat list of layers reading the dims pairwise
         layers = []
-        layers = [layers.extend(self.mlp_layer(
-            self.dims[i], self.dims[i+1])) for i in range(num_layers)]
+        for i in range(num_layers):
+            layers.extend(self.mlp_layer(self.dims[i], self.dims[i+1]))
 
         self.layers = nn.Sequential(*layers)
 
@@ -250,7 +251,7 @@ class MFCCEncoder(nn.Module):
 
     def forward(self, y):
         mfcc = self.mfcc(y)
-        mfcc = self.layernorm(torch.transpose(mfcc, 1, 2))
+        mfcc = self.layernorm(torch.transpose(mfcc, -2, -1))
         mfcc, _ = self.gru(mfcc)
         mfcc = self.linear(mfcc)
         mfcc = self.mlp(mfcc)
@@ -291,7 +292,7 @@ class MelbandsEncoder(nn.Module):
 
     def forward(self, y):
         melspec = self.melspec(y)
-        melspec = self.layernorm(torch.transpose(melspec, 1, 2))
+        melspec = self.layernorm(torch.transpose(melspec, -2, -1))
         melspec, _ = self.gru(melspec)
         melspec = self.linear(melspec)
         melspec = self.mlp(melspec)
@@ -304,6 +305,7 @@ class PitchEncoder(nn.Module):
             sr=48000,
             f_min=20.0,
             f_max=20000.0,
+            num_frames: int = None,
             mlp_out_dim=256,
             mlp_layers=3
     ):
@@ -312,46 +314,127 @@ class PitchEncoder(nn.Module):
         self.sr = sr
         self.f_min = f_min
         self.f_max = f_max
+        self.num_frames = num_frames
 
         self.mlp = MLP(1, mlp_out_dim, mlp_out_dim, mlp_layers)
 
+    def resize_interp(self, x, out_size):
+        x_3d = x.unsqueeze(1)
+        y_3d = torch.nn.functional.interpolate(
+            x_3d, size=out_size, mode='linear', align_corners=True)
+        y = y_3d.squeeze(1)
+        return y
+
     def forward(self, y):
-        pitch = torchaudio.functional.detect_pitch_frequency(
-            y, self.sr, freq_low=self.f_min, freq_high=self.f_max)
+        pitch = torchyin.estimate(
+            y, self.sr, pitch_min=self.f_min, pitch_max=self.f_max)
+        if self.num_frames is not None:
+            pitch = self.resize_interp(pitch, self.num_frames)
+        pitch = pitch.unsqueeze(-1)
         pitch = self.mlp(pitch)
         return pitch
 
 
+# function to calculate number of hops
+def num_hops(
+        buffer_length: int,
+        hop_length: int
+) -> int:
+    return int(buffer_length / hop_length) + 1
+
+
 class Wave2Params(nn.Module):
-    def __init__(self):
+    def __init__(
+            self,
+            sr=48000,
+            n_mels=80,
+            n_mfcc=30,
+            n_fft=2048,
+            hop_length=512,
+            normalized=True,
+            f_min=20.0,
+            f_max=20000.0,
+            gru_hidden_dim=512,
+            mlp_in_dim=16,
+            mlp_out_dim=256,
+            mlp_layers=3,
+            buffer_length_s: int = 4,
+
+    ):
         super().__init__()
 
+        self.sr = sr
+        self.buffer_length_s = buffer_length_s
+
         # feature extraction: Mel spectrogram, MFCCs, pitch
-        self.melbands_encoder = MelbandsEncoder()
-        self.mfcc_encoder = MFCCEncoder()
-        self.pitch_encoder = PitchEncoder()
+        self.melbands_encoder = MelbandsEncoder(
+            sr=sr,
+            n_mels=n_mels,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            normalized=normalized,
+            f_min=f_min,
+            f_max=f_max,
+            gru_hidden_dim=gru_hidden_dim,
+            mlp_in_dim=mlp_in_dim,
+            mlp_out_dim=mlp_out_dim,
+            mlp_layers=mlp_layers
+        )
+
+        self.mfcc_encoder = MFCCEncoder(
+            sr=sr,
+            n_mels=n_mels,
+            n_mfcc=n_mfcc,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            normalized=normalized,
+            f_min=f_min,
+            f_max=f_max,
+            gru_hidden_dim=gru_hidden_dim,
+            mlp_in_dim=mlp_in_dim,
+            mlp_out_dim=mlp_out_dim,
+            mlp_layers=mlp_layers
+        )
+
+        self.pitch_encoder = PitchEncoder(
+            sr=sr,
+            f_min=f_min,
+            f_max=f_max,
+            mlp_out_dim=mlp_out_dim,
+            mlp_layers=mlp_layers,
+        )
+
         # synth params from the concatenated encoded features
+        n_hops = num_hops(buffer_length_s * sr, hop_length)
         self.synth_params = nn.Sequential(
-            nn.Linear(3 * 256, 3),
+            nn.Linear(3 * mlp_out_dim * n_hops, 3),
             nn.ReLU(),
         )
         # synth
-        self.synth = ddsp_utils.FMSynth(sr=48000)
+        self.synth = ddsp_utils.FMSynth(sr=sr)
 
     def forward(self, y):
         # extract & encode features
         melbands_encoded = self.melbands_encoder(y)
         mfcc_encoded = self.mfcc_encoder(y)
+        # set the number of frames for pitch encoding to the number of fft hops
+        self.pitch_encoder.num_frames = mfcc_encoded.shape[-2]
         pitch = self.pitch_encoder(y)
         # concatenate features
         encoded = torch.cat(
             (melbands_encoded, mfcc_encoded, pitch), dim=-1)
+        # flatten encoded
+        encoded_flatten = torch.flatten(encoded, start_dim=-2)
         # predict synth params
-        synth_params = self.synth_params(encoded)
+        synth_params = self.synth_params(encoded_flatten)
+        # take each param from all batches and repeat it for the number of samples in the buffer
+        carr_freq = synth_params[:,
+                                 0].unsqueeze(-1).repeat(1, self.buffer_length_s * self.sr)
+        harm_ratio = synth_params[:,
+                                  1].unsqueeze(-1).repeat(1, self.buffer_length_s * self.sr)
+        mod_index = synth_params[:,
+                                 2].unsqueeze(-1).repeat(1, self.buffer_length_s * self.sr)
         # generate synth buffer
-        carr_freq = synth_params[:, 0]
-        harm_ratio = synth_params[:, 1]
-        mod_index = synth_params[:, 2]
         synth_buffer = self.synth(carr_freq, harm_ratio, mod_index)
 
         return synth_buffer, synth_params
