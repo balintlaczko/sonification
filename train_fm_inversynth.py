@@ -13,6 +13,7 @@ import ddsp_utils
 
 from utils import *
 
+import fm_inversynth
 from fm_inversynth import Wave2Params
 
 from tqdm import tqdm
@@ -42,18 +43,28 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
         # move data to device
         data = data.to(device)
 
+        # scale synth params from 0-1 to their respective ranges
+        carr_freq = data[:, 0]
+        carr_freq_midi = fm_inversynth.scale(carr_freq, 0, 1, 44, 88, 1)
+        carr_freq_hz = fm_inversynth.midi2frequency(carr_freq_midi)
+        harm_ratio = data[:, 1]
+        harm_ratio_scaled = fm_inversynth.scale(harm_ratio, 0, 1, 1, 10, 1)
+        mod_index = data[:, 2]
+        mod_index_scaled = fm_inversynth.scale(mod_index, 0, 1, 0.1, 10, 0.5)
+
+        # take each param from all batches and repeat it for the number of samples in the buffer
+        carr_freq_array = carr_freq_hz.unsqueeze(-1).repeat(
+            1, int(args.buffer_length_s * args.sample_rate))
+        harm_ratio_array = harm_ratio_scaled.unsqueeze(
+            -1).repeat(1, int(args.buffer_length_s * args.sample_rate))
+        mod_index_array = mod_index_scaled.unsqueeze(
+            -1).repeat(1, int(args.buffer_length_s * args.sample_rate))
+
         # create input synth buffers
-        carr_freq = data[:, 0].unsqueeze(-1).repeat(1,
-                                                    int(args.buffer_length_s * args.sample_rate))
-        mod_freq = data[:, 1].unsqueeze(-1).repeat(1,
-                                                   int(args.buffer_length_s * args.sample_rate))
-        mod_idx = data[:, 2].unsqueeze(-1).repeat(1,
-                                                  int(args.buffer_length_s * args.sample_rate))
-        y = synth(carr_freq, mod_freq, mod_idx)
+        y = synth(carr_freq_array, harm_ratio_array, mod_index_array)
 
         # forward pass
         y_pred, params_pred = model(y)
-        # print(float(params_pred.min()), float(params_pred.max()))
 
         # add audio channels dim for loss function
         y = y.view(y.shape[0], 1, -1)
@@ -75,7 +86,6 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
 
         # update progress bar
         train_loader.set_description(
-            # f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {mse_sum / mse_n:.4f}")
             f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {loss.item():.4f} | Params: MIN: {float(params_pred.min()):.4f} MAX: {float(params_pred.max()):.4f}")
 
     # return average loss for the epoch
@@ -87,13 +97,22 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using {device} device")
 
-    # load parameter values from npy file
-    train_dataset = np.load(args.params_dataset)
-    print(
-        f"Loaded dataset with {len(train_dataset)} samples and {len(train_dataset[0])} features")
+    # # load parameter values from npy file
+    # train_dataset = np.load(args.params_dataset)
+    # print(
+    #     f"Loaded dataset with {len(train_dataset)} samples and {len(train_dataset[0])} features")
 
-    # convert to tensor
-    train_dataset = torch.from_numpy(train_dataset).float().to(device)
+    # # convert to tensor
+    # train_dataset = torch.from_numpy(train_dataset).float().to(device)
+
+    # generate normalized (0-1) params dataset
+    num_samples = 1000000
+    num_params = 3
+    train_dataset = torch.randn((num_samples, num_params), device=device)
+    train_dataset = fm_inversynth.scale(
+        train_dataset, train_dataset.min(), train_dataset.max(), 0, 1, 1)
+    print(
+        f"Generated dataset with {len(train_dataset)} samples and {len(train_dataset[0])} features")
 
     # create dataloader
     train_loader = DataLoader(
