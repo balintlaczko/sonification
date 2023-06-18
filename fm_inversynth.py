@@ -429,11 +429,11 @@ class Wave2Params(nn.Module):
         synth_params = self.synth_params(encoded_flatten)
         # take each param from all batches and repeat it for the number of samples in the buffer
         carr_freq = synth_params[:,
-                                 0].unsqueeze(-1).repeat(1, self.buffer_length_s * self.sr)
+                                 0].unsqueeze(-1).repeat(1, int(self.buffer_length_s * self.sr))
         harm_ratio = synth_params[:,
-                                  1].unsqueeze(-1).repeat(1, self.buffer_length_s * self.sr)
+                                  1].unsqueeze(-1).repeat(1, int(self.buffer_length_s * self.sr))
         mod_index = synth_params[:,
-                                 2].unsqueeze(-1).repeat(1, self.buffer_length_s * self.sr)
+                                 2].unsqueeze(-1).repeat(1, int(self.buffer_length_s * self.sr))
         # generate synth buffer
         synth_buffer = self.synth(carr_freq, harm_ratio, mod_index)
 
