@@ -435,8 +435,8 @@ class Wave2Params(nn.Module):
         n_hops = num_hops(buffer_length_s * sr, hop_length)
         self.synth_params = nn.Sequential(
             nn.Linear(3 * mlp_out_dim * n_hops, 3),
-            nn.ReLU(),
-            # nn.Sigmoid(),
+            # nn.ReLU(),
+            nn.Sigmoid(),
         )
         # synth
         self.synth = ddsp_utils.FMSynth(sr=sr)
