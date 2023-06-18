@@ -41,7 +41,7 @@ class Phasor(nn.Module):
         batch_size = freq.shape[0]
         increment = freq[:, :-1] / self.sr
         phase = torch.cumsum(increment, dim=-1)
-        phase = torch.cat([torch.zeros(batch_size, 1), phase], dim=-1)
+        phase = torch.cat([torch.zeros(batch_size, 1).to(phase.device), phase], dim=-1)
         phasor = wrap(phase, 0.0, 1.0)
         return phasor
 
