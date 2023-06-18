@@ -343,6 +343,26 @@ def num_hops(
     return int(buffer_length / hop_length) + 1
 
 
+# function to scale with exponent
+def scale(x, in_low, in_high, out_low, out_high, exp=1):
+    return torch.where(
+        (x-in_low)/(in_high-in_low) == 0,
+        out_low,
+        torch.where(
+            (x-in_low)/(in_high-in_low) > 0,
+            out_low + (out_high-out_low) *
+            ((x-in_low)/(in_high-in_low))**exp,
+            out_low + (out_high-out_low) * -
+            ((((-x+in_low)/(in_high-in_low)))**(exp))
+        )
+    )
+
+
+# function to convert MIDI to frequency
+def midi2frequency(midi, base_frequency=440.0):
+    return base_frequency * 2**((midi - 69) / 12)
+
+
 class Wave2Params(nn.Module):
     def __init__(
             self,
@@ -409,6 +429,7 @@ class Wave2Params(nn.Module):
         self.synth_params = nn.Sequential(
             nn.Linear(3 * mlp_out_dim * n_hops, 3),
             nn.ReLU(),
+            # nn.Sigmoid(),
         )
         # synth
         self.synth = ddsp_utils.FMSynth(sr=sr)
@@ -425,17 +446,26 @@ class Wave2Params(nn.Module):
             (melbands_encoded, mfcc_encoded, pitch), dim=-1)
         # flatten encoded
         encoded_flatten = torch.flatten(encoded, start_dim=-2)
-        # predict synth params
+        # predict synth params (0-1)
         synth_params = self.synth_params(encoded_flatten)
+        # scale synth params from 0-1 to their respective ranges
+        carr_freq = torch.clamp(synth_params[:, 0], 0, 1)
+        carr_freq_midi = scale(carr_freq, 0, 1, 44, 88, 1)
+        carr_freq_hz = midi2frequency(carr_freq_midi)
+        harm_ratio = torch.clamp(synth_params[:, 1], 0, 1)
+        harm_ratio_scaled = scale(harm_ratio, 0, 1, 1, 10, 1)
+        mod_index = torch.clamp(synth_params[:, 2], 0, 1)
+        mod_index_scaled = scale(mod_index, 0, 1, 0.1, 10, 0.5)
         # take each param from all batches and repeat it for the number of samples in the buffer
-        carr_freq = synth_params[:,
-                                 0].unsqueeze(-1).repeat(1, int(self.buffer_length_s * self.sr))
-        harm_ratio = synth_params[:,
-                                  1].unsqueeze(-1).repeat(1, int(self.buffer_length_s * self.sr))
-        mod_index = synth_params[:,
-                                 2].unsqueeze(-1).repeat(1, int(self.buffer_length_s * self.sr))
+        carr_freq_array = carr_freq_hz.unsqueeze(-1).repeat(
+            1, int(self.buffer_length_s * self.sr))
+        harm_ratio_array = harm_ratio_scaled.unsqueeze(
+            -1).repeat(1, int(self.buffer_length_s * self.sr))
+        mod_index_array = mod_index_scaled.unsqueeze(
+            -1).repeat(1, int(self.buffer_length_s * self.sr))
         # generate synth buffer
-        synth_buffer = self.synth(carr_freq, harm_ratio, mod_index)
+        synth_buffer = self.synth(
+            carr_freq_array, harm_ratio_array, mod_index_array)
 
         return synth_buffer, synth_params
 
