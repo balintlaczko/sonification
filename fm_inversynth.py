@@ -448,6 +448,8 @@ class Wave2Params(nn.Module):
         encoded_flatten = torch.flatten(encoded, start_dim=-2)
         # predict synth params (0-1)
         synth_params = self.synth_params(encoded_flatten)
+        # fix nan
+        synth_params = torch.nan_to_num(synth_params)
         # scale synth params from 0-1 to their respective ranges
         carr_freq = torch.clamp(synth_params[:, 0], 0, 1)
         carr_freq_midi = scale(carr_freq, 0, 1, 44, 88, 1)
