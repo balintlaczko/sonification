@@ -345,6 +345,8 @@ def num_hops(
 
 # function to scale with exponent
 def scale(x, in_low, in_high, out_low, out_high, exp=1):
+    if in_low == in_high:
+        return torch.ones_like(x) * out_high
     return torch.where(
         (x-in_low)/(in_high-in_low) == 0,
         out_low,
@@ -358,7 +360,12 @@ def scale(x, in_low, in_high, out_low, out_high, exp=1):
     )
 
 
+def scale_linear(x, in_low, in_high, out_low, out_high):
+    return (x - in_low) / (in_high - in_low) * (out_high - out_low) + out_low
+
 # function to convert MIDI to frequency
+
+
 def midi2frequency(midi, base_frequency=440.0):
     return base_frequency * 2**((midi - 69) / 12)
 
@@ -449,15 +456,15 @@ class Wave2Params(nn.Module):
         # predict synth params (0-1)
         synth_params = self.synth_params(encoded_flatten)
         # fix nan
-        synth_params = torch.nan_to_num(synth_params)
+        # synth_params = torch.nan_to_num(synth_params)
         # scale synth params from 0-1 to their respective ranges
-        carr_freq = torch.clamp(synth_params[:, 0], 0, 1)
-        carr_freq_midi = scale(carr_freq, 0, 1, 44, 88, 1)
+        carr_freq = synth_params[:, 0]
+        carr_freq_midi = scale_linear(carr_freq, 0, 1, 44, 88)
         carr_freq_hz = midi2frequency(carr_freq_midi)
-        harm_ratio = torch.clamp(synth_params[:, 1], 0, 1)
-        harm_ratio_scaled = scale(harm_ratio, 0, 1, 1, 10, 1)
-        mod_index = torch.clamp(synth_params[:, 2], 0, 1)
-        mod_index_scaled = scale(mod_index, 0, 1, 0.1, 10, 0.5)
+        harm_ratio = synth_params[:, 1]
+        harm_ratio_scaled = scale_linear(harm_ratio, 0, 1, 1, 10)
+        mod_index = synth_params[:, 2]
+        mod_index_scaled = scale_linear(mod_index, 0, 1, 0.1, 10)
         # take each param from all batches and repeat it for the number of samples in the buffer
         carr_freq_array = carr_freq_hz.unsqueeze(-1).repeat(
             1, int(self.buffer_length_s * self.sr))

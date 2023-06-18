@@ -45,12 +45,12 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
 
         # scale synth params from 0-1 to their respective ranges
         carr_freq = data[:, 0]
-        carr_freq_midi = fm_inversynth.scale(carr_freq, 0, 1, 44, 88, 1)
+        carr_freq_midi = fm_inversynth.scale_linear(carr_freq, 0, 1, 44, 88)
         carr_freq_hz = fm_inversynth.midi2frequency(carr_freq_midi)
         harm_ratio = data[:, 1]
-        harm_ratio_scaled = fm_inversynth.scale(harm_ratio, 0, 1, 1, 10, 1)
+        harm_ratio_scaled = fm_inversynth.scale_linear(harm_ratio, 0, 1, 1, 10)
         mod_index = data[:, 2]
-        mod_index_scaled = fm_inversynth.scale(mod_index, 0, 1, 0.1, 10, 0.5)
+        mod_index_scaled = fm_inversynth.scale_linear(mod_index, 0, 1, 0.1, 10)
 
         # take each param from all batches and repeat it for the number of samples in the buffer
         carr_freq_array = carr_freq_hz.unsqueeze(-1).repeat(
@@ -132,7 +132,7 @@ def main(args):
     # model = FM_Param_Autoencoder(config, device).to(device)
     # model = FM_Autoencoder_Wave2(config, device, z_dim=512).to(device)
     model = Wave2Params(buffer_length_s=args.buffer_length_s).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
     print("Model and optimizer created")
 
     # print model summary
