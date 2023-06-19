@@ -132,7 +132,8 @@ def main(args):
     # model = FM_Autoencoder(config, device).to(device)
     # model = FM_Param_Autoencoder(config, device).to(device)
     # model = FM_Autoencoder_Wave2(config, device, z_dim=512).to(device)
-    model = Wave2Params(buffer_length_s=args.buffer_length_s).to(device)
+    model = Wave2Params(sr=args.sample_rate, buffer_length_s=args.buffer_length_s,
+                        gru_hidden_dim=128, mlp_out_dim=64).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
     print("Model and optimizer created")
 

@@ -434,7 +434,8 @@ class Wave2Params(nn.Module):
         # synth params from the concatenated encoded features
         n_hops = num_hops(buffer_length_s * sr, hop_length)
         self.synth_params = nn.Sequential(
-            nn.Linear(3 * mlp_out_dim * n_hops, 3),
+            # nn.Linear(3 * mlp_out_dim * n_hops, 3),
+            nn.Linear(3 * mlp_out_dim, 3),
             # nn.ReLU(),
             nn.Sigmoid(),
         )
@@ -451,6 +452,8 @@ class Wave2Params(nn.Module):
         # concatenate features
         encoded = torch.cat(
             (melbands_encoded, mfcc_encoded, pitch), dim=-1)
+        # average time steps
+        encoded = torch.mean(encoded, dim=-2, keepdim=True)
         # flatten encoded
         encoded_flatten = torch.flatten(encoded, start_dim=-2)
         # predict synth params (0-1)
