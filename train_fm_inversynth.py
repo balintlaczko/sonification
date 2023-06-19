@@ -88,7 +88,7 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
 
         # update progress bar
         train_loader.set_description(
-            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {loss.item():.4f} | Params: MIN: {float(params_pred.min()):.4f} MAX: {float(params_pred.max()):.4f} Uniques: {len(torch.unique(params_pred))}")
+            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {(mse_sum/mse_n):.4f} | Params: MIN: {float(params_pred.min()):.4f} MAX: {float(params_pred.max()):.4f} Uniques: {len(torch.unique(params_pred))}")
 
     # return average loss for the epoch
     return mse_sum / mse_n
