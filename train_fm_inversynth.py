@@ -70,9 +70,8 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
         y = y.view(y.shape[0], 1, -1)
         y_pred = y_pred.view(y.shape[0], 1, -1)
 
-        # calculate reconstruction loss
-        loss = criterion(y_pred, y) + \
-            criterion_mse(params_pred, data) * 1.0
+        # calculate param loss
+        loss = criterion_mse(params_pred, data)
 
         # backpropagate
         loss.backward()
@@ -107,7 +106,7 @@ def main(args):
     # train_dataset = torch.from_numpy(train_dataset).float().to(device)
 
     # generate normalized (0-1) params dataset
-    num_samples = 1000000
+    num_samples = args.batch_size * args.steps_per_epoch
     num_params = 3
     train_dataset = torch.randn((num_samples, num_params), device=device)
     train_dataset = fm_inversynth.scale(
@@ -119,30 +118,16 @@ def main(args):
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
 
-    # create synth config
-    # config = SynthConfig(
-    #     batch_size=args.batch_size,
-    #     sample_rate=args.sample_rate,
-    #     buffer_size_seconds=args.buffer_length_s,
-    #     reproducible=False,
-    #     no_grad=False,
-    # )
-
     # create model and optimizer
-    # model = FM_Autoencoder(config, device).to(device)
-    # model = FM_Param_Autoencoder(config, device).to(device)
-    # model = FM_Autoencoder_Wave2(config, device, z_dim=512).to(device)
     model = Wave2Params(sr=args.sample_rate, buffer_length_s=args.buffer_length_s,
-                        gru_hidden_dim=128, mlp_out_dim=64).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)
+                        gru_hidden_dim=args.gru_hidden_dim, mlp_out_dim=args.mlp_out_dim).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
     print("Model and optimizer created")
 
     # print model summary
     summary(model, (int(args.sample_rate * args.buffer_length_s),))
 
     # create synth
-    # synth = FmSynth(config, device).to(device)
-    # synth = FmSynth2Wave(config, device).to(device)
     synth = ddsp_utils.FMSynth(sr=args.sample_rate).to(device)
 
     # create summary writer
@@ -183,9 +168,13 @@ if __name__ == "__main__":
     parser.add_argument("--params_dataset", type=str,
                         default="/Volumes/T7/synth_dataset_fm_inversynth/params_scaled.npy")
     parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--num_epochs", type=int, default=1)
+    parser.add_argument("--steps_per_epoch", type=int, default=32)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--sample_rate", type=int, default=48000)
     parser.add_argument("--buffer_length_s", type=float, default=2.0)
-    parser.add_argument("--num_epochs", type=int, default=1)
+    parser.add_argument("--gru_hidden_dim", type=int, default=128)
+    parser.add_argument("--mlp_out_dim", type=int, default=64)
     parser.add_argument("--ckpt_folder", type=str,
                         default="/Volumes/T7/synth_dataset_fm_inversynth/ckpt")
     parser.add_argument("--ckpt_interval", type=int,
