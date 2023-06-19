@@ -71,7 +71,8 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
         y_pred = y_pred.view(y.shape[0], 1, -1)
 
         # calculate reconstruction loss
-        loss = criterion(y_pred, y) + criterion_mse(params_pred, data) * 0.0
+        loss = criterion(y_pred, y) + \
+            criterion_mse(params_pred[:, 0], data[:, 0]) * 0.25
 
         # backpropagate
         loss.backward()
@@ -86,7 +87,7 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
 
         # update progress bar
         train_loader.set_description(
-            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {loss.item():.4f} | Params: MIN: {float(params_pred.min()):.4f} MAX: {float(params_pred.max()):.4f}")
+            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {loss.item():.4f} | Params: MIN: {float(params_pred.min()):.4f} MAX: {float(params_pred.max()):.4f} Uniques: {len(torch.unique(params_pred))}")
 
     # return average loss for the epoch
     return mse_sum / mse_n
@@ -132,7 +133,7 @@ def main(args):
     # model = FM_Param_Autoencoder(config, device).to(device)
     # model = FM_Autoencoder_Wave2(config, device, z_dim=512).to(device)
     model = Wave2Params(buffer_length_s=args.buffer_length_s).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-2)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
     print("Model and optimizer created")
 
     # print model summary
