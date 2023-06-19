@@ -72,7 +72,7 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
 
         # calculate reconstruction loss
         loss = criterion(y_pred, y) + \
-            criterion_mse(params_pred[:, 0], data[:, 0]) * 0.25
+            criterion_mse(params_pred, data) * 1.0
 
         # backpropagate
         loss.backward()
@@ -134,7 +134,7 @@ def main(args):
     # model = FM_Autoencoder_Wave2(config, device, z_dim=512).to(device)
     model = Wave2Params(sr=args.sample_rate, buffer_length_s=args.buffer_length_s,
                         gru_hidden_dim=128, mlp_out_dim=64).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)
     print("Model and optimizer created")
 
     # print model summary
