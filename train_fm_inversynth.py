@@ -1,5 +1,6 @@
 # imports
 import argparse
+import json
 
 import numpy as np
 import torch
@@ -70,8 +71,9 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
         y = y.view(y.shape[0], 1, -1)
         y_pred = y_pred.view(y.shape[0], 1, -1)
 
-        # calculate param loss
-        loss = criterion_mse(params_pred, data)
+        # calculate param loss + recon loss
+        loss = criterion_mse(params_pred, data) * args.param_loss_weight + \
+            criterion_mse(y_pred, y) * args.recon_loss_weight
 
         # backpropagate
         loss.backward()
@@ -119,8 +121,20 @@ def main(args):
         train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
 
     # create model and optimizer
-    model = Wave2Params(sr=args.sample_rate, buffer_length_s=args.buffer_length_s,
-                        gru_hidden_dim=args.gru_hidden_dim, mlp_out_dim=args.mlp_out_dim).to(device)
+    model = Wave2Params(
+        sr=args.sample_rate,
+        n_mels=args.n_mels,
+        n_mfcc=args.n_mfcc,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
+        f_min=args.f_min,
+        f_max=args.f_max,
+        gru_hidden_dim=args.gru_hidden_dim,
+        mlp_in_dim=args.mlp_in_dim,
+        mlp_out_dim=args.mlp_out_dim,
+        mlp_layers=args.mlp_layers,
+        buffer_length_s=args.buffer_length_s,
+    ).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     print("Model and optimizer created")
 
@@ -136,6 +150,10 @@ def main(args):
     os.makedirs(args.log_folder, exist_ok=True)
     # create checkpoint folder
     os.makedirs(args.ckpt_folder, exist_ok=True)
+
+    # save args to file
+    with open(f"{args.log_dir}/args.json", "w") as f:
+        json.dump(args.__dict__, f, indent=2)
 
     # create loss function
     loss_fn = auraloss.freq.MultiResolutionSTFTLoss(
@@ -165,16 +183,32 @@ def main(args):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--params_dataset", type=str,
-                        default="/Volumes/T7/synth_dataset_fm_inversynth/params_scaled.npy")
+    # parser.add_argument("--params_dataset", type=str,
+    #                     default="/Volumes/T7/synth_dataset_fm_inversynth/params_scaled.npy")
+
+    # train params
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--num_epochs", type=int, default=1)
     parser.add_argument("--steps_per_epoch", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--param_loss_weight", type=float, default=1.0)
+    parser.add_argument("--recon_loss_weight", type=float, default=1.0)
+
+    # model params
     parser.add_argument("--sample_rate", type=int, default=48000)
-    parser.add_argument("--buffer_length_s", type=float, default=2.0)
+    parser.add_argument("--n_mels", type=int, default=80)
+    parser.add_argument("--n_mfcc", type=int, default=30)
+    parser.add_argument("--n_fft", type=int, default=2048)
+    parser.add_argument("--hop_length", type=int, default=512)
+    parser.add_argument("--f_min", type=float, default=20.0)
+    parser.add_argument("--f_max", type=float, default=20000.0)
     parser.add_argument("--gru_hidden_dim", type=int, default=128)
+    parser.add_argument("--mlp_in_dim", type=int, default=16)
     parser.add_argument("--mlp_out_dim", type=int, default=64)
+    parser.add_argument("--mlp_layers", type=int, default=3)
+    parser.add_argument("--buffer_length_s", type=float, default=2.0)
+
+    # logging params
     parser.add_argument("--ckpt_folder", type=str,
                         default="/Volumes/T7/synth_dataset_fm_inversynth/ckpt")
     parser.add_argument("--ckpt_interval", type=int,
