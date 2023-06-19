@@ -152,7 +152,7 @@ def main(args):
     os.makedirs(args.ckpt_folder, exist_ok=True)
 
     # save args to file
-    with open(f"{args.log_dir}/args.json", "w") as f:
+    with open(f"{args.log_folder}/args.json", "w") as f:
         json.dump(args.__dict__, f, indent=2)
 
     # create loss function
