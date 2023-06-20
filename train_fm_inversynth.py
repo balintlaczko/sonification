@@ -85,6 +85,11 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
 
         # get the learning rate from the optimizer
         lr = optimizer.param_groups[0]['lr']
+        # apply learning rate decay for next round
+        if args.lr_decay < 1:
+            # decay learning rate
+            for param_group in optimizer.param_groups:
+                param_group['lr'] *= args.lr_decay
 
         # update progress bar
         train_loader.set_description(
@@ -191,6 +196,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_epochs", type=int, default=1)
     parser.add_argument("--steps_per_epoch", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr_decay", type=float, default=0.99)
     parser.add_argument("--param_loss_weight", type=float, default=1.0)
     parser.add_argument("--recon_loss_weight", type=float, default=1.0)
 
