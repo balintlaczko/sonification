@@ -86,7 +86,7 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
         # get the learning rate from the optimizer
         lr = optimizer.param_groups[0]['lr']
         # apply learning rate decay for next round
-        if args.lr_decay < 1:
+        if args.lr_decay < 1 and batch_idx == len(train_loader) - 1:
             # decay learning rate
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= args.lr_decay
