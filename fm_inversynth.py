@@ -225,12 +225,15 @@ class MFCCEncoder(nn.Module):
             normalized=True,
             f_min=20.0,
             f_max=20000.0,
+            use_gru=True,
             gru_hidden_dim=512,
             mlp_in_dim=16,
             mlp_out_dim=256,
             mlp_layers=3
     ):
         super().__init__()
+
+        self.use_gru = use_gru
 
         self.mfcc = torchaudio.transforms.MFCC(
             sample_rate=sr,
@@ -245,16 +248,26 @@ class MFCCEncoder(nn.Module):
             })
 
         self.layernorm = nn.LayerNorm(n_mfcc)
-        self.gru = nn.GRU(n_mfcc, gru_hidden_dim, batch_first=True)
-        self.linear = nn.Linear(gru_hidden_dim, mlp_in_dim)
+        if self.use_gru:
+            self.gru = nn.GRU(n_mfcc, gru_hidden_dim, batch_first=True)
+            self.linear = nn.Linear(gru_hidden_dim, mlp_in_dim)
+        else:
+            self.linear = nn.Linear(n_mfcc, mlp_in_dim)
         self.mlp = MLP(mlp_in_dim, mlp_out_dim, mlp_out_dim, mlp_layers)
 
     def forward(self, y):
+        # input shape: (batch_size, n_samples)
         mfcc = self.mfcc(y)
+        # (batch_size, n_mfcc, n_frames)
         mfcc = self.layernorm(torch.transpose(mfcc, -2, -1))
-        mfcc, _ = self.gru(mfcc)
+        # (batch_size, n_frames, n_mfcc)
+        if self.use_gru:
+            mfcc, _ = self.gru(mfcc)
+            # (batch_size, n_frames, gru_hidden_dim)
         mfcc = self.linear(mfcc)
+        # (batch_size, n_frames, mlp_in_dim)
         mfcc = self.mlp(mfcc)
+        # (batch_size, n_frames, mlp_out_dim)
         return mfcc
 
 
@@ -268,12 +281,15 @@ class MelbandsEncoder(nn.Module):
             normalized=True,
             f_min=20.0,
             f_max=20000.0,
+            use_gru=True,
             gru_hidden_dim=512,
             mlp_in_dim=16,
             mlp_out_dim=256,
             mlp_layers=3
     ):
         super().__init__()
+
+        self.use_gru = use_gru
 
         self.melspec = torchaudio.transforms.MelSpectrogram(
             sample_rate=sr,
@@ -286,16 +302,26 @@ class MelbandsEncoder(nn.Module):
         )
 
         self.layernorm = nn.LayerNorm(n_mels)
-        self.gru = nn.GRU(n_mels, gru_hidden_dim, batch_first=True)
-        self.linear = nn.Linear(gru_hidden_dim, mlp_in_dim)
+        if self.use_gru:
+            self.gru = nn.GRU(n_mels, gru_hidden_dim, batch_first=True)
+            self.linear = nn.Linear(gru_hidden_dim, mlp_in_dim)
+        else:
+            self.linear = nn.Linear(n_mels, mlp_in_dim)
         self.mlp = MLP(mlp_in_dim, mlp_out_dim, mlp_out_dim, mlp_layers)
 
     def forward(self, y):
+        # input shape: (batch_size, n_samples)
         melspec = self.melspec(y)
+        # (batch_size, n_mels, n_frames)
         melspec = self.layernorm(torch.transpose(melspec, -2, -1))
-        melspec, _ = self.gru(melspec)
+        # (batch_size, n_frames, n_mels)
+        if self.use_gru:
+            melspec, _ = self.gru(melspec)
+            # (batch_size, n_frames, gru_hidden_dim)
         melspec = self.linear(melspec)
+        # (batch_size, n_frames, mlp_in_dim)
         melspec = self.mlp(melspec)
+        # (batch_size, n_frames, mlp_out_dim)
         return melspec
 
 
@@ -381,6 +407,7 @@ class Wave2Params(nn.Module):
             normalized=True,
             f_min=20.0,
             f_max=20000.0,
+            use_gru=True,
             gru_hidden_dim=512,
             mlp_in_dim=16,
             mlp_out_dim=256,
@@ -402,6 +429,7 @@ class Wave2Params(nn.Module):
             normalized=normalized,
             f_min=f_min,
             f_max=f_max,
+            use_gru=use_gru,
             gru_hidden_dim=gru_hidden_dim,
             mlp_in_dim=mlp_in_dim,
             mlp_out_dim=mlp_out_dim,
@@ -417,6 +445,7 @@ class Wave2Params(nn.Module):
             normalized=normalized,
             f_min=f_min,
             f_max=f_max,
+            use_gru=use_gru,
             gru_hidden_dim=gru_hidden_dim,
             mlp_in_dim=mlp_in_dim,
             mlp_out_dim=mlp_out_dim,

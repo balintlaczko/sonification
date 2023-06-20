@@ -134,6 +134,7 @@ def main(args):
         hop_length=args.hop_length,
         f_min=args.f_min,
         f_max=args.f_max,
+        use_gru=args.use_gru == 1,
         gru_hidden_dim=args.gru_hidden_dim,
         mlp_in_dim=args.mlp_in_dim,
         mlp_out_dim=args.mlp_out_dim,
@@ -208,6 +209,7 @@ if __name__ == "__main__":
     parser.add_argument("--hop_length", type=int, default=512)
     parser.add_argument("--f_min", type=float, default=20.0)
     parser.add_argument("--f_max", type=float, default=20000.0)
+    parser.add_argument("--use_gru", type=int, default=1)
     parser.add_argument("--gru_hidden_dim", type=int, default=128)
     parser.add_argument("--mlp_in_dim", type=int, default=16)
     parser.add_argument("--mlp_out_dim", type=int, default=64)

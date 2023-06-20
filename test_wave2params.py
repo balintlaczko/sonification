@@ -59,8 +59,17 @@ melbands = melbands_encoder(y_batch)
 melbands.shape
 
 # %%
+melbands = MelbandsEncoder(use_gru=False)(y_batch)
+melbands.shape
+
+# %%
 
 mfcc = mfcc_encoder(y_batch)
+mfcc.shape
+
+# %%
+
+mfcc = MFCCEncoder(use_gru=False)(y_batch)
 mfcc.shape
 
 # %%
