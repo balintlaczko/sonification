@@ -1,0 +1,23 @@
+{
+  "batch_size": 512,
+  "num_epochs": 100,
+  "steps_per_epoch": 32,
+  "lr": 0.0001,
+  "param_loss_weight": 10.0,
+  "recon_loss_weight": 0.1,
+  "sample_rate": 24000,
+  "n_mels": 80,
+  "n_mfcc": 30,
+  "n_fft": 2048,
+  "hop_length": 512,
+  "f_min": 20.0,
+  "f_max": 8000.0,
+  "gru_hidden_dim": 128,
+  "mlp_in_dim": 16,
+  "mlp_out_dim": 256,
+  "mlp_layers": 3,
+  "buffer_length_s": 2.0,
+  "ckpt_folder": "ckpt/synth_dataset_fm_inversynth/tiny_4",
+  "ckpt_interval": 1,
+  "log_folder": "logs\\synth_dataset_fm_inversynth\\tiny_4"
+}
