@@ -1173,7 +1173,6 @@ def scale_array_exp(
             )
         )
 
-# %%
 
 # function: wrap
 
@@ -1197,7 +1196,6 @@ def wrap(
     """
     return (x - min) % (max - min) + min
 
-# %%
 
 # function: resize_interp
 
@@ -1224,7 +1222,6 @@ def resize_interp(
     # interpolate
     return np.interp(output_x, input_x, input).astype(np.float64)
 
-# %%
 
 # function: phasor
 
@@ -1264,7 +1261,6 @@ def phasor(
         output[i+1] = wrap(increment + output[i], 0, 1)
     return output
 
-# %%
 
 # function: samples2seconds
 
@@ -1286,7 +1282,6 @@ def samples2seconds(
     """
     return samples / sr
 
-# %%
 
 # function: seconds2samples
 
@@ -1308,7 +1303,6 @@ def seconds2samples(
     """
     return int(seconds * sr)
 
-# %%
 
 # function: array2broadcastable
 
@@ -1335,7 +1329,6 @@ def array2broadcastable(
     else:
         return resize_interp(array, samples)
 
-# %%
 
 # function: sinewave
 
@@ -1362,7 +1355,6 @@ def sinewave(
     # calculate sine wave and return sine buffer
     return np.sin(2 * np.pi * phasor_buf)
 
-# %%
 
 # function: fm_synth
 
@@ -1399,7 +1391,6 @@ def fm_synth(
     # calculate frequency modulated signal and return fm buffer
     return sinewave(samples, sr, carrier_frequency + modulator_buf)
 
-# %%
 
 # function: fm_synth_2 (with harmonicity)
 
@@ -1441,7 +1432,6 @@ def fm_synth_2(
     # calculate frequency modulated signal and return fm buffer
     return sinewave(samples, sr, _carrier_frequency + (modulator_buf * modulation_amplitude))
 
-# %%
 
 # function: am_synth
 
@@ -1481,7 +1471,6 @@ def am_synth(
     # calculate amplitude modulated signal and return am buffer
     return sinewave(samples, sr, carrier_frequency) * (modulator_buf + 1 - mod_amp_resized)
 
-# %%
 
 # function: am_module
 
@@ -1519,7 +1508,6 @@ def am_module(
     # calculate amplitude modulator signal and return am buffer
     return modulator_buf + 1 - mod_amp_resized
 
-# %%
 
 # function: midi2frequency
 
@@ -1541,7 +1529,6 @@ def midi2frequency(
     """
     return base_frequency * 2 ** ((midi.astype(np.float64) - 69) / 12)
 
-# %%
 
 # function: frequency2midi
 
@@ -1565,8 +1552,6 @@ def frequency2midi(
     return 69 + 12 * np.log2(frequency.astype(np.float64) / base_frequency)
 
 
-# %%
-
 # function: frequency2midi_tensor
 
 def frequency2midi_tensor(
@@ -1586,7 +1571,6 @@ def frequency2midi_tensor(
 
     return 69 + 12 * torch.log2(frequency / base_frequency)
 
-# %%
 
 # function: history
 
@@ -1608,8 +1592,6 @@ def history(
     history = np.zeros_like(signal, dtype=np.float64)
     history[1:] = signal[:-1]
     return history
-
-# %%
 
 
 # function: ramp2trigger
@@ -1641,7 +1623,6 @@ def ramp2trigger(
 
     return trigger
 
-# %%
 
 # function: ramp2slope
 
@@ -1660,7 +1641,6 @@ def ramp2slope(ramp: np.ndarray) -> np.ndarray:
     delta[1:] = np.diff(ramp)
     return wrap(delta, -0.5, 0.5)
 
-# %%
 
 # function: array2fluid_dataset
 
@@ -1685,8 +1665,6 @@ def array2fluid_dataset(
         out_dict["data"][str(i)] = array[i].tolist()
     return out_dict
 
-
-# %%
 
 # function: fluid_dataset2array
 
