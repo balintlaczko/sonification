@@ -268,3 +268,15 @@ distances, distances.shape
 #     loss = loss_func(embeddings, augmented)
 #     loss.backward()
 #     optimizer.step()
+
+
+# %%
+from video_utils import *
+
+video_gfp = "/Users/balintl/Desktop/Sonification Pilot Video/Materials/processing/pbsgb_gfp_st_1.avi"
+video_rfp = "/Users/balintl/Desktop/Sonification Pilot Video/Materials/processing/pbsgb_rfp_st_1.avi"
+target_name = "/Users/balintl/Desktop/Sonification Pilot Video/Materials/processing/rfp_red.avi"
+
+# %%
+target_name = "/Users/balintl/Desktop/Sonification Pilot Video/Materials/processing/rfp_red.avi"
+videos2planes(video2red=video_rfp, target_name=target_name)
