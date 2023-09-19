@@ -18,7 +18,7 @@ from sklearn.decomposition import PCA
 from matplotlib import pyplot as plt
 
 
-def train(train_loader, model, optimizer, epoch, device):
+def train(train_loader, model, optimizer, epoch, device, args):
     # set model to train mode
     model.train()
 
@@ -61,7 +61,7 @@ def train(train_loader, model, optimizer, epoch, device):
         KLD = -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
         # print("KLD.shape", KLD.shape)
         # print("KLD", KLD)
-        combined_loss = recon_loss + KLD
+        combined_loss = recon_loss + (KLD * args.kld_weight)
 
         # backpropagate
         combined_loss.backward()
@@ -131,7 +131,8 @@ def main(args):
 
     # train model
     for epoch in tqdm(range(args.num_epochs)):
-        loss, embeddings = train(train_loader, model, optimizer, epoch, device)
+        loss, embeddings = train(
+            train_loader, model, optimizer, epoch, device, args)
 
         # log loss
         writer.add_scalar("Loss/train", loss, epoch)
@@ -161,6 +162,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_latent_size", type=int, default=8)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--num_epochs", type=int, default=100)
+    parser.add_argument("--kld_weight", type=float, default=1)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--ckpt_folder", type=str,
                         default="ckpt/simple_vae")
