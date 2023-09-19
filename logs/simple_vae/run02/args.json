@@ -1,0 +1,10 @@
+{
+  "dataset": "/Volumes/T7/synth_dataset_2/melspec.npy",
+  "model_hidden_size": 8,
+  "batch_size": 256,
+  "num_epochs": 100,
+  "lr": 0.0003,
+  "ckpt_folder": "ckpt/simple_vae/run_02",
+  "ckpt_interval": 10,
+  "log_folder": "logs/simple_vae/run02"
+}
