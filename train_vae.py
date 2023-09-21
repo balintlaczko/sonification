@@ -142,7 +142,7 @@ def main(args):
         writer.add_scalar("Recon Loss/train", recon_loss, epoch)
         writer.add_scalar("KLD Loss/train", KLD_loss, epoch)
         writer.add_scalar("LR", current_lr, epoch)
-        writer.add_scalar("KLD Warmup Factor", kld_warmup_curve[epoch], epoch)
+        writer.add_scalar("KLD Warmup Factor", kld_warmup_curve[epoch-1], epoch)
 
         # reduce the dimensionality of the vectors to 2
         if args.model_latent_size > 2:
