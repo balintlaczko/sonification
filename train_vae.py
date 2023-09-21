@@ -134,15 +134,18 @@ def main(args):
 
     # train model
     for epoch in tqdm(range(args.num_epochs)):
+        
+        kld_warmup_counter = np.clip(epoch, 0, args.kld_warmup_epochs-1)
+
         combined_loss, recon_loss, KLD_loss, embeddings, current_lr = train(
-            train_loader, model, optimizer, epoch, device, args, kld_warmup_curve[epoch-1])
+            train_loader, model, optimizer, epoch, device, args, kld_warmup_curve[kld_warmup_counter])
 
         # log loss
         writer.add_scalar("Loss/train", combined_loss, epoch)
         writer.add_scalar("Recon Loss/train", recon_loss, epoch)
         writer.add_scalar("KLD Loss/train", KLD_loss, epoch)
         writer.add_scalar("LR", current_lr, epoch)
-        writer.add_scalar("KLD Warmup Factor", kld_warmup_curve[epoch-1], epoch)
+        writer.add_scalar("KLD Warmup Factor", kld_warmup_curve[kld_warmup_counter], epoch)
 
         # reduce the dimensionality of the vectors to 2
         if args.model_latent_size > 2:
