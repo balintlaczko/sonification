@@ -29,7 +29,10 @@ def train(train_loader, model, optimizer, epoch, device, args):
     criterion = nn.MSELoss()
 
     # initialize loss variables for the epoch
-    loss_sum = 0
+    combined_loss_sum = 0
+    recon_loss_sum = 0
+    KLD_sum = 0
+    scaled_KLD_sum = 0
     loss_n = 0
     epoch_embeddings = None
 
@@ -43,12 +46,6 @@ def train(train_loader, model, optimizer, epoch, device, args):
         # forward pass
         output, mean, logvar, z = model(data)
 
-        # print("data.shape", data.shape)
-        # print("output.shape", output.shape)
-        # print("output", output)
-
-        # print("z.shape", z.shape)
-
         if batch_idx == 0:
             epoch_embeddings = z
         else:
@@ -56,19 +53,19 @@ def train(train_loader, model, optimizer, epoch, device, args):
 
         # calculate loss
         recon_loss = criterion(output, data)
-        # print("recon_loss.shape", recon_loss.shape)
-        # print("recon_loss", recon_loss)
-        KLD = -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
-        # print("KLD.shape", KLD.shape)
-        # print("KLD", KLD)
-        combined_loss = recon_loss + (KLD * args.kld_weight)
+        KLD = -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp()) # TODO: add torch.mean()?! then we don't need to scale it down like crazy
+        scaled_KLD = KLD * args.kld_weight * 0.0001
+        combined_loss = recon_loss + scaled_KLD
 
         # backpropagate
         combined_loss.backward()
         optimizer.step()
 
         # update loss variables
-        loss_sum += combined_loss.item() * data.shape[0]
+        combined_loss_sum += combined_loss.item() * data.shape[0]
+        recon_loss_sum += recon_loss.item() * data.shape[0]
+        KLD_sum += KLD.item() * data.shape[0]
+        scaled_KLD_sum += scaled_KLD.item() * data.shape[0]
         loss_n += data.shape[0]
 
         # get the learning rate from the optimizer
@@ -76,10 +73,10 @@ def train(train_loader, model, optimizer, epoch, device, args):
 
         # update progress bar
         train_loader.set_description(
-            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Loss: {loss_sum / loss_n:.4f}")
+            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Combined Loss: {combined_loss_sum / loss_n:.6f} | Recon Loss: {recon_loss_sum / loss_n:.6f} | KLD: {KLD_sum / loss_n:.6f} | Scaled KLD: {scaled_KLD_sum / loss_n:.6f}")
 
     # return average loss for the epoch
-    return loss_sum / loss_n, epoch_embeddings
+    return combined_loss_sum / loss_n, recon_loss_sum / loss_n, KLD_sum / loss_n, epoch_embeddings
 
 
 def main(args):
@@ -131,14 +128,17 @@ def main(args):
 
     # train model
     for epoch in tqdm(range(args.num_epochs)):
-        loss, embeddings = train(
+        combined_loss, recon_loss, KLD_loss, embeddings = train(
             train_loader, model, optimizer, epoch, device, args)
 
         # log loss
-        writer.add_scalar("Loss/train", loss, epoch)
+        writer.add_scalar("Loss/train", combined_loss, epoch)
+        writer.add_scalar("Recon Loss/train", recon_loss, epoch)
+        writer.add_scalar("KLD Loss/train", KLD_loss, epoch)
 
         # reduce the dimensionality of the vectors to 2
-        reduced_vectors = pca.fit_transform(embeddings.detach().cpu().numpy())
+        # reduced_vectors = pca.fit_transform(embeddings.detach().cpu().numpy())
+        reduced_vectors = embeddings.detach().cpu().numpy()
         # plot the vectors
         plt.scatter(reduced_vectors[:, 0],
                     reduced_vectors[:, 1], s=1, alpha=0.5)
@@ -172,6 +172,7 @@ if __name__ == "__main__":
                         default="logs/simple_vae")
     parser.add_argument("--plots_folder", type=str,
                         default="plots/simple_vae")
+    parser.add_argument("--notes", type=str, default="")
 
     args = parser.parse_args()
 
