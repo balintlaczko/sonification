@@ -18,7 +18,7 @@ from sklearn.decomposition import PCA
 from matplotlib import pyplot as plt
 
 
-def train(train_loader, model, optimizer, epoch, device, args):
+def train(train_loader, model, optimizer, epoch, device, args, kld_warmpup_factor):
     # set model to train mode
     model.train()
 
@@ -55,7 +55,7 @@ def train(train_loader, model, optimizer, epoch, device, args):
         # calculate loss
         recon_loss = criterion(output, data)
         KLD = torch.mean(-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=1), dim=0)
-        scaled_KLD = KLD * args.kld_weight
+        scaled_KLD = KLD * args.kld_weight * kld_warmpup_factor
         combined_loss = recon_loss + scaled_KLD
 
         # backpropagate
@@ -74,10 +74,15 @@ def train(train_loader, model, optimizer, epoch, device, args):
 
         # update progress bar
         train_loader.set_description(
-            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Combined Loss: {combined_loss_sum / loss_n:.6f} | Recon Loss: {recon_loss_sum / loss_n:.6f} | KLD: {KLD_sum / loss_n:.6f} | Scaled KLD: {scaled_KLD_sum / loss_n:.6f}")
+            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Combined Loss: {combined_loss_sum / loss_n:.6f} | Recon Loss: {recon_loss_sum / loss_n:.6f} | KLD: {KLD_sum / loss_n:.3f} | Scaled KLD: {scaled_KLD_sum / loss_n:.6f} | KLD Warmup Factor: {kld_warmpup_factor:.3f}")
+
+        # update learning rate at the end of the epoch
+        if batch_idx == len(train_loader) - 1:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr * args.lr_decay
 
     # return average loss for the epoch
-    return combined_loss_sum / loss_n, recon_loss_sum / loss_n, KLD_sum / loss_n, epoch_embeddings
+    return combined_loss_sum / loss_n, recon_loss_sum / loss_n, KLD_sum / loss_n, epoch_embeddings, lr
 
 
 def main(args):
@@ -91,14 +96,11 @@ def main(args):
     print(
         f"Loaded dataset with {len(train_dataset)} samples and {len(train_dataset[0])} features")
 
-    print("train_dataset.shape", train_dataset.shape)
     train_dataset = train_dataset[..., 0]
-    print("train_dataset.shape", train_dataset.shape)
 
     # normalize
     scaler = MinMaxScaler()
     train_dataset = scaler.fit_transform(train_dataset)
-    print("train_dataset.shape", train_dataset.shape)
 
     # convert to tensor
     train_dataset = torch.from_numpy(train_dataset).float().to(device)
@@ -127,19 +129,26 @@ def main(args):
 
     pca = PCA(n_components=2)
 
+    # create linear warmup for KLD loss
+    kld_warmup_curve = np.linspace(0, 1, args.kld_warmup_epochs)
+
     # train model
     for epoch in tqdm(range(args.num_epochs)):
-        combined_loss, recon_loss, KLD_loss, embeddings = train(
-            train_loader, model, optimizer, epoch, device, args)
+        combined_loss, recon_loss, KLD_loss, embeddings, current_lr = train(
+            train_loader, model, optimizer, epoch, device, args, kld_warmup_curve[epoch-1])
 
         # log loss
         writer.add_scalar("Loss/train", combined_loss, epoch)
         writer.add_scalar("Recon Loss/train", recon_loss, epoch)
         writer.add_scalar("KLD Loss/train", KLD_loss, epoch)
+        writer.add_scalar("LR", current_lr, epoch)
+        writer.add_scalar("KLD Warmup Factor", kld_warmup_curve[epoch], epoch)
 
         # reduce the dimensionality of the vectors to 2
-        # reduced_vectors = pca.fit_transform(embeddings.detach().cpu().numpy())
-        reduced_vectors = embeddings.detach().cpu().numpy()
+        if args.model_latent_size > 2:
+            reduced_vectors = pca.fit_transform(embeddings.detach().cpu().numpy())
+        else:
+            reduced_vectors = embeddings.detach().cpu().numpy()
         # plot the vectors
         plt.scatter(reduced_vectors[:, 0],
                     reduced_vectors[:, 1], s=1, alpha=0.5)
@@ -160,11 +169,13 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str,
                         default="/Volumes/T7/synth_dataset_2/melspec.npy")
     parser.add_argument("--model_hidden_size", type=int, default=512)
-    parser.add_argument("--model_latent_size", type=int, default=8)
+    parser.add_argument("--model_latent_size", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--num_epochs", type=int, default=100)
+    parser.add_argument("--num_epochs", type=int, default=2000)
     parser.add_argument("--kld_weight", type=float, default=1)
+    parser.add_argument("--kld_warmup_epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr_decay", type=float, default=0.99)
     parser.add_argument("--ckpt_folder", type=str,
                         default="ckpt/simple_vae")
     parser.add_argument("--ckpt_interval", type=int,
