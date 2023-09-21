@@ -1,0 +1,13 @@
+{
+  "dataset": "datasets/melspec_2_mean_std.npy",
+  "model_hidden_size": 1024,
+  "model_latent_size": 32,
+  "batch_size": 500000,
+  "num_epochs": 2000,
+  "kld_weight": 0.005,
+  "lr": 0.001,
+  "ckpt_folder": "ckpt/simple_vae/run16",
+  "ckpt_interval": 10,
+  "log_folder": "logs/simple_vae/run16",
+  "plots_folder": "plots/simple_vae/run16"
+}
