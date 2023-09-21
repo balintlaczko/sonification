@@ -51,10 +51,11 @@ def train(train_loader, model, optimizer, epoch, device, args):
         else:
             epoch_embeddings = torch.cat((epoch_embeddings, z), dim=0)
 
+        # KLD corrected according to: https://towardsdatascience.com/variational-autoencoder-demystified-with-pytorch-implementation-3a06bee395ed
         # calculate loss
         recon_loss = criterion(output, data)
-        KLD = -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp()) # TODO: add torch.mean()?! then we don't need to scale it down like crazy
-        scaled_KLD = KLD * args.kld_weight * 0.0001
+        KLD = torch.mean(-0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=1), dim=0)
+        scaled_KLD = KLD * args.kld_weight
         combined_loss = recon_loss + scaled_KLD
 
         # backpropagate
