@@ -1,0 +1,17 @@
+{
+  "dataset": "datasets/melspec_2_mean_std.npy",
+  "model_hidden_size": 2048,
+  "model_latent_size": 2,
+  "batch_size": 500000,
+  "num_epochs": 10000,
+  "kld_weight": 1e-05,
+  "kld_start_epoch": 100,
+  "kld_warmup_epochs": 100,
+  "lr": 0.01,
+  "lr_decay": 0.999,
+  "ckpt_folder": "ckpt/simple_vae/run46",
+  "ckpt_interval": 10,
+  "log_folder": "logs/simple_vae/run46",
+  "plots_folder": "plots/simple_vae/run46",
+  "notes": "try kld warmup delay"
+}
