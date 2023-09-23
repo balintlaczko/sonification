@@ -135,7 +135,7 @@ def main(args):
     # train model
     for epoch in tqdm(range(args.num_epochs)):
         
-        kld_warmup_counter = np.clip(epoch, 0, args.kld_warmup_epochs-1)
+        kld_warmup_counter = np.clip(epoch - args.kld_start_epoch, 0, args.kld_warmup_epochs-1)
 
         combined_loss, recon_loss, KLD_loss, embeddings, current_lr = train(
             train_loader, model, optimizer, epoch, device, args, kld_warmup_curve[kld_warmup_counter])
@@ -176,6 +176,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--num_epochs", type=int, default=2000)
     parser.add_argument("--kld_weight", type=float, default=1)
+    parser.add_argument("--kld_start_epoch", type=int, default=0)
     parser.add_argument("--kld_warmup_epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--lr_decay", type=float, default=0.99)
