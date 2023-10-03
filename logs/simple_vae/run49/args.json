@@ -1,0 +1,17 @@
+{
+  "dataset": "datasets/melspec_2_mean_std.npy",
+  "model_hidden_size": 2048,
+  "model_latent_size": 8,
+  "batch_size": 500000,
+  "num_epochs": 10000,
+  "kld_weight": 1.0,
+  "kld_start_epoch": 0,
+  "kld_warmup_epochs": 100,
+  "lr": 0.001,
+  "lr_decay": 0.9995,
+  "ckpt_folder": "ckpt/simple_vae/run49",
+  "ckpt_interval": 10,
+  "log_folder": "logs/simple_vae/run49",
+  "plots_folder": "plots/simple_vae/run49",
+  "notes": "4x less kld weight, kld start immediately, faster lr decay"
+}
