@@ -64,7 +64,7 @@ def train(train_loader, model, optimizer, epoch, device, args, kld_warmpup_facto
         scaled_KLD = KLD * args.kld_weight * \
             kld_warmpup_factor * (1. - args.alpha)
         mmd_loss = mmd(z)
-        bias_corr = args.batch_size / (args.batch_size - 1)
+        bias_corr = args.batch_size * (args.batch_size - 1)
         scaled_mmd_loss = (args.alpha + args.reg_weight - 1.) / \
             bias_corr * mmd_loss * args.mmd_weight
         combined_loss = scaled_recon_loss + scaled_KLD + scaled_mmd_loss
