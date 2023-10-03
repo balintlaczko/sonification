@@ -89,7 +89,7 @@ def train(train_loader, model, optimizer, epoch, device, args, kld_warmpup_facto
 
         # update progress bar
         train_loader.set_description(
-            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Combined Loss: {combined_loss_sum / loss_n:.6f} | Recon Loss: {recon_loss_sum / loss_n:.6f} | Scaled Recon: {recon_loss_sum / loss_n:.6f} | KLD: {KLD_sum / loss_n:.3f} | Scaled KLD: {scaled_KLD_sum / loss_n:.6f} | KLD Warmup Factor: {kld_warmpup_factor:.3f} | MMD: {MMD_sum / loss_n:.6f} | Scaled MMD: {scaled_MMD_sum / loss_n:.6f}")
+            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Combined Loss: {combined_loss_sum / loss_n:.6f} | Recon Loss: {recon_loss_sum / loss_n:.6f} | Scaled Recon: {scaled_recon_loss_sum / loss_n:.6f} | KLD: {KLD_sum / loss_n:.3f} | Scaled KLD: {scaled_KLD_sum / loss_n:.6f} | KLD Warmup Factor: {kld_warmpup_factor:.3f} | MMD: {MMD_sum / loss_n:.6f} | Scaled MMD: {scaled_MMD_sum / loss_n:.6f}")
 
         # update learning rate at the end of the epoch
         if batch_idx == len(train_loader) - 1:
