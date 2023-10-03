@@ -83,7 +83,7 @@ class MMDloss(nn.Module):
 
         return result
 
-    def forward(self, z: Tensor) -> Tensor:
+    def compute_mmd(self, z: Tensor) -> Tensor:
         # Sample from prior (Gaussian) distribution
         prior_z = torch.randn_like(z)
 
