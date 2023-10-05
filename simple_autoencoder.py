@@ -11,8 +11,10 @@ class Encoder(nn.Module):
         self.latent_size = latent_size
         self.layers = nn.Sequential(
             nn.Linear(input_size, hidden_size, dtype=torch.float32),
+            nn.BatchNorm1d(hidden_size),
             nn.LeakyReLU(0.2),
             nn.Linear(hidden_size, latent_size),
+            nn.BatchNorm1d(latent_size),
             nn.LeakyReLU(0.2),
         )
 
@@ -28,8 +30,10 @@ class Decoder(nn.Module):
         self.output_size = output_size
         self.layers = nn.Sequential(
             nn.Linear(latent_size, hidden_size),
+            nn.BatchNorm1d(hidden_size),
             nn.LeakyReLU(0.2),
             nn.Linear(hidden_size, output_size),
+            nn.BatchNorm1d(output_size),
             nn.Sigmoid(),
         )
 
