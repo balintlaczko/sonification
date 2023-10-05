@@ -1,0 +1,21 @@
+{
+  "dataset": "datasets/melspec_2_mean_std.npy",
+  "model_hidden_size": 2048,
+  "model_latent_size": 2,
+  "batch_size": 20000,
+  "num_epochs": 4000,
+  "alpha": 0.5,
+  "beta": 100.0,
+  "reg_weight": 100.0,
+  "kld_weight": 1.0,
+  "kld_start_epoch": 0,
+  "kld_warmup_epochs": 3,
+  "mmd_weight": 1,
+  "lr": 0.001,
+  "lr_decay": 0.9995,
+  "ckpt_folder": "ckpt/simple_vae/infovae_04",
+  "ckpt_interval": 10,
+  "log_folder": "logs/simple_vae/infovae_04",
+  "plots_folder": "plots/simple_vae/infovae_04",
+  "notes": "same, but changed mmd loss call fn name, 10x lr"
+}
