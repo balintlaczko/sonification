@@ -28,7 +28,7 @@ def train(train_loader, model, optimizer, epoch, device, args, kld_warmpup_facto
 
     # create loss function
     criterion = nn.MSELoss()
-    mmd = MMDloss()
+    mmd = MMDloss(kernel_type=args.mmd_kernel_type, latent_var=args.mmd_latent_var)
 
     # initialize loss variables for the epoch
     combined_loss_sum = 0
@@ -60,14 +60,22 @@ def train(train_loader, model, optimizer, epoch, device, args, kld_warmpup_facto
         # calculate loss
         recon_loss = criterion(output, data)
         scaled_recon_loss = recon_loss * args.beta
-        KLD = torch.mean(-0.5 * torch.sum(1 + logvar -
-                         mean.pow(2) - logvar.exp(), dim=1), dim=0)
-        scaled_KLD = KLD * args.kld_weight * \
-            kld_warmpup_factor * (1. - args.alpha)
-        mmd_loss = mmd.compute_mmd(z)
-        bias_corr = args.batch_size * (args.batch_size - 1)
-        scaled_mmd_loss = (args.alpha + args.reg_weight - 1.) / \
-            bias_corr * mmd_loss * args.mmd_weight
+
+        KLD, scaled_KLD = 0, 0
+        compute_kld = args.kld_weight > 0 and args.kld_start_epoch <= epoch and args.alpha < 1
+        if compute_kld:
+            KLD = torch.mean(-0.5 * torch.sum(1 + logvar -
+                            mean.pow(2) - logvar.exp(), dim=1), dim=0)
+            scaled_KLD = KLD * args.kld_weight * \
+                kld_warmpup_factor * (1. - args.alpha)
+            
+        mmd_loss, scaled_mmd_loss = 0, 0
+        if args.mmd_weight > 0:
+            mmd_loss = mmd.compute_mmd(z)
+            bias_corr = args.batch_size * (args.batch_size - 1)
+            scaled_mmd_loss = (args.alpha + args.reg_weight - 1.) / \
+                bias_corr * mmd_loss * args.mmd_weight
+            
         combined_loss = scaled_recon_loss + scaled_KLD + scaled_mmd_loss
 
         # backpropagate
@@ -78,10 +86,12 @@ def train(train_loader, model, optimizer, epoch, device, args, kld_warmpup_facto
         combined_loss_sum += combined_loss.item() * data.shape[0]
         recon_loss_sum += recon_loss.item() * data.shape[0]
         scaled_recon_loss_sum += scaled_recon_loss.item() * data.shape[0]
-        KLD_sum += KLD.item() * data.shape[0]
-        scaled_KLD_sum += scaled_KLD.item() * data.shape[0]
-        MMD_sum += mmd_loss.item() * data.shape[0]
-        scaled_MMD_sum += scaled_mmd_loss.item() * data.shape[0]
+        if compute_kld:
+            KLD_sum += KLD.item() * data.shape[0]
+            scaled_KLD_sum += scaled_KLD.item() * data.shape[0]
+        if args.mmd_weight > 0:
+            MMD_sum += mmd_loss.item() * data.shape[0]
+            scaled_MMD_sum += scaled_mmd_loss.item() * data.shape[0]
         loss_n += data.shape[0]
 
         # get the learning rate from the optimizer
@@ -89,7 +99,7 @@ def train(train_loader, model, optimizer, epoch, device, args, kld_warmpup_facto
 
         # update progress bar
         train_loader.set_description(
-            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Combined Loss: {combined_loss_sum / loss_n:.6f} | Recon Loss: {recon_loss_sum / loss_n:.6f} | Scaled Recon: {scaled_recon_loss_sum / loss_n:.6f} | KLD: {KLD_sum / loss_n:.3f} | Scaled KLD: {scaled_KLD_sum / loss_n:.6f} | KLD Warmup Factor: {kld_warmpup_factor:.3f} | MMD: {MMD_sum / loss_n:.6f} | Scaled MMD: {scaled_MMD_sum / loss_n:.6f}")
+            f"Epoch {epoch + 1}/{args.num_epochs} | LR: {lr:.6f} | Combined Loss: {combined_loss_sum / loss_n:.6f} | Recon Loss: {recon_loss_sum / loss_n:.6f} | Scaled Recon: {scaled_recon_loss_sum / loss_n:.6f} | KLD: {KLD_sum / loss_n:.3f} | Scaled KLD: {scaled_KLD_sum / loss_n:.6f} | MMD: {MMD_sum / loss_n:.6f} | Scaled MMD: {scaled_MMD_sum / loss_n:.6f}")
 
         # update learning rate at the end of the epoch
         if batch_idx == len(train_loader) - 1:
@@ -201,6 +211,8 @@ if __name__ == "__main__":
     parser.add_argument("--kld_start_epoch", type=int, default=0)
     parser.add_argument("--kld_warmup_epochs", type=int, default=100)
     parser.add_argument("--mmd_weight", type=float, default=1)
+    parser.add_argument("--mmd_kernel_type", type=str, default="imq")
+    parser.add_argument("--mmd_latent_var", type=float, default=2)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--lr_decay", type=float, default=0.99)
     parser.add_argument("--ckpt_folder", type=str,
