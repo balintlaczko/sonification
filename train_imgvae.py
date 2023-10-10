@@ -29,7 +29,8 @@ def train(train_loader, model, optimizer, epoch, device, args, kld_warmpup_facto
 
     # create loss function
     criterion = nn.MSELoss()
-    mmd = MMDloss(kernel_type=args.mmd_kernel_type, latent_var=args.mmd_latent_var)
+    mmd = MMDloss(kernel_type=args.mmd_kernel_type,
+                  latent_var=args.mmd_latent_var)
 
     # initialize loss variables for the epoch
     combined_loss_sum = 0
@@ -66,17 +67,17 @@ def train(train_loader, model, optimizer, epoch, device, args, kld_warmpup_facto
         compute_kld = args.kld_weight > 0 and args.kld_start_epoch <= epoch and args.alpha < 1
         if compute_kld:
             KLD = torch.mean(-0.5 * torch.sum(1 + logvar -
-                            mean.pow(2) - logvar.exp(), dim=1), dim=0)
+                                              mean.pow(2) - logvar.exp(), dim=1), dim=0)
             scaled_KLD = KLD * args.kld_weight * \
                 kld_warmpup_factor * (1. - args.alpha)
-            
+
         mmd_loss, scaled_mmd_loss = 0, 0
         if args.mmd_weight > 0:
             mmd_loss = mmd.compute_mmd(z)
             bias_corr = args.batch_size * (args.batch_size - 1)
             scaled_mmd_loss = (args.alpha + args.reg_weight - 1.) / \
                 bias_corr * mmd_loss * args.mmd_weight
-            
+
         combined_loss = scaled_recon_loss + scaled_KLD + scaled_mmd_loss
 
         # backpropagate
@@ -117,33 +118,15 @@ def main(args):
     print(f"Using {device} device")
 
     # load dataset
-    train_dataset = None
     train_dataset = Amanis_RG_dataset(args.dataset)
-    # print(
-    #     f"Loaded dataset with {len(train_dataset)} images of height {len(train_dataset[0])}, width {len(train_dataset[1])} and channels {len(train_dataset[2])}.")
-
-    # print the memory size of the dataset in GB
-    # print(f"Dataset size before float: {sys.getsizeof(train_dataset) / 1024**3:.2f} GB")
-
-    # normalize
-    # scaler = MinMaxScaler()
-    # train_dataset = scaler.fit_transform(train_dataset)
-    # train_dataset = train_dataset / 255
-
-    # print the memory size of the dataset in GB
-    # print(f"Dataset size: {sys.getsizeof(train_dataset) / 1024**3:.2f} GB")
-
-    # return
-
-    # convert to tensor
-    # train_dataset = torch.from_numpy(train_dataset).float().to(device)
 
     # create dataloader
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True)
 
     # create model and optimizer
-    model = ImgVAE(in_channels=2, latent_size=args.model_latent_size).to(device)
+    model = ImgVAE(
+        in_channels=2, latent_size=args.model_latent_size).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     # create summary writer
