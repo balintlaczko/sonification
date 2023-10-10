@@ -1,0 +1,22 @@
+{
+  "dataset": "C:/Users/Balint Laczko/Desktop/work/Sonification/Amani_230117/merged images/images_array.npy",
+  "model_latent_size": 2,
+  "batch_size": 256,
+  "num_epochs": 1000,
+  "alpha": 0.0,
+  "beta": 1.0,
+  "reg_weight": 100.0,
+  "kld_weight": 1e-05,
+  "kld_start_epoch": 0,
+  "kld_warmup_epochs": 3,
+  "mmd_weight": 0.0,
+  "mmd_kernel_type": "imq",
+  "mmd_latent_var": 2,
+  "lr": 0.0001,
+  "lr_decay": 0.9999,
+  "ckpt_folder": "ckpt/imgvae/run01",
+  "ckpt_interval": 10,
+  "log_folder": "logs/imgvae/run01",
+  "plots_folder": "plots/imgvae/run01",
+  "notes": "imgvae first attempt with kld for efficiency sake"
+}
