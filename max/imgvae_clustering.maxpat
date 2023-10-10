@@ -41,12 +41,12 @@
 		"boxes" : [ 			{
 				"box" : 				{
 					"id" : "obj-206",
-					"linecount" : 3,
+					"linecount" : 5,
 					"maxclass" : "comment",
 					"numinlets" : 1,
 					"numoutlets" : 0,
-					"patching_rect" : [ 1235.0, 701.0, 163.0, 47.0 ],
-					"text" : "TODO:\n- labelset with BST, ST, RF\n- labelset w cell labels"
+					"patching_rect" : [ 1235.0, 701.0, 228.0, 74.0 ],
+					"text" : "TODO:\n- labelset with BST, ST, RF\n- labelset w cell labels\n- show path of a label at Sn\n- fix fluid.jit.plotter presentation mode bug"
 				}
 
 			}
@@ -610,7 +610,6 @@
 						"style" : "",
 						"subpatcher_template" : "",
 						"assistshowspatchername" : 0,
-						"visible" : 1,
 						"boxes" : [ 							{
 								"box" : 								{
 									"id" : "obj-142",
@@ -1157,7 +1156,7 @@
 					"maxclass" : "comment",
 					"numinlets" : 1,
 					"numoutlets" : 0,
-					"patching_rect" : [ 794.0, 2243.0, 150.0, 20.0 ]
+					"patching_rect" : [ 820.0, 1634.0, 150.0, 20.0 ]
 				}
 
 			}
@@ -1167,7 +1166,7 @@
 					"maxclass" : "comment",
 					"numinlets" : 1,
 					"numoutlets" : 0,
-					"patching_rect" : [ 746.0, 2173.0, 150.0, 20.0 ]
+					"patching_rect" : [ 772.0, 1564.0, 150.0, 20.0 ]
 				}
 
 			}
