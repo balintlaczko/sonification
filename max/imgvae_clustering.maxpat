@@ -41,12 +41,12 @@
 		"boxes" : [ 			{
 				"box" : 				{
 					"id" : "obj-206",
-					"linecount" : 5,
+					"linecount" : 6,
 					"maxclass" : "comment",
 					"numinlets" : 1,
 					"numoutlets" : 0,
-					"patching_rect" : [ 1235.0, 701.0, 228.0, 74.0 ],
-					"text" : "TODO:\n- labelset with BST, ST, RF\n- labelset w cell labels\n- show path of a label at Sn\n- fix fluid.jit.plotter presentation mode bug"
+					"patching_rect" : [ 1235.0, 701.0, 228.0, 87.0 ],
+					"text" : "TODO:\n- labelset with BST, ST, RF\n- labelset w cell labels\n- labelset w cell labels per cell!\n- show path of a label at Sn\n- fix fluid.jit.plotter presentation mode bug"
 				}
 
 			}
@@ -59,7 +59,7 @@
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
 					"patching_rect" : [ 916.0, 1319.0, 670.0, 35.0 ],
-					"text" : "\"/Volumes/T7RITMO/Sonification/Amani_230117/merged images/RF/Timepoint_004_230117-RF_K08_s1__MERGE_ADJ.jpg\""
+					"text" : "\"/Volumes/T7RITMO/Sonification/Amani_230117/merged images/RF/Timepoint_007_230117-RF_L16_s1__MERGE_ADJ.jpg\""
 				}
 
 			}
@@ -121,7 +121,7 @@
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
 					"patching_rect" : [ 1156.0, 1050.477157413959503, 383.0, 49.0 ],
-					"text" : "117 118 119 801 802 803 1485 1486 1487 2169 2170 2171 2853 2854 2855 3537 3538 3539 4221 4222 4223 4905 4906 4907 5589 5590 5591 6273 6274 6275 6957 6958 6959"
+					"text" : "489 490 491 1173 1174 1175 1857 1858 1859 2541 2542 2543 3225 3226 3227 3909 3910 3911 4593 4594 4595 5277 5278 5279 5961 5962 5963 6645 6646 6647 7329 7330 7331"
 				}
 
 			}
@@ -512,7 +512,7 @@
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
 					"patching_rect" : [ 148.0, 936.666667461395264, 50.0, 22.0 ],
-					"text" : "E04"
+					"text" : "K14"
 				}
 
 			}
@@ -983,7 +983,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 4,
 					"outlettype" : [ "list", "", "", "" ],
-					"patching_rect" : [ 12.0, 508.0, 1048.0, 237.477157413959503 ],
+					"patching_rect" : [ 12.0, 507.0, 1183.0, 238.477157413959503 ],
 					"presentation" : 1,
 					"presentation_rect" : [ 30.5, 33.0, 1481.0, 310.0 ],
 					"rowhead" : 1,
