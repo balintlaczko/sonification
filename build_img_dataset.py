@@ -24,6 +24,15 @@ target_img_hw = 512
 image_shape = (num_images, target_img_hw, target_img_hw, 2)
 print(f"Found {num_images} images")
 
+# %%
+# Save image paths to a txt file in Max coll format
+target_path = r"C:\Users\Balint Laczko\Desktop\work\Sonification\Amani_230117\merged images\image_paths.txt"
+with open(target_path, "w") as f:
+    for i, path in enumerate(image_paths):
+        f.write(f"{i}, {path};\n")
+
+
+# %%
 # Create the output array
 images_array = np.zeros(image_shape, dtype=np.uint8)
 
