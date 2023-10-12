@@ -189,6 +189,9 @@ def view(matrix: np.ndarray, scale: float = 1.0, text: str = None, swap_rb: bool
     if platform.system() == "Darwin":
         cv2.startWindowThread()
     cv2.imshow("view", to_show.astype(np.uint8))
+    # avoid unmovable windows on Mac OS
+    if platform.system() == "Darwin":
+        cv2.moveWindow("view", 50, 50)
     cv2.waitKey(0)
     # avoid hanging windows on Mac OS
     if platform.system() == "Darwin":
