@@ -79,13 +79,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str,
-                        default="/Volumes/T7/synth_dataset_2/melspec_2_mean_std.npy")
+                        default="/Volumes/T7RITMO/synth_dataset_2/melspec_2_mean_std.npy")
     parser.add_argument("--train_args", type=str,
                         default="logs/simple_vae/run33/args.json")
     parser.add_argument("--ckpt", type=str,
                         default="ckpt/simple_vae/run33_model_2000.pt")
     parser.add_argument("--target_folder", type=str,
-                        default="/Volumes/T7/simple_vae_clustering/")
+                        default="/Volumes/T7RITMO/simple_vae_clustering/")
     parser.add_argument("--batch_size", type=int, default=1024)
 
     args = parser.parse_args()
