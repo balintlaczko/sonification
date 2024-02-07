@@ -13,7 +13,7 @@ from torchsynth.module import (
 
 import soundfile as sf
 
-from utils import *
+from utils.dsp import frequency2midi
 
 # %%
 # set torch device

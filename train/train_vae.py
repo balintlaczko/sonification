@@ -2,7 +2,7 @@ import argparse
 import sys
 import os
 import json
-
+import numpy as np
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
@@ -10,9 +10,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import *
 from models.models import VAE
-from loss import MMDloss
+from models.loss import MMDloss
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA

@@ -1,30 +1,88 @@
-# imports
 import torch
-from torch import tensor, nn
+from torch import nn
+from utils.tensor import wrap
+from utils.dsp import frequency2midi_tensor, num_hops
+from utils.misc import scale_linear, midi2frequency
+from models.layers import MLP, MultiScaleEncoder
+from models import ddsp
 import torchaudio
 import torchyin
 from torchsynth.module import (
     SineVCO,
     FmVCO,
 )
-from utils import *
-from functools import reduce
-import ddsp_utils
 
 
-class FmSynth(nn.Module):
+class Phasor(nn.Module):
+    def __init__(
+        self,
+        sr: int
+    ):
+        super().__init__()
+
+        self.sr = sr
+
+    def forward(self, freq: torch.Tensor):  # input shape: (batch_size, n_samples)
+        batch_size = freq.shape[0]
+        increment = freq[:, :-1] / self.sr
+        phase = torch.cumsum(increment, dim=-1)
+        phase = torch.cat([torch.zeros(batch_size, 1).to(phase.device), phase], dim=-1)
+        phasor = wrap(phase, 0.0, 1.0)
+        return phasor
+
+
+class Sinewave(nn.Module):
+    def __init__(
+        self,
+        sr: int
+    ):
+        super().__init__()
+
+        self.sr = sr
+        self.phasor = Phasor(self.sr)
+
+    def forward(self, freq: torch.Tensor):
+        phasor = self.phasor(freq)
+        sine = torch.sin(2 * torch.pi * phasor)
+        return sine
+
+
+class FMSynth(nn.Module):
+    def __init__(
+        self,
+        sr: int,
+    ):
+        super().__init__()
+
+        self.sr = sr
+        self.modulator_sine = Sinewave(self.sr)
+        self.carrier_sine = Sinewave(self.sr)
+
+    def forward(
+            self,
+            carrier_frequency: torch.Tensor,
+            harmonicity_ratio: torch.Tensor,
+            modulation_index: torch.Tensor,
+    ):
+        modulator_frequency = carrier_frequency * harmonicity_ratio
+        modulator_buf = self.modulator_sine(modulator_frequency)
+        modulation_amplitude = modulator_frequency * modulation_index
+        return self.carrier_sine(carrier_frequency + modulator_buf * modulation_amplitude)
+
+
+class Tsynth_FmSynth(nn.Module):
     def __init__(self, config, device):
         super().__init__()
         self.fm_vco = FmVCO(
-            tuning=tensor([0.0] * config.batch_size),
-            mod_depth=tensor([0.0] * config.batch_size),
+            tuning=torch.tensor([0.0] * config.batch_size),
+            mod_depth=torch.tensor([0.0] * config.batch_size),
             synthconfig=config,
             device=device,
         )
         self.modulator = SineVCO(
-            tuning=tensor([0.0] * config.batch_size),
-            mod_depth=tensor([0.0] * config.batch_size),
-            initial_phase=tensor([torch.pi / 2] * config.batch_size),
+            tuning=torch.tensor([0.0] * config.batch_size),
+            mod_depth=torch.tensor([0.0] * config.batch_size),
+            initial_phase=torch.tensor([torch.pi / 2] * config.batch_size),
             synthconfig=config,
             device=device,
         )
@@ -61,21 +119,21 @@ class FmSynth(nn.Module):
         mel_spec = self.mel_transform(fm_signal)
 
         return mel_spec
+    
 
-
-class FmSynth2Wave(nn.Module):
+class Tsynth_FmSynth2Wave(nn.Module):
     def __init__(self, config, device):
         super().__init__()
         self.fm_vco = FmVCO(
-            tuning=tensor([0.0] * config.batch_size),
-            mod_depth=tensor([0.0] * config.batch_size),
+            tuning=torch.tensor([0.0] * config.batch_size),
+            mod_depth=torch.tensor([0.0] * config.batch_size),
             synthconfig=config,
             device=device,
         )
         self.modulator = SineVCO(
-            tuning=tensor([0.0] * config.batch_size),
-            mod_depth=tensor([0.0] * config.batch_size),
-            initial_phase=tensor([torch.pi / 2] * config.batch_size),
+            tuning=torch.tensor([0.0] * config.batch_size),
+            mod_depth=torch.tensor([0.0] * config.batch_size),
+            initial_phase=torch.tensor([torch.pi / 2] * config.batch_size),
             synthconfig=config,
             device=device,
         )
@@ -99,7 +157,7 @@ class FmSynth2Wave(nn.Module):
             carrier_frequency), modulator_signal)
 
         return fm_signal
-
+    
 
 class Mel2Params(nn.Module):
     def __init__(self, num_mels, num_hops, num_params, dim=512):
@@ -120,7 +178,7 @@ class Mel2Params(nn.Module):
         mel_spec = mel_spec.reshape(-1, self.num_mels * self.num_hops)
         params = self.layers(mel_spec)
         return params
-
+    
 
 class Mel2Params2(nn.Module):
     def __init__(self, num_mels, num_hops, num_params, dim=256):
@@ -130,7 +188,7 @@ class Mel2Params2(nn.Module):
         self.num_hops = num_hops
         self.num_params = num_params
 
-        self.mel_encoder = Encoder(input_dim_h=num_mels, input_dim_w=num_hops)
+        self.mel_encoder = MultiScaleEncoder(input_dim_h=num_mels, input_dim_w=num_hops)
 
         self.layers = nn.Sequential(
             nn.Linear(128 * 20 * 47, dim),
@@ -186,33 +244,7 @@ class Wave2MFCCEncoder(nn.Module):
         # mfcc_norm = self.norm(mfcc_mean)
         z = self.fc(mfcc_mean)
         return z
-
-
-class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
-        super().__init__()
-
-        # create a chain of ints for the dimensions of the MLP
-        self.dims = [hidden_dim, ] * (num_layers + 1)
-        # mark first and last as the input and output dimensions
-        self.dims[0], self.dims[-1] = input_dim, output_dim
-        # create a flat list of layers reading the dims pairwise
-        layers = []
-        for i in range(num_layers):
-            layers.extend(self.mlp_layer(self.dims[i], self.dims[i+1]))
-
-        self.layers = nn.Sequential(*layers)
-
-    def mlp_layer(self, input_dim, output_dim) -> list:
-        return [
-            nn.Linear(input_dim, output_dim),
-            nn.LayerNorm(output_dim),
-            nn.LeakyReLU(),
-        ]
-
-    def forward(self, x):
-        return self.layers(x)
-
+    
 
 class MFCCEncoder(nn.Module):
     def __init__(
@@ -269,7 +301,7 @@ class MFCCEncoder(nn.Module):
         mfcc = self.mlp(mfcc)
         # (batch_size, n_frames, mlp_out_dim)
         return mfcc
-
+    
 
 class MelbandsEncoder(nn.Module):
     def __init__(
@@ -323,7 +355,7 @@ class MelbandsEncoder(nn.Module):
         melspec = self.mlp(melspec)
         # (batch_size, n_frames, mlp_out_dim)
         return melspec
-
+    
 
 class PitchEncoder(nn.Module):
     def __init__(
@@ -359,42 +391,7 @@ class PitchEncoder(nn.Module):
         pitch = pitch.unsqueeze(-1)
         pitch = self.mlp(pitch)
         return pitch
-
-
-# function to calculate number of hops
-def num_hops(
-        buffer_length: int,
-        hop_length: int
-) -> int:
-    return int(buffer_length / hop_length) + 1
-
-
-# function to scale with exponent
-def scale(x, in_low, in_high, out_low, out_high, exp=1):
-    if in_low == in_high:
-        return torch.ones_like(x) * out_high
-    return torch.where(
-        (x-in_low)/(in_high-in_low) == 0,
-        out_low,
-        torch.where(
-            (x-in_low)/(in_high-in_low) > 0,
-            out_low + (out_high-out_low) *
-            ((x-in_low)/(in_high-in_low))**exp,
-            out_low + (out_high-out_low) * -
-            ((((-x+in_low)/(in_high-in_low)))**(exp))
-        )
-    )
-
-
-def scale_linear(x, in_low, in_high, out_low, out_high):
-    return (x - in_low) / (in_high - in_low) * (out_high - out_low) + out_low
-
-# function to convert MIDI to frequency
-
-
-def midi2frequency(midi, base_frequency=440.0):
-    return base_frequency * 2**((midi - 69) / 12)
-
+    
 
 class Wave2Params(nn.Module):
     def __init__(
@@ -469,7 +466,7 @@ class Wave2Params(nn.Module):
             nn.Sigmoid(),
         )
         # synth
-        self.synth = ddsp_utils.FMSynth(sr=sr)
+        self.synth = ddsp.FMSynth(sr=sr)
 
     def forward(self, y):
         # extract & encode features
@@ -509,7 +506,7 @@ class Wave2Params(nn.Module):
             carr_freq_array, harm_ratio_array, mod_index_array)
 
         return synth_buffer, synth_params
-
+    
 
 class FM_Autoencoder_Wave(nn.Module):
     def __init__(self, config, device, z_dim=32, mlp_dim=512):
@@ -519,7 +516,7 @@ class FM_Autoencoder_Wave(nn.Module):
         self.decoder = MLP(z_dim, mlp_dim, mlp_dim, 3)
         self.synthparams = nn.Linear(mlp_dim, 3)
         self.synth_act = nn.ReLU()
-        self.synth = FmSynth2Wave(config, device)
+        self.synth = Tsynth_FmSynth2Wave(config, device)
 
     def forward(self, x):
         z = self.encoder(x)
@@ -554,7 +551,7 @@ class FM_Autoencoder_Wave2(nn.Module):
             f_max=8000.0,
         ).to(device)
 
-        self.spec_encoder = Encoder(input_dim_h=80, input_dim_w=188)
+        self.spec_encoder = MultiScaleEncoder(input_dim_h=80, input_dim_w=188)
 
         self.z = nn.Sequential(
             nn.Linear(128 * 20 * 47, z_dim),
@@ -566,7 +563,7 @@ class FM_Autoencoder_Wave2(nn.Module):
         self.decoder = MLP(z_dim, mlp_dim, mlp_dim, 3)
         self.synthparams = nn.Linear(mlp_dim, 3)
         self.synth_act = nn.ReLU()
-        self.synth = FmSynth2Wave(config, device)
+        self.synth = Tsynth_FmSynth2Wave(config, device)
 
     def forward(self, x):
         # print("x.shape", x.shape)
@@ -595,7 +592,7 @@ class FM_Autoencoder_Wave2(nn.Module):
         fm_signal = self.synth(
             carrier_frequency, modulator_frequency, modulation_index)
         return fm_signal
-
+    
 
 class FM_Autoencoder(nn.Module):
     def __init__(
@@ -615,7 +612,7 @@ class FM_Autoencoder(nn.Module):
 
         # self.encoder = Mel2Params(num_mels, num_hops, num_params, dim=dim)
         self.encoder = Mel2Params2(num_mels, num_hops, num_params, dim=dim)
-        self.synth = FmSynth(config, device)
+        self.synth = Tsynth_FmSynth(config, device)
 
     def forward(self, mel_spec):
         params = self.encoder(mel_spec)
@@ -628,7 +625,7 @@ class FM_Autoencoder(nn.Module):
             modulation_index
         )
         return mel_spec_recon, params
-
+    
 
 class FM_Param_Autoencoder(nn.Module):
     def __init__(
@@ -646,7 +643,7 @@ class FM_Param_Autoencoder(nn.Module):
         self.num_hops = num_hops
         self.num_params = num_params
 
-        self.synth = FmSynth(config, device)
+        self.synth = Tsynth_FmSynth(config, device)
         self.decoder = Mel2Params2(num_mels, num_hops, num_params, dim=dim)
         # self.decoder = Mel2Params(num_mels, num_hops, num_params, dim=dim)
 
@@ -658,101 +655,3 @@ class FM_Param_Autoencoder(nn.Module):
         )
         params_recon = self.decoder(mel_spec)
         return params_recon
-
-
-class ResBlock(nn.Module):
-    def __init__(self, in_channel, channel):
-        super().__init__()
-
-        # this is the residual block
-        self.conv = nn.Sequential(
-            nn.ReLU(inplace=True),
-            nn.Conv2d(in_channel, channel, 3, padding=1),
-            # nn.BatchNorm2d(channel),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(channel, in_channel, 1),
-            # nn.BatchNorm2d(in_channel),
-        )
-
-    def forward(self, input):
-        out = self.conv(input)
-        out += input  # skip connection
-
-        return out
-
-# missing VQVAE reference here
-
-
-class Encoder(nn.Module):
-    def __init__(
-            self,
-            in_channel=1,
-            channel=128,
-            n_res_block=1,
-            n_res_channel=32,
-            stride=4,
-            kernels=[4, 4],
-            input_dim_h=80,
-            input_dim_w=188,
-    ):
-        super().__init__()
-
-        # check that the stride is valid
-        assert stride in [2, 4]
-
-        # check that kernels is a list with even number of elements
-        assert len(kernels) % 2 == 0
-
-        # group kernels into pairs
-        kernels = [kernels[i:i + 2] for i in range(0, len(kernels), 2)]
-
-        # save input dimension for later use
-        self.input_dim_h = input_dim_h
-        self.input_dim_w = input_dim_w
-
-        # create a list of lanes
-        self.lanes = nn.ModuleList()
-
-        # create a lane for each kernel size
-        for kernel in kernels:
-            padding = [kernel_side // 2 - 1 for kernel_side in kernel]
-            lane = None
-
-            if stride == 4:
-                # base block: in -> out/2 -> out -> out
-                lane = [
-                    nn.Conv2d(in_channel, channel // 2, kernel,
-                              stride=2, padding=padding),
-                    nn.ReLU(inplace=True),
-                    nn.Conv2d(channel // 2, channel, kernel,
-                              stride=2, padding=padding),
-                    nn.ReLU(inplace=True),
-                    nn.Conv2d(channel, channel, 3, padding=1),
-                ]
-
-            elif stride == 2:
-                # base block: in -> out/2 -> out
-                lane = [
-                    nn.Conv2d(in_channel, channel // 2, kernel,
-                              stride=2, padding=padding),
-                    nn.ReLU(inplace=True),
-                    nn.Conv2d(channel // 2, channel, 3, padding=1),
-                ]
-
-            # add residual blocks
-            lane.extend([ResBlock(channel, n_res_channel)
-                         for _ in range(n_res_block)])
-
-            # add final ReLU
-            lane.append(nn.ReLU(inplace=True))
-
-            # add to list of blocks
-            self.lanes.append(nn.Sequential(*lane))
-
-    def forward(self, input):
-        # reducing with this so the "+" still means whatever it should
-        def add_lane(x, y):
-            return x + y
-
-        # apply each block to the input, then sum the results
-        return reduce(add_lane, [lane(input) for lane in self.lanes])

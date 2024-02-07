@@ -1,14 +1,13 @@
 # %%
 # imports
 import torch
-from fm_inversynth import Wave2Params, MelbandsEncoder, MFCCEncoder, PitchEncoder
-import ddsp_utils
+from models.ddsp import FMSynth, Wave2Params, MelbandsEncoder, MFCCEncoder, PitchEncoder
 
 
 # %%
 # create synth & models
 
-synth = ddsp_utils.FMSynth(sr=48000)
+synth = FMSynth(sr=48000)
 model = Wave2Params()
 melbands_encoder = MelbandsEncoder()
 mfcc_encoder = MFCCEncoder()

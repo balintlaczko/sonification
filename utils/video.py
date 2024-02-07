@@ -1,13 +1,7 @@
-# %%
-# imports
-
 import numpy as np
 import cv2
 import os
 import tqdm
-
-# %%
-# function to render an RGB video from up to 3 grayscale videos
 
 
 def videos2planes(
@@ -121,5 +115,3 @@ def videos2planes(
 
     return output_name
 
-
-# %%

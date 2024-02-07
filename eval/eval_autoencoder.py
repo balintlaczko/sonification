@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from tqdm import tqdm
 
-from utils import *
+from utils.array import array2fluid_dataset, fluid_dataset2array
 from models.models import AE
 
 

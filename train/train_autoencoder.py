@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import *
+from utils.array import fluid_dataset2array
 from models.models import AE
 
 

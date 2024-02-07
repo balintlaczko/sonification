@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 from layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder
 
+
 class AE(nn.Module):
     def __init__(self, input_size, hidden_size, latent_size, output_size):
         super().__init__()
@@ -14,6 +15,7 @@ class AE(nn.Module):
 
     def encode(self, x):
         return self.encoder(x)
+
 
 # inspired by https://medium.com/@rekalantar/variational-auto-encoder-vae-pytorch-tutorial-dce2d2fe0f5f
 class VAE(nn.Module):

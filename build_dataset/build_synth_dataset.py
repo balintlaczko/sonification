@@ -1,6 +1,6 @@
 # %%
 # imports
-
+import os
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,7 +10,8 @@ from pathlib import Path
 from flucoma import fluid
 from flucoma.utils import cleanup, get_buffer
 from scipy.io import wavfile as wav
-from utils import *
+from utils.array import scale_array, scale_array_exp, array2fluid_dataset, fluid_dataset2array
+from utils.dsp import midi2frequency, fm_synth
 import torch
 import torchaudio
 import umap

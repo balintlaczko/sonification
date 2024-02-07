@@ -1,4 +1,6 @@
-from ddsp_utils import *
+import torch
+from utils import tensor
+from models import ddsp
 import utils
 import numpy as np
 
@@ -11,7 +13,7 @@ def test_wrap():
         input_np = np.random.uniform(-2.0, 2.0, size=(n_batches, n_samps))
         input_t = torch.tensor(input_np)
         wrap_np = utils.wrap(input_np, -1.0, 1.0)
-        wrap_t = wrap(input_t, -1.0, 1.0)
+        wrap_t = tensor.wrap(input_t, -1.0, 1.0)
         assert np.allclose(wrap_np, wrap_t.numpy())
 
 
@@ -28,7 +30,7 @@ def test_phasor():
         phasor_np = np.zeros((n_batches, n_samps))
         for j in range(n_batches):
             phasor_np[j, :] = utils.phasor(n_samps, n_samps, input_freq[j, :])
-        phasor_t = Phasor(n_samps)(input_freq_t)
+        phasor_t = ddsp.Phasor(n_samps)(input_freq_t)
         assert np.allclose(phasor_np, phasor_t.numpy())
 
 
@@ -45,7 +47,7 @@ def test_sine():
         sine_np = np.zeros((n_batches, n_samps))
         for j in range(n_batches):
             sine_np[j, :] = utils.sinewave(n_samps, n_samps, input_freq[j, :])
-        sine_t = Sinewave(n_samps)(input_freq_t)
+        sine_t = ddsp.Sinewave(n_samps)(input_freq_t)
         assert np.allclose(sine_np, sine_t.numpy())
 
 
@@ -67,7 +69,7 @@ def test_fm_synth():
         for j in range(n_batches):
             fm_np[j, :] = utils.fm_synth_2(
                 n_samps, n_samps, carr_freq[j, :], harm_ratio[j, :], mod_index[j, :])
-        fm_t = FMSynth(n_samps)(carr_freq_t, harm_ratio_t, mod_index_t)
+        fm_t = ddsp.FMSynth(n_samps)(carr_freq_t, harm_ratio_t, mod_index_t)
         assert np.allclose(fm_np, fm_t.numpy())
 
 

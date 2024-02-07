@@ -1,8 +1,9 @@
 # %%
 # imports
-
+import os
 import numpy as np
-from utils import *
+from utils.array import scale_array, scale_array_exp
+from utils.dsp import midi2frequency
 import platform
 
 # %%

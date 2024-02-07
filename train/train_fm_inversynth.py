@@ -1,7 +1,7 @@
 # imports
 import argparse
 import json
-
+import os
 import numpy as np
 import torch
 from torch import nn, optim
@@ -10,12 +10,10 @@ from torch.utils.data import DataLoader
 from torchsynth.config import SynthConfig
 
 import auraloss
-import ddsp_utils
 
-from utils import *
-
-import fm_inversynth
-from fm_inversynth import Wave2Params
+from models.ddsp import Tsynth_FmSynth, Wave2Params
+from utils.misc import scale_linear, midi2frequency
+from utils.tensor import scale
 
 from tqdm import tqdm
 from torchsummary import summary
@@ -46,12 +44,12 @@ def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):
 
         # scale synth params from 0-1 to their respective ranges
         carr_freq = data[:, 0]
-        carr_freq_midi = fm_inversynth.scale_linear(carr_freq, 0, 1, 44, 88)
-        carr_freq_hz = fm_inversynth.midi2frequency(carr_freq_midi)
+        carr_freq_midi = scale_linear(carr_freq, 0, 1, 44, 88)
+        carr_freq_hz = midi2frequency(carr_freq_midi)
         harm_ratio = data[:, 1]
-        harm_ratio_scaled = fm_inversynth.scale_linear(harm_ratio, 0, 1, 1, 10)
+        harm_ratio_scaled = scale_linear(harm_ratio, 0, 1, 1, 10)
         mod_index = data[:, 2]
-        mod_index_scaled = fm_inversynth.scale_linear(mod_index, 0, 1, 0.1, 10)
+        mod_index_scaled = scale_linear(mod_index, 0, 1, 0.1, 10)
 
         # take each param from all batches and repeat it for the number of samples in the buffer
         carr_freq_array = carr_freq_hz.unsqueeze(-1).repeat(
@@ -116,7 +114,7 @@ def main(args):
     num_samples = args.batch_size * args.steps_per_epoch
     num_params = 3
     train_dataset = torch.randn((num_samples, num_params), device=device)
-    train_dataset = fm_inversynth.scale(
+    train_dataset = scale(
         train_dataset, train_dataset.min(), train_dataset.max(), 0, 1, 1)
     print(
         f"Generated dataset with {len(train_dataset)} samples and {len(train_dataset[0])} features")
@@ -148,7 +146,7 @@ def main(args):
     summary(model, (int(args.sample_rate * args.buffer_length_s),))
 
     # create synth
-    synth = ddsp_utils.FMSynth(sr=args.sample_rate).to(device)
+    synth = Tsynth_FmSynth(sr=args.sample_rate).to(device)
 
     # create summary writer
     writer = SummaryWriter(args.log_folder)
