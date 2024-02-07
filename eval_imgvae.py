@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from utils import *
 from datasets import Amanis_RG_dataset
-from simple_autoencoder import ImgVAE
+from simple_autoencoder import ConvVAE
 
 from sklearn.preprocessing import MinMaxScaler
 
@@ -31,7 +31,7 @@ def main(args):
     model_latent_size = train_args["model_latent_size"]
 
     # create model
-    model = ImgVAE(
+    model = ConvVAE(
         in_channels=2, latent_size=model_latent_size).to(device)
     model.load_state_dict(torch.load(
         args.ckpt, map_location='cpu'))

@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from utils import *
-from simple_autoencoder import Autoencoder
+from simple_autoencoder import AE
 
 
 def main(args):
@@ -34,7 +34,7 @@ def main(args):
         train_dataset, batch_size=args.batch_size, shuffle=True)
 
     # create model from checkpoint
-    model = Autoencoder(input_size=len(
+    model = AE(input_size=len(
         train_dataset[0]), hidden_size=2, output_size=len(train_dataset[0])).to(device)
     model.load_state_dict(torch.load(
         args.ckpt, map_location='cpu'))

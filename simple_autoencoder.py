@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 
-class Encoder(nn.Module):
+class LinearEncoder(nn.Module):
     def __init__(self, input_size, hidden_size, latent_size):
         super().__init__()
         self.input_size = input_size
@@ -20,43 +20,9 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
-    
-
-class ImgEncoder(nn.Module):
-    def __init__(self, in_channels, latent_size):
-        super().__init__()
-        self.in_channels = in_channels # 2 for red and green
-        self.latent_size = latent_size
-        self.layers = nn.Sequential(
-            nn.Conv2d(self.in_channels, 16, 3, stride=2, padding=1), # in shape: (512, 512, 2) out shape: (256, 256, 16)
-            nn.BatchNorm2d(16),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(16, 32, 3, stride=2, padding=1), # in shape: (256, 256, 16) out shape: (128, 128, 32)
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(32, 64, 3, stride=2, padding=1), # in shape: (128, 128, 32) out shape: (64, 64, 64)
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 128, 3, stride=2, padding=1), # in shape: (64, 64, 64) out shape: (32, 32, 128)
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(128, 256, 3, stride=2, padding=1), # in shape: (32, 32, 128) out shape: (16, 16, 256)
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(256, 512, 3, stride=2, padding=1), # in shape: (16, 16, 256) out shape: (8, 8, 512)
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(0.2),
-            nn.Flatten(),
-            nn.Linear(512*8*8, latent_size),
-            nn.BatchNorm1d(latent_size),
-            nn.LeakyReLU(0.2),
-        )
-
-    def forward(self, x):
-        return self.layers(x)
 
 
-class Decoder(nn.Module):
+class LinearDecoder(nn.Module):
     def __init__(self, latent_size, hidden_size, output_size):
         super().__init__()
         self.latent_size = latent_size
@@ -75,45 +41,81 @@ class Decoder(nn.Module):
         return self.layers(x)
 
 
-class ImgDecoder(nn.Module):
-    def __init__(self, latent_size, out_channels):
+class ConvEncoder(nn.Module):
+    def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
+        super().__init__()
+        self.in_channels = in_channels # 2 for red and green
+        self.latent_size = latent_size
+
+        layers = []
+        in_channel = self.in_channels
+        for out_channel in layers_channels:
+            layers.extend([
+                nn.Conv2d(in_channel, out_channel, 3, stride=2, padding=1),
+                nn.BatchNorm2d(out_channel),
+                nn.LeakyReLU(0.2)
+            ])
+            in_channel = out_channel
+
+        # Calculate the size of the feature map when it reaches the linear layer
+        feature_map_size = input_size // (2 ** len(layers_channels))
+        
+        layers.extend([
+            nn.Flatten(),
+            nn.Linear(layers_channels[-1] * feature_map_size * feature_map_size, self.latent_size),
+            nn.BatchNorm1d(self.latent_size),
+            nn.LeakyReLU(0.2),
+        ])
+
+        self.layers = nn.Sequential(*layers)
+    
+
+    def forward(self, x):
+        return self.layers(x)
+    
+
+class ConvDecoder(nn.Module):
+    def __init__(self, latent_size, out_channels, layers_channels=[512, 256, 128, 64, 32, 16], output_size=512):
         super().__init__()
         self.latent_size = latent_size
-        self.out_channels = out_channels # 2 for red and green
-        self.layers = nn.Sequential(
-            nn.Linear(latent_size, 512*8*8),
-            nn.BatchNorm1d(512*8*8),
+        self.out_channels = out_channels
+
+        # Calculate the size of the feature map when it reaches the linear layer
+        feature_map_size = output_size // (2 ** len(layers_channels))
+
+        layers = [
+            nn.Linear(latent_size, layers_channels[0] * feature_map_size * feature_map_size),
+            nn.BatchNorm1d(layers_channels[0] * feature_map_size * feature_map_size),
             nn.LeakyReLU(0.2),
-            nn.Unflatten(1, (512, 8, 8)),
-            nn.ConvTranspose2d(512, 256, 3, stride=2, padding=1, output_padding=1), # in shape: (8, 8, 512) out shape: (16, 16, 256)
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2),
-            nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, output_padding=1), # in shape: (16, 16, 256) out shape: (32, 32, 128)
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2),
-            nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1), # in shape: (32, 32, 128) out shape: (64, 64, 64)
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.2),
-            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1), # in shape: (64, 64, 64) out shape: (128, 128, 32)
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(0.2),
-            nn.ConvTranspose2d(32, 16, 3, stride=2, padding=1, output_padding=1), # in shape: (128, 128, 32) out shape: (256, 256, 16)
-            nn.BatchNorm2d(16),
-            nn.LeakyReLU(0.2),
-            nn.ConvTranspose2d(16, out_channels, 3, stride=2, padding=1, output_padding=1), # in shape: (256, 256, 16) out shape: (512, 512, 2)
+            nn.Unflatten(1, (layers_channels[0], feature_map_size, feature_map_size)),
+        ]
+
+        in_channel = layers_channels[0]
+        for out_channel in layers_channels[1:]:
+            layers.extend([
+                nn.ConvTranspose2d(in_channel, out_channel, 3, stride=2, padding=1, output_padding=1),
+                nn.BatchNorm2d(out_channel),
+                nn.LeakyReLU(0.2),
+            ])
+            in_channel = out_channel
+
+        layers.extend([
+            nn.ConvTranspose2d(layers_channels[-1], out_channels, 3, stride=2, padding=1, output_padding=1),
             nn.BatchNorm2d(out_channels),
             nn.Sigmoid(),
-        )
-    
+        ])
+
+        self.layers = nn.Sequential(*layers)
+
     def forward(self, x):
         return self.layers(x)
 
 
-class Autoencoder(nn.Module):
+class AE(nn.Module):
     def __init__(self, input_size, hidden_size, latent_size, output_size):
         super().__init__()
-        self.encoder = Encoder(input_size, hidden_size, latent_size)
-        self.decoder = Decoder(latent_size, hidden_size, output_size)
+        self.encoder = LinearEncoder(input_size, hidden_size, latent_size)
+        self.decoder = LinearDecoder(latent_size, hidden_size, output_size)
 
     def forward(self, x):
         return self.decoder(self.encoder(x))
@@ -122,15 +124,13 @@ class Autoencoder(nn.Module):
         return self.encoder(x)
 
 # inspired by https://medium.com/@rekalantar/variational-auto-encoder-vae-pytorch-tutorial-dce2d2fe0f5f
-
-
 class VAE(nn.Module):
     def __init__(self, input_size, hidden_size, latent_size):
         super().__init__()
-        self.encoder = Encoder(input_size, hidden_size, latent_size)
+        self.encoder = LinearEncoder(input_size, hidden_size, latent_size)
         self.mu = nn.Linear(latent_size, latent_size)
         self.logvar = nn.Linear(latent_size, latent_size)
-        self.decoder = Decoder(latent_size, hidden_size, input_size)
+        self.decoder = LinearDecoder(latent_size, hidden_size, input_size)
 
     def encode(self, x):
         x = self.encoder(x)
@@ -147,13 +147,13 @@ class VAE(nn.Module):
         return self.decoder(z), mean, logvar, z
 
 
-class ImgVAE(nn.Module):
+class ConvVAE(nn.Module):
     def __init__(self, in_channels, latent_size):
         super().__init__()
-        self.encoder = ImgEncoder(in_channels, latent_size)
+        self.encoder = ConvEncoder(in_channels, latent_size)
         self.mu = nn.Linear(latent_size, latent_size)
         self.logvar = nn.Linear(latent_size, latent_size)
-        self.decoder = ImgDecoder(latent_size, in_channels)
+        self.decoder = ConvDecoder(latent_size, in_channels)
     
     def encode(self, x):
         x = self.encoder(x)

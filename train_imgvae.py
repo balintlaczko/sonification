@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from utils import *
 from datasets import Amanis_RG_dataset
-from simple_autoencoder import ImgVAE
+from simple_autoencoder import ConvVAE
 from loss import MMDloss
 
 from sklearn.preprocessing import MinMaxScaler
@@ -125,7 +125,7 @@ def main(args):
         train_dataset, batch_size=args.batch_size, shuffle=True)
 
     # create model and optimizer
-    model = ImgVAE(
+    model = ConvVAE(
         in_channels=2, latent_size=args.model_latent_size).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
