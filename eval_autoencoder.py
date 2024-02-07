@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from utils import *
-from simple_autoencoder import AE
+from models.models import AE
 
 
 def main(args):

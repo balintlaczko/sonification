@@ -11,7 +11,7 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 from utils import *
-from simple_autoencoder import VAE
+from models.models import VAE
 from loss import MMDloss
 
 from sklearn.preprocessing import MinMaxScaler

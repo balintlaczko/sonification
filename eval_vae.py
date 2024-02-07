@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from utils import *
-from simple_autoencoder import VAE
+from models.models import VAE
 
 from sklearn.preprocessing import MinMaxScaler
 

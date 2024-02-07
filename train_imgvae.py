@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from utils import *
 from datasets import Amanis_RG_dataset
-from simple_autoencoder import ConvVAE
+from models.models import ConvVAE
 from loss import MMDloss
 
 from sklearn.preprocessing import MinMaxScaler

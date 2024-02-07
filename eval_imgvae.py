@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from utils import *
 from datasets import Amanis_RG_dataset
-from simple_autoencoder import ConvVAE
+from models.models import ConvVAE
 
 from sklearn.preprocessing import MinMaxScaler
 

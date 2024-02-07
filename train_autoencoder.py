@@ -11,7 +11,7 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 from utils import *
-from simple_autoencoder import Autoencoder
+from models.models import AE
 
 
 def train(train_loader, model, optimizer, epoch, device):
@@ -81,7 +81,7 @@ def main(args):
         train_dataset, batch_size=args.batch_size, shuffle=True)
 
     # create model and optimizer
-    model = Autoencoder(input_size=len(
+    model = AE(input_size=len(
         train_dataset[0]), hidden_size=2, output_size=len(train_dataset[0])).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
