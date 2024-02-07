@@ -13,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 from utils import *
 from datasets import Amanis_RG_dataset
 from simple_autoencoder import ImgVAE
-from mmd_loss import MMDloss
+from loss import MMDloss
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA

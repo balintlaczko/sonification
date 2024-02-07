@@ -1,12 +1,11 @@
-# taken form: https://github.com/AntixK/PyTorch-VAE/blob/master/models/info_vae.py
-# then modified it into its own class
-
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torch import Tensor
 
 
+# taken form: https://github.com/AntixK/PyTorch-VAE/blob/master/models/info_vae.py
+# then modified it into its own class
 class MMDloss(nn.Module):
     def __init__(self,
                  kernel_type: str = 'imq',

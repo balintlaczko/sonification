@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from utils import *
 from simple_autoencoder import VAE
-from mmd_loss import MMDloss
+from loss import MMDloss
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
