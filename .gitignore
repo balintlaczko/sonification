@@ -4,3 +4,4 @@ __pycache__/
 ckpt/
 plots/
 datasets/
+.vscode/

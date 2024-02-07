@@ -680,6 +680,8 @@ class ResBlock(nn.Module):
 
         return out
 
+# missing VQVAE reference here
+
 
 class Encoder(nn.Module):
     def __init__(
