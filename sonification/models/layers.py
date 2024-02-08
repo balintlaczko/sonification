@@ -226,7 +226,7 @@ class MLP(nn.Module):
         return [
             nn.Linear(input_dim, output_dim),
             nn.LayerNorm(output_dim),
-            nn.LeakyReLU(),
+            nn.LeakyReLU(0.2),
         ]
 
     def forward(self, x):
