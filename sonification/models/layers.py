@@ -5,7 +5,7 @@ from functools import reduce
 
 class LinearEncoder(nn.Module):
     def __init__(self, input_size, hidden_size, latent_size):
-        super().__init__()
+        super(LinearEncoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.latent_size = latent_size
@@ -24,7 +24,7 @@ class LinearEncoder(nn.Module):
 
 class LinearDecoder(nn.Module):
     def __init__(self, latent_size, hidden_size, output_size):
-        super().__init__()
+        super(LinearDecoder, self).__init__()
         self.latent_size = latent_size
         self.hidden_size = hidden_size
         self.output_size = output_size
@@ -43,7 +43,7 @@ class LinearDecoder(nn.Module):
 
 class ConvEncoder(nn.Module):
     def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
-        super().__init__()
+        super(ConvEncoder, self).__init__()
         self.in_channels = in_channels # 2 for red and green
         self.latent_size = latent_size
 
@@ -76,7 +76,7 @@ class ConvEncoder(nn.Module):
 
 class ConvDecoder(nn.Module):
     def __init__(self, latent_size, out_channels, layers_channels=[512, 256, 128, 64, 32, 16], output_size=512):
-        super().__init__()
+        super(ConvDecoder, self).__init__()
         self.latent_size = latent_size
         self.out_channels = out_channels
 
@@ -113,7 +113,7 @@ class ConvDecoder(nn.Module):
 
 class ResBlock(nn.Module):
     def __init__(self, in_channel, channel):
-        super().__init__()
+        super(ResBlock, self).__init__()
 
         # this is the residual block
         self.conv = nn.Sequential(
@@ -144,7 +144,7 @@ class MultiScaleEncoder(nn.Module):
             input_dim_h=80,
             input_dim_w=188,
     ):
-        super().__init__()
+        super(MultiScaleEncoder, self).__init__()
 
         # check that the stride is valid
         assert stride in [2, 4]
@@ -209,7 +209,7 @@ class MultiScaleEncoder(nn.Module):
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
-        super().__init__()
+        super(MLP, self).__init__()
 
         # create a chain of ints for the dimensions of the MLP
         self.dims = [hidden_dim, ] * (num_layers + 1)

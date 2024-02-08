@@ -5,7 +5,7 @@ from layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder
 
 class AE(nn.Module):
     def __init__(self, input_size, hidden_size, latent_size, output_size):
-        super().__init__()
+        super(AE, self).__init__()
         self.encoder = LinearEncoder(input_size, hidden_size, latent_size)
         self.decoder = LinearDecoder(latent_size, hidden_size, output_size)
 
@@ -19,7 +19,7 @@ class AE(nn.Module):
 # inspired by https://medium.com/@rekalantar/variational-auto-encoder-vae-pytorch-tutorial-dce2d2fe0f5f
 class VAE(nn.Module):
     def __init__(self, input_size, hidden_size, latent_size):
-        super().__init__()
+        super(VAE, self).__init__()
         self.encoder = LinearEncoder(input_size, hidden_size, latent_size)
         self.mu = nn.Linear(latent_size, latent_size)
         self.logvar = nn.Linear(latent_size, latent_size)
@@ -42,7 +42,7 @@ class VAE(nn.Module):
 
 class ConvVAE(nn.Module):
     def __init__(self, in_channels, latent_size):
-        super().__init__()
+        super(ConvVAE, self).__init__()
         self.encoder = ConvEncoder(in_channels, latent_size)
         self.mu = nn.Linear(latent_size, latent_size)
         self.logvar = nn.Linear(latent_size, latent_size)

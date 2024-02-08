@@ -13,7 +13,7 @@ class Phasor(nn.Module):
         self,
         sr: int
     ):
-        super().__init__()
+        super(Phasor, self).__init__()
 
         self.sr = sr
 
@@ -31,7 +31,7 @@ class Sinewave(nn.Module):
         self,
         sr: int
     ):
-        super().__init__()
+        super(Sinewave, self).__init__()
 
         self.sr = sr
         self.phasor = Phasor(self.sr)
@@ -47,7 +47,7 @@ class FMSynth(nn.Module):
         self,
         sr: int,
     ):
-        super().__init__()
+        super(FMSynth, self).__init__()
 
         self.sr = sr
         self.modulator_sine = Sinewave(self.sr)
@@ -67,7 +67,7 @@ class FMSynth(nn.Module):
 
 class Mel2Params(nn.Module):
     def __init__(self, num_mels, num_hops, num_params, dim=512):
-        super().__init__()
+        super(Mel2Params, self).__init__()
 
         self.num_mels = num_mels
         self.num_hops = num_hops
@@ -88,7 +88,7 @@ class Mel2Params(nn.Module):
 
 class Mel2Params2(nn.Module):
     def __init__(self, num_mels, num_hops, num_params, dim=256):
-        super().__init__()
+        super(Mel2Params2, self).__init__()
 
         self.num_mels = num_mels
         self.num_hops = num_hops
@@ -126,7 +126,7 @@ class Wave2MFCCEncoder(nn.Module):
             f_max=8000.0,
             z_dim=32
     ):
-        super().__init__()
+        super(Wave2MFCCEncoder, self).__init__()
 
         self.mfcc = torchaudio.transforms.MFCC(
             sample_rate=sr,
@@ -169,7 +169,7 @@ class MFCCEncoder(nn.Module):
             mlp_out_dim=256,
             mlp_layers=3
     ):
-        super().__init__()
+        super(MFCCEncoder, self).__init__()
 
         self.use_gru = use_gru
 
@@ -225,7 +225,7 @@ class MelbandsEncoder(nn.Module):
             mlp_out_dim=256,
             mlp_layers=3
     ):
-        super().__init__()
+        super(MelbandsEncoder, self).__init__()
 
         self.use_gru = use_gru
 
@@ -273,7 +273,7 @@ class PitchEncoder(nn.Module):
             mlp_out_dim=256,
             mlp_layers=3
     ):
-        super().__init__()
+        super(PitchEncoder, self).__init__()
 
         self.sr = sr
         self.f_min = f_min
@@ -318,7 +318,7 @@ class Wave2Params(nn.Module):
             buffer_length_s: int = 4,
 
     ):
-        super().__init__()
+        super(Wave2Params, self).__init__()
 
         self.sr = sr
         self.buffer_length_s = buffer_length_s
