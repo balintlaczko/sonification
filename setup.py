@@ -1,0 +1,41 @@
+from setuptools import setup, find_packages
+
+setup(
+    name='sonification',
+    version='0.1.0',
+    author='Balint Laczko',
+    author_email='balint.laczko@imv.uio.no',
+    description='The code repository for the sonification PhD project',
+    packages=find_packages(),
+    install_requires=[
+        # TODO: Add dependencies
+        "numpy",
+        "numba",
+        "torch",
+        "torchvision",
+        "torchaudio",
+        "torchyin",
+        "torchsummary",
+        "auraloss",
+        "opencv-python",
+        "pillow",
+        "librosa",
+        "matplotlib",
+        "scipy",
+        "tqdm",
+        "pandas",
+        "scikit-learn",
+        "umap-learn",
+    ],
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+    ],
+)

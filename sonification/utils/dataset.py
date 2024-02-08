@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 import cv2
 import matrix
-from musicalgestures._utils import roundup, generate_outfilename, MgProgressbar
+from misc import roundup, generate_outfilename
+import tqdm
 
 
 def folder2dataset(folder: str, image_extension: str = ".tif") -> pd.DataFrame:
@@ -389,13 +390,12 @@ class ImageSequence():
 
         # create progress bar
         pb_prefix = "Rendering image sequence:"
-        pb = MgProgressbar(total=self.num_steps, prefix=pb_prefix)
-        ii = 0
+        pb = tqdm.tqdm(range(self.num_steps), desc=pb_prefix)
         # create a preview window for the render
         cv2.namedWindow("Rendering in progress...", 0)
         cv2.resizeWindow("Rendering in progress...", (300, 300))
         # loop through steps
-        for step in range(self.num_steps):
+        for step in pb:
             # fetch image path and then matrix
             image_path = self.get_path(step, color_space, visiting_point)
             image = self.get_matrix(image_path, color_space)
@@ -406,9 +406,6 @@ class ImageSequence():
                     image, in_min=color_min, in_max=color_max, out_max=255, in_percentile=norm_percentile)
             # write frame as 8-bit
             out.write(image.astype(np.uint8))
-            # progress progress bar
-            pb.progress(ii)
-            ii += 1
             # preview rendered frame in window
             cv2.imshow("Rendering in progress...", image.astype(np.uint8))
             # preview for a 100 milliseconds

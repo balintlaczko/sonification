@@ -5,11 +5,9 @@ import json
 import torch
 from torch.utils.data import DataLoader
 
-from utils.array import array2fluid_dataset
-from datasets import Amanis_RG_dataset
-from models.models import ConvVAE
-
-from sklearn.preprocessing import MinMaxScaler
+from sonification.utils.array import array2fluid_dataset
+from sonification.datasets import Amanis_RG_dataset
+from sonification.models.models import ConvVAE
 
 
 def main(args):

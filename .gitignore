@@ -6,3 +6,4 @@ plots/
 datasets/
 .vscode/
 .ipynb_checkpoints/
+*.egg-info/

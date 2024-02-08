@@ -1,7 +1,7 @@
 # %%
 # imports
 import torch
-from models.ddsp import FMSynth, Wave2Params, MelbandsEncoder, MFCCEncoder, PitchEncoder
+from sonification.models.ddsp import FMSynth, Wave2Params, MelbandsEncoder, MFCCEncoder, PitchEncoder
 
 
 # %%

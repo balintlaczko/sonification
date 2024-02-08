@@ -1,5 +1,5 @@
 import numpy as np
-from ..utils import dsp
+from sonification.utils import dsp
 
 def test_history():
     # test that the shift is correct

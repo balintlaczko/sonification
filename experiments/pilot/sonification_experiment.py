@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 import cv2
 from matplotlib import pyplot as plt
-from utils.dataset import folder2dataset, ImageSequence
-from utils.array import scale_array_auto
-from utils.matrix import stretch_contrast, view
-from utils.dsp import image2sines
+from sonification.utils.dataset import folder2dataset, ImageSequence
+from sonification.utils.array import scale_array_auto
+from sonification.utils.matrix import stretch_contrast, view
+from sonification.utils.dsp import image2sines
 import musicalgestures
 
 # %%

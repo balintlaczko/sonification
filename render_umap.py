@@ -4,7 +4,7 @@ import os
 import json
 import numpy as np
 import platform
-from utils.array import array2fluid_dataset
+from sonification.utils.array import array2fluid_dataset
 import umap
 
 

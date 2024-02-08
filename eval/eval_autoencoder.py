@@ -1,16 +1,12 @@
 import argparse
-import sys
 import os
 import json
 
 import torch
-from torch import nn, optim
 from torch.utils.data import DataLoader
 
-from tqdm import tqdm
-
-from utils.array import array2fluid_dataset, fluid_dataset2array
-from models.models import AE
+from sonification.utils.array import array2fluid_dataset, fluid_dataset2array
+from sonification.models.models import AE
 
 
 def main(args):

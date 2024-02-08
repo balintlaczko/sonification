@@ -1,8 +1,3 @@
-from utils import *
-import math
-import pyo
-
-
 @jit(nopython=True)
 def hop2col(hop, num_hops, num_cols):
     return hop * num_cols / num_hops
@@ -357,3 +352,241 @@ def generate_row_with_hops(
         insertion_index += hop_size_samps
     # return row buffer
     return output_row
+
+
+class Tsynth_FmSynth(nn.Module):
+    def __init__(self, config, device):
+        super().__init__()
+        self.fm_vco = FmVCO(
+            tuning=torch.tensor([0.0] * config.batch_size),
+            mod_depth=torch.tensor([0.0] * config.batch_size),
+            synthconfig=config,
+            device=device,
+        )
+        self.modulator = SineVCO(
+            tuning=torch.tensor([0.0] * config.batch_size),
+            mod_depth=torch.tensor([0.0] * config.batch_size),
+            initial_phase=torch.tensor([torch.pi / 2] * config.batch_size),
+            synthconfig=config,
+            device=device,
+        )
+
+        self.mel_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=config.sample_rate,
+            n_fft=2048,
+            hop_length=512,
+            n_mels=80,
+            normalized=True,
+            f_min=20.0,
+            f_max=8000.0,
+        ).to(device)
+
+    def forward(
+            self,
+            carrier_frequency: torch.Tensor,
+            modulator_frequency: torch.Tensor,
+            modulation_index: torch.Tensor
+    ):
+        # generate modulator signal
+        modulator_signal = self.modulator(
+            frequency2midi_tensor(modulator_frequency))
+
+        # set modulation index
+        self.fm_vco.set_parameter(
+            "mod_depth", torch.clip(modulation_index, -96, 96))
+
+        # generate fm signal
+        fm_signal = self.fm_vco(frequency2midi_tensor(
+            carrier_frequency), modulator_signal)
+
+        # generate mel spectrogram
+        mel_spec = self.mel_transform(fm_signal)
+
+        return mel_spec
+    
+
+class Tsynth_FmSynth2Wave(nn.Module):
+    def __init__(self, config, device):
+        super().__init__()
+        self.fm_vco = FmVCO(
+            tuning=torch.tensor([0.0] * config.batch_size),
+            mod_depth=torch.tensor([0.0] * config.batch_size),
+            synthconfig=config,
+            device=device,
+        )
+        self.modulator = SineVCO(
+            tuning=torch.tensor([0.0] * config.batch_size),
+            mod_depth=torch.tensor([0.0] * config.batch_size),
+            initial_phase=torch.tensor([torch.pi / 2] * config.batch_size),
+            synthconfig=config,
+            device=device,
+        )
+
+    def forward(
+            self,
+            carrier_frequency: torch.Tensor,
+            modulator_frequency: torch.Tensor,
+            modulation_index: torch.Tensor
+    ):
+        # generate modulator signal
+        modulator_signal = self.modulator(
+            frequency2midi_tensor(modulator_frequency))
+
+        # set modulation index
+        self.fm_vco.set_parameter(
+            "mod_depth", torch.clip(modulation_index, -96, 96))
+
+        # generate fm signal
+        fm_signal = self.fm_vco(frequency2midi_tensor(
+            carrier_frequency), modulator_signal)
+
+        return fm_signal
+    
+
+class FM_Autoencoder_Wave(nn.Module):
+    def __init__(self, config, device, z_dim=32, mlp_dim=512):
+        super().__init__()
+
+        self.encoder = Wave2MFCCEncoder(z_dim=z_dim)
+        self.decoder = MLP(z_dim, mlp_dim, mlp_dim, 3)
+        self.synthparams = nn.Linear(mlp_dim, 3)
+        self.synth_act = nn.ReLU()
+        self.synth = Tsynth_FmSynth2Wave(config, device)
+
+    def forward(self, x):
+        z = self.encoder(x)
+        mlp_out = self.decoder(z)
+        params = self.synthparams(mlp_out)
+        params = self.synth_act(params)
+        # print("params.shape", params.shape)
+        # print("params", params)
+        carrier_frequency = params[:, 0]
+        # print("carrier_frequency", carrier_frequency)
+        modulator_frequency = params[:, 1]
+        # print("modulator_frequency", modulator_frequency)
+        modulation_index = params[:, 2]
+        # print("modulation_index", modulation_index)
+        # print("mod index sum:", modulation_index.sum())
+        fm_signal = self.synth(
+            carrier_frequency, modulator_frequency, modulation_index)
+        return fm_signal
+    
+
+class FM_Autoencoder_Wave2(nn.Module):
+    def __init__(self, config, device, z_dim=32, mlp_dim=512):
+        super().__init__()
+
+        self.mel_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=config.sample_rate,
+            n_fft=2048,
+            hop_length=512,
+            n_mels=80,
+            normalized=True,
+            f_min=20.0,
+            f_max=8000.0,
+        ).to(device)
+
+        self.spec_encoder = MultiScaleEncoder(input_dim_h=80, input_dim_w=188)
+
+        self.z = nn.Sequential(
+            nn.Linear(128 * 20 * 47, z_dim),
+            nn.ReLU(),
+            nn.Linear(z_dim, z_dim),
+            nn.ReLU(),
+        )
+
+        self.decoder = MLP(z_dim, mlp_dim, mlp_dim, 3)
+        self.synthparams = nn.Linear(mlp_dim, 3)
+        self.synth_act = nn.ReLU()
+        self.synth = Tsynth_FmSynth2Wave(config, device)
+
+    def forward(self, x):
+        # print("x.shape", x.shape)
+        mel_spec = self.mel_transform(x)
+        # print("mel_spec.shape", mel_spec.shape)
+        mel_spec = mel_spec.unsqueeze(1)
+        encoded = self.spec_encoder(mel_spec)
+        # print("encoded.shape", encoded.shape)
+        encoded_flatten = encoded.view(encoded.shape[0], -1)
+        z = self.z(encoded_flatten)
+        # print("z.shape", z.shape)
+        mlp_out = self.decoder(z)
+        # print("mlp_out.shape", mlp_out.shape)
+        params = self.synthparams(mlp_out)
+        params = self.synth_act(params)
+        # print("params.shape", params.shape)
+        # print("params.shape", params.shape)
+        # print("params", params)
+        carrier_frequency = params[:, 0]
+        # print("carrier_frequency", carrier_frequency)
+        modulator_frequency = params[:, 1]
+        # print("modulator_frequency", modulator_frequency)
+        modulation_index = params[:, 2]
+        # print("modulation_index", modulation_index)
+        # print("mod index sum:", modulation_index.sum())
+        fm_signal = self.synth(
+            carrier_frequency, modulator_frequency, modulation_index)
+        return fm_signal
+
+
+class FM_Autoencoder(nn.Module):
+    def __init__(
+            self,
+            config,
+            device,
+            num_mels=80,
+            num_hops=188,
+            num_params=3,
+            dim=256
+    ):
+        super().__init__()
+
+        self.num_mels = num_mels
+        self.num_hops = num_hops
+        self.num_params = num_params
+
+        # self.encoder = Mel2Params(num_mels, num_hops, num_params, dim=dim)
+        self.encoder = Mel2Params2(num_mels, num_hops, num_params, dim=dim)
+        self.synth = Tsynth_FmSynth(config, device)
+
+    def forward(self, mel_spec):
+        params = self.encoder(mel_spec)
+        carrier_frequency = params[:, 0]
+        modulator_frequency = params[:, 1]
+        modulation_index = params[:, 2]
+        mel_spec_recon = self.synth(
+            carrier_frequency,
+            modulator_frequency,
+            modulation_index
+        )
+        return mel_spec_recon, params
+    
+
+class FM_Param_Autoencoder(nn.Module):
+    def __init__(
+            self,
+            config,
+            device,
+            num_mels=80,
+            num_hops=188,
+            num_params=3,
+            dim=256
+    ):
+        super().__init__()
+
+        self.num_mels = num_mels
+        self.num_hops = num_hops
+        self.num_params = num_params
+
+        self.synth = Tsynth_FmSynth(config, device)
+        self.decoder = Mel2Params2(num_mels, num_hops, num_params, dim=dim)
+        # self.decoder = Mel2Params(num_mels, num_hops, num_params, dim=dim)
+
+    def forward(self, params):
+        mel_spec = self.synth(
+            params[:, 0],  # carrier_frequency
+            params[:, 1],  # modulator_frequency
+            params[:, 2]  # modulation_index
+        )
+        params_recon = self.decoder(mel_spec)
+        return params_recon

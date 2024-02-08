@@ -2,22 +2,20 @@
 import argparse
 import json
 import os
-import numpy as np
+
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from torchsummary import summary
 
-from torchsynth.config import SynthConfig
+
+from sonification.models.ddsp import Tsynth_FmSynth, Wave2Params
+from sonification.utils.misc import scale_linear, midi2frequency
+from sonification.utils.tensor import scale
 
 import auraloss
-
-from models.ddsp import Tsynth_FmSynth, Wave2Params
-from utils.misc import scale_linear, midi2frequency
-from utils.tensor import scale
-
 from tqdm import tqdm
-from torchsummary import summary
-from torch.utils.tensorboard import SummaryWriter
 
 
 def train(train_loader, model, optimizer, loss_fn, synth, epoch, device, args):

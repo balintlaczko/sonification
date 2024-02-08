@@ -8,8 +8,8 @@ from flucoma import fluid
 from pathlib import Path
 import numpy as np
 from scipy.io import wavfile as wav
-from utils.array import resize_interp, array2broadcastable, scale_array_exp
-from utils.dsp import phasor, sinewave, fm_synth, fm_synth_2, am_synth, am_module, history, ramp2trigger, ramp2slope
+from sonification.utils.array import array2broadcastable
+from sonification.utils.dsp import phasor, sinewave, fm_synth, fm_synth_2, am_synth, am_module, ramp2slope
 
 # %%
 # TODO:
@@ -230,7 +230,7 @@ distances, distances.shape
 
 
 # %%
-from utils.video import videos2planes
+from sonification.utils.video import videos2planes
 
 video_gfp = "/Users/balintl/Desktop/Sonification Pilot Video/Materials/processing/pbsgb_gfp_st_1.avi"
 video_rfp = "/Users/balintl/Desktop/Sonification Pilot Video/Materials/processing/pbsgb_rfp_st_1.avi"
@@ -244,7 +244,7 @@ videos2planes(video2red=video_rfp, target_name=target_name)
 # %%
 import cv2
 import numpy as np
-from utils.matrix import view
+from sonification.utils.matrix import view
 
 # %%
 mask_path = "/Volumes/T7RITMO/Sonification/Amani_230117/W3onlywith masks/Timepoint_001_230117-BST_C03_s1_w3_cp_masks.png"

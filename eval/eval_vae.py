@@ -4,8 +4,8 @@ import json
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from utils.array import array2fluid_dataset
-from models.models import VAE
+from sonification.utils.array import array2fluid_dataset
+from sonification.models.models import VAE
 from sklearn.preprocessing import MinMaxScaler
 
 

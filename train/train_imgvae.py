@@ -1,21 +1,18 @@
 import argparse
-import sys
 import os
 import json
 import numpy as np
 import torch
 from torch import nn, optim
-from torch.utils.data import Dataset, DataLoader
-
-from tqdm import tqdm
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+from tqdm import tqdm
 
-from datasets import Amanis_RG_dataset
-from models.models import ConvVAE
-from models.loss import MMDloss
+from sonification.datasets import Amanis_RG_dataset
+from sonification.models.models import ConvVAE
+from sonification.models.loss import MMDloss
 
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 from matplotlib import pyplot as plt
 

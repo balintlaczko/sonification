@@ -1,5 +1,4 @@
 import argparse
-import sys
 import os
 import json
 
@@ -10,8 +9,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-from utils.array import fluid_dataset2array
-from models.models import AE
+from sonification.utils.array import fluid_dataset2array
+from sonification.models.models import AE
 
 
 def train(train_loader, model, optimizer, epoch, device):

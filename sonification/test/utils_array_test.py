@@ -1,5 +1,5 @@
 import numpy as np
-from ..utils import array
+from sonification.utils import array
 
 def test_resize_interp():
     # test results length, and matching first and last elements, and average distance between elements

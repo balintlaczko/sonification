@@ -5,7 +5,7 @@ import cv2
 import librosa
 import scipy.io.wavfile as wav
 from scipy import interpolate
-from musicalgestures._utils import generate_outfilename
+from misc import generate_outfilename
 from . import array
 
 
