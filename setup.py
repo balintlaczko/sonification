@@ -16,6 +16,7 @@ setup(
         "torchaudio",
         "torchyin",
         "torchsummary",
+        "lightning",
         "auraloss",
         "opencv-python",
         "pillow",
