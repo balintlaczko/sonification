@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import cv2
 import platform
 
@@ -47,7 +48,7 @@ def stretch_contrast(
     out_min: int = None,
     out_max: int = None,
     clip: bool = True,
-) -> np.ndarray:
+    ) -> np.ndarray:
     """
     Implements the stretch contrast algorithm, a wide-spread method of normalization. The input and output ranges
     of the mapping can optionally be specified using `in_min` and `in_max` for the input and `out_min` and `out_max`
@@ -97,3 +98,27 @@ def stretch_contrast(
         return (matrix - in_min)*(((out_max-out_min)/(in_max-in_min))+out_min)
 
 
+def square_over_bg(
+        x: int, 
+        y: int, 
+        img_size: int=512, 
+        square_size: int=50,
+    ) -> torch.Tensor:
+    """
+    Create a binary image of a square over a black background.
+
+    Args:
+        x (int): The x coordinate of the top-left corner of the square.
+        y (int): The y coordinate of the top-left corner of the square.
+        img_size (int, optional): The size of each side of the image. Defaults to 512.
+        square_size (int, optional): The size of each side of the square. Defaults to 50.
+
+    Returns:
+        torch.Tensor: _description_
+    """
+    # create a black image
+    img = torch.zeros((img_size, img_size))
+    # set the square to white
+    img[y:y + square_size, x:x + square_size] = 1
+
+    return img
