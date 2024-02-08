@@ -3,7 +3,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 import cv2
-from utils import matrix
+import matrix
 from musicalgestures._utils import roundup, generate_outfilename, MgProgressbar
 
 

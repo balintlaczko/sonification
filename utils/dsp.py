@@ -6,7 +6,7 @@ import librosa
 import scipy.io.wavfile as wav
 from scipy import interpolate
 from musicalgestures._utils import generate_outfilename
-from utils import array
+from . import array
 
 
 # function to calculate number of hops
