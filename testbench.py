@@ -18,22 +18,6 @@ from utils.dsp import phasor, sinewave, fm_synth, fm_synth_2, am_synth, am_modul
 
 # %%
 
-# test resize_interp
-
-
-a = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-print(a)
-print(np.round(resize_interp(a, 6)).astype(int))
-a = np.arange(10)
-print(a)
-print(np.round(resize_interp(a, 6)).astype(int))
-a = np.arange(15)
-print(a)
-print(resize_interp(a, 20))
-
-
-# %%
-
 # test phasor
 
 
@@ -61,13 +45,13 @@ wav.write(target_name, sr, testy.astype(np.float32))
 
 # time phasor vs sinewave vs generate_sine
 
-%timeit phasor(48000 * 60, 48000, np.array([1]))
+# %timeit phasor(48000 * 60, 48000, np.array([1]))
 
 # %%
-%timeit sinewave(48000 * 60, 48000, np.array([1]))
+# %timeit sinewave(48000 * 60, 48000, np.array([1]))
 
 # %%
-%timeit generate_sine(48000, 60, 1, 0, 4096)
+# %timeit generate_sine(48000, 60, 1, 0, 4096)
 
 # %%
 
@@ -86,7 +70,7 @@ wav.write(target_name, sr, testy.astype(np.float32))
 
 # time fm_synth
 
-%timeit fm_synth(48000 * 60, 48000, np.array([440]), np.array([1]), np.array([10]))
+# %timeit fm_synth(48000 * 60, 48000, np.array([440]), np.array([1]), np.array([10]))
 
 # %%
 
@@ -117,7 +101,7 @@ wav.write(target_name, sr, testy.astype(np.float32))
 
 # time fm_synth_2
 
-%timeit fm_synth_2(48000 * 60, 48000, np.array([440]), np.array([1]), np.array([10]))
+# %timeit fm_synth_2(48000 * 60, 48000, np.array([440]), np.array([1]), np.array([10]))
 
 
 # %%
@@ -166,22 +150,6 @@ carrier *= am_module(samples, sr, np.array([8]), np.array([0.15]))
 target_name = "/Users/balintl/Desktop/test_fm_assignment42.wav"
 wav.write(target_name, sr, carrier.astype(np.float32))
 
-# %%
-
-# test history function
-
-test_signal = np.array([1, 2, 3, 4, 5])
-test_history = history(test_signal)
-assert np.array_equal(test_history, np.array([0, 1, 2, 3, 4]))
-
-# %%
-
-# test ramp2trigger function
-
-sr = 48000
-test_ramp = phasor(sr*10, sr, np.array([2]))
-test_trigger = ramp2trigger(test_ramp)
-assert np.sum(test_trigger) == 20
 
 # %%
 
@@ -190,16 +158,6 @@ assert np.sum(test_trigger) == 20
 ramp = phasor(48000 * 10, 48000, np.array([1]))
 slope = ramp2slope(ramp)
 slope
-
-# %%
-
-# test scale_array_exp
-
-test_array = np.arange(0, 1.1, 0.1)
-print(test_array)
-print(scale_array_exp(test_array, 0, 1, 0, 1))
-print(scale_array_exp(test_array, 0, 1, 0, 1, 2))
-print(scale_array_exp(test_array, 0, 1, 0, 1, 0.5))
 
 
 # %%
