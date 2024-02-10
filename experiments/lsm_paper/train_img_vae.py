@@ -28,16 +28,16 @@ def main():
 
     # model
     parser.add_argument('--latent_size', type=int, default=2, help='latent size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[16, 32, 64, 128, 256],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[32, 32, 64, 64],
                         help='channels for the layers')
-    parser.add_argument('--d_hidden_size', type=int, default=1024, help='mlp hidden size')
-    parser.add_argument('--d_num_layers', type=int, default=4, help='mlp number of layers')
+    parser.add_argument('--d_hidden_size', type=int, default=1000, help='mlp hidden size')
+    parser.add_argument('--d_num_layers', type=int, default=6, help='mlp number of layers')
 
     # training
-    parser.add_argument('--train_epochs', type=int, default=1000, help='number of training epochs')
-    parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=1e-3, help='learning rate for the vae')
-    parser.add_argument('--lr_d', type=float, default=1e-3, help='learning rate for the discriminator')
+    parser.add_argument('--train_epochs', type=int, default=10000, help='number of training epochs')
+    parser.add_argument('--batch_size', type=int, default=64, help='batch size')
+    parser.add_argument('--lr_vae', type=float, default=1e-4, help='learning rate for the vae')
+    parser.add_argument('--lr_d', type=float, default=1e-4, help='learning rate for the discriminator')
     parser.add_argument('--kld_weight', type=float, default=1, help='kld weight')
     parser.add_argument('--tc_weight', type=float, default=40, help='tc weight')
     parser.add_argument('--train_steps_limit', type=int, default=-1, help='train steps limit. -1 means no limit')

@@ -9,3 +9,4 @@ datasets/
 *.egg-info/
 experiments/lsm_paper/workbench.py
 *.csv
+logs/

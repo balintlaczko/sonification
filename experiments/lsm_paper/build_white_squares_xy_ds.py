@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out_name", type=str, default="./experiments/lsm_paper/white_squares_xy.csv")
+    parser.add_argument("--out_name", type=str, default="./experiments/lsm_paper/white_squares_xy_64_4.csv")
     parser.add_argument("--img_size", type=int, default=64)
     parser.add_argument("--square_size", type=int, default=4)
     parser.add_argument("--val_split", type=float, default=0.2)
@@ -36,12 +36,12 @@ def main():
     # add the train set to the dataframe
     df_train = pd.DataFrame(train, columns=["x", "y"])
     df_train["dataset"] = "train"
-    df = df.append(df_train)
+    df = df._append(df_train)
 
     # add the val set to the dataframe
     df_val = pd.DataFrame(val, columns=["x", "y"])
     df_val["dataset"] = "val"
-    df = df.append(df_val)
+    df = df._append(df_val)
 
     # save the dataframe
     df.to_csv(out_name, index=False)

@@ -14,7 +14,7 @@ setup(
         "torch",
         "torchvision",
         "torchaudio",
-        "torchyin",
+        "torch-yin",
         "torchsummary",
         "lightning",
         "auraloss",

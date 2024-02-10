@@ -216,6 +216,6 @@ class PlFactorVAE(LightningModule):
 
 
     def configure_optimizers(self):
-        vae_optimizer = torch.optim.Adam(self.VAE.parameters(), lr=self.hparams.lr_vae)
-        d_optimizer = torch.optim.Adam(self.D.parameters(), lr=self.hparams.lr_d)
+        vae_optimizer = torch.optim.Adam(self.VAE.parameters(), lr=self.hparams.lr_vae, betas=(0.9, 0.999))
+        d_optimizer = torch.optim.Adam(self.D.parameters(), lr=self.hparams.lr_d, betas=(0.5, 0.9))
         return vae_optimizer, d_optimizer
