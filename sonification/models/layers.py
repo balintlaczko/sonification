@@ -208,9 +208,9 @@ class MultiScaleEncoder(nn.Module):
     
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, relu_inplace=False):
         super(MLP, self).__init__()
-
+        self.relu_inplace = relu_inplace
         # create a chain of ints for the dimensions of the MLP
         self.dims = [hidden_dim, ] * (num_layers + 1)
         # mark first and last as the input and output dimensions
@@ -226,9 +226,29 @@ class MLP(nn.Module):
         return [
             nn.Linear(input_dim, output_dim),
             nn.LayerNorm(output_dim),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=self.relu_inplace),
         ]
 
     def forward(self, x):
         return self.layers(x)
     
+
+class LinearDiscriminator(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+        super(LinearDiscriminator, self).__init__()
+        
+        layers = []
+        for i in range(num_layers-1):
+            layers.extend([
+                nn.Linear(input_dim, hidden_dim),
+                nn.LeakyReLU(0.2, inplace=True),
+            ])
+            input_dim = hidden_dim
+        layers.extend([
+            nn.Linear(hidden_dim, output_dim),
+        ])
+
+        self.discriminator = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.discriminator(x)
