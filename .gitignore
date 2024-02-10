@@ -7,4 +7,5 @@ datasets/
 .vscode/
 .ipynb_checkpoints/
 *.egg-info/
-experiments/lsm_paper/exp1/workbench.py
+experiments/lsm_paper/workbench.py
+*.csv
