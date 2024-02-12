@@ -10,10 +10,12 @@ from piqa import SSIM
 
 
 class AE(nn.Module):
-    def __init__(self, input_size, hidden_size, latent_size, output_size):
+    def __init__(self, input_size, hidden_size, latent_size, output_size, num_layers=4, bias=False, dtype=torch.float32):
         super(AE, self).__init__()
-        self.encoder = LinearEncoder(input_size, hidden_size, latent_size)
-        self.decoder = LinearDecoder(latent_size, hidden_size, output_size)
+        self.encoder = LinearEncoder(
+            input_size, hidden_size, latent_size, num_layers, bias, dtype)
+        self.decoder = LinearDecoder(
+            latent_size, hidden_size, output_size, num_layers, bias, dtype)
 
     def forward(self, x):
         return self.decoder(self.encoder(x))
@@ -24,12 +26,14 @@ class AE(nn.Module):
 
 # inspired by https://medium.com/@rekalantar/variational-auto-encoder-vae-pytorch-tutorial-dce2d2fe0f5f
 class VAE(nn.Module):
-    def __init__(self, input_size, hidden_size, latent_size):
+    def __init__(self, input_size, hidden_size, latent_size, num_layers=4, bias=False, dtype=torch.float32):
         super(VAE, self).__init__()
-        self.encoder = LinearEncoder(input_size, hidden_size, latent_size)
-        self.mu = nn.Linear(latent_size, latent_size)
-        self.logvar = nn.Linear(latent_size, latent_size)
-        self.decoder = LinearDecoder(latent_size, hidden_size, input_size)
+        self.encoder = LinearEncoder(
+            input_size, hidden_size, hidden_size, num_layers, bias, dtype)
+        self.mu = nn.Linear(hidden_size, latent_size)
+        self.logvar = nn.Linear(latent_size, hidden_size)
+        self.decoder = LinearDecoder(
+            hidden_size, hidden_size, input_size, num_layers, bias, dtype)
 
     def encode(self, x):
         x = self.encoder(x)
@@ -69,7 +73,6 @@ class ConvVAE(nn.Module):
         mean, logvar = self.encode(x)
         z = self.reparameterize(mean, logvar)
         recon = self.decoder(z)
-        # recon = torch.where(recon > 0.5, torch.ones_like(recon), torch.zeros_like(recon))
         return recon, mean, logvar, z
 
 
@@ -98,12 +101,9 @@ class PlFactorVAE(LightningModule):
         # models
         self.VAE = ConvVAE(in_channels, hidden_size,
                            latent_size, layers_channels, input_size)
-        # self.VAE = VAE(input_size*input_size, hidden_size, latent_size)
         # self.D = LinearDiscriminator(latent_size, d_hidden_size, 2, d_num_layers)
         # losses
         self.mse = nn.MSELoss()
-        # self.bce = nn.BCELoss()
-        # self.ce = nn.CrossEntropyLoss()
         # self.ssim = SSIM(n_channels=in_channels)
         self.kld = kld_loss
         self.kld_weight = kld_weight
@@ -140,12 +140,6 @@ class PlFactorVAE(LightningModule):
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
-        # # flatten the input
-        # x_1_flatten = x_1.view(batch_size, -1)
-        # x_recon, mean, logvar, z = self.VAE(x_1_flatten)
-        # # unflatten the output
-        # x_recon = x_recon.view(
-        #     batch_size, 1, self.hparams.input_size, self.hparams.input_size)
         vae_recon_loss = self.mse(x_recon, x_1*4)
         # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
@@ -203,12 +197,6 @@ class PlFactorVAE(LightningModule):
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
-        # # flatten the input
-        # x_1_flatten = x_1.view(batch_size, -1)
-        # x_recon, mean, logvar, z = self.VAE(x_1_flatten)
-        # # unflatten the output
-        # x_recon = x_recon.view(
-        #     batch_size, 1, self.hparams.input_size, self.hparams.input_size)
         vae_recon_loss = self.mse(x_recon, x_1)
         # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
@@ -246,20 +234,7 @@ class PlFactorVAE(LightningModule):
         x_1, x_2 = x_1.unsqueeze(0).cuda(), x_2.unsqueeze(0).cuda()
 
         x_1_recon, mean, logvar, z = self.VAE(x_1)
-        # # flatten the input
-        # x_1_flatten = x_1.view(1, -1)
-        # x_1_recon, mean, logvar, z = self.VAE(x_1_flatten)
-        # # unflatten the output
-        # x_1_recon = x_1_recon.view(
-        #     1, 1, self.hparams.input_size, self.hparams.input_size)
-
-        # flatten the input
         x_2_recon, mean, logvar, z = self.VAE(x_2)
-        # x_2_flatten = x_2.view(1, -1)
-        # x_2_recon, mean, logvar, z = self.VAE(x_2_flatten)
-        # # unflatten the output
-        # x_2_recon = x_2_recon.view(
-        #     1, 1, self.hparams.input_size, self.hparams.input_size)
 
         # log the images
         self.log_tb_images([[x_1.squeeze(0), x_1_recon.squeeze(0)],
