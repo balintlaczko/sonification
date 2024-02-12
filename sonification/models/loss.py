@@ -9,7 +9,7 @@ import torch.nn.functional as F
 def recon_loss(x, x_recon):
     n = x.size(0)
     loss = F.binary_cross_entropy_with_logits(
-        x_recon, x, size_average=False).div(n)
+        x_recon, x, reduction="sum").div(n)
     return loss
 
 
