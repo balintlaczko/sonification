@@ -78,42 +78,37 @@ class ConvVAE(nn.Module):
 
 # used this for guidance: https://github.com/1Konny/FactorVAE/blob/master/solver.py
 class PlFactorVAE(LightningModule):
-    def __init__(
-            self,
-            in_channels,
-            hidden_size,
-            latent_size,
-            layers_channels,
-            input_size,
-            d_hidden_size,
-            d_num_layers,
-            lr_vae,
-            lr_d,
-            kld_weight,
-            tc_weight,
-            train_dataset,
-            val_dataset,
-    ):
+    def __init__(self, args):
         super(PlFactorVAE, self).__init__()
         # Important: This property activates manual optimization.
         self.automatic_optimization = False
         self.save_hyperparameters()
-        # models
-        self.VAE = ConvVAE(in_channels, hidden_size,
-                           latent_size, layers_channels, input_size)
-        # self.D = LinearDiscriminator(latent_size, d_hidden_size, 2, d_num_layers)
+
+        # data params
+        self.in_channels = args.in_channels
+        self.input_size = args.input_size
+        self.hidden_size = args.hidden_size
+        self.latent_size = args.latent_size
+        self.layers_channels = args.layers_channels
+        self.d_hidden_size = args.d_hidden_size
+        self.d_num_layers = args.d_num_layers
+
         # losses
         self.mse = nn.MSELoss()
         # self.ssim = SSIM(n_channels=in_channels)
         self.kld = kld_loss
-        self.kld_weight = kld_weight
-        self.tc_weight = tc_weight
+        self.kld_weight = args.kld_weight
+        self.tc_weight = args.tc_weight
+        self.l1_weight = args.l1_weight
+
         # learning rates
-        self.lr_vae = lr_vae
-        self.lr_d = lr_d
-        # datasets
-        self.train_dataset = train_dataset
-        self.val_dataset = val_dataset
+        self.lr_vae = args.lr_vae
+        self.lr_d = args.lr_d
+
+        # models
+        self.VAE = ConvVAE(self.in_channels, self.hidden_size,
+                           self.latent_size, self.layers_channels, self.input_size)
+        # self.D = LinearDiscriminator(latent_size, d_hidden_size, 2, d_num_layers)
 
     def forward(self, x):
         return self.VAE(x)
@@ -140,22 +135,26 @@ class PlFactorVAE(LightningModule):
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
+
+        # VAE reconstruction loss
         vae_recon_loss = self.mse(x_recon, x_1*4)
         # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
-        kld_loss = self.kld(mean, logvar)
+
+        # VAE KLD loss
+        kld_loss = self.kld(mean, logvar) * self.kld_weight
+
         # VAE TC loss
         # d_z = self.D(z)
-        # vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean()
+        # vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean() * self.tc_weight
+
         # L1 penalty
-        l1_weight = 1e-6
-        l1_penalty = l1_weight * sum([p.abs().sum()
-                                     for p in self.VAE.parameters()])
+        l1_penalty = sum([p.abs().sum()
+                         for p in self.VAE.parameters()]) * self.l1_weight
 
         # VAE loss
-        # vae_loss = vae_recon_loss + self.kld_weight * \
-        #     kld_loss  # + self.tc_weight * vae_tc_loss
-        vae_loss = vae_recon_loss + self.kld_weight * kld_loss + l1_penalty
+        # vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
+        vae_loss = vae_recon_loss + kld_loss + l1_penalty
 
         # VAE backward pass
         vae_optimizer.zero_grad()
