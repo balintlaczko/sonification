@@ -3,8 +3,10 @@ from torch import nn
 import torch.nn.functional as F
 from .layers import *
 from lightning.pytorch import LightningModule
+from lightning.pytorch.loggers import TensorBoardLogger
 from ..utils.tensor import permute_dims
 from .loss import kld_loss
+from piqa import SSIM
 
 
 class AE(nn.Module):
@@ -45,13 +47,15 @@ class VAE(nn.Module):
 
 
 class ConvVAE(nn.Module):
-    def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
+    def __init__(self, in_channels, hidden_size, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
         super(ConvVAE, self).__init__()
-        self.encoder = ConvEncoder(in_channels, latent_size, layers_channels, input_size)
-        self.mu = nn.Linear(latent_size, latent_size)
-        self.logvar = nn.Linear(latent_size, latent_size)
-        self.decoder = ConvDecoder(latent_size, in_channels, layers_channels, input_size)
-    
+        self.encoder = ConvEncoder(
+            in_channels, hidden_size, layers_channels, input_size)
+        self.mu = nn.Linear(hidden_size, latent_size)
+        self.logvar = nn.Linear(hidden_size, latent_size)
+        self.decoder = ConvDecoder(
+            latent_size, in_channels, layers_channels, input_size)
+
     def encode(self, x):
         x = self.encoder(x)
         return self.mu(x), self.logvar(x)
@@ -64,105 +68,137 @@ class ConvVAE(nn.Module):
     def forward(self, x):
         mean, logvar = self.encode(x)
         z = self.reparameterize(mean, logvar)
-        return self.decoder(z), mean, logvar, z
-    
+        recon = self.decoder(z)
+        # recon = torch.where(recon > 0.5, torch.ones_like(recon), torch.zeros_like(recon))
+        return recon, mean, logvar, z
+
 
 # used this for guidance: https://github.com/1Konny/FactorVAE/blob/master/solver.py
 class PlFactorVAE(LightningModule):
     def __init__(
-            self, 
-            in_channels, 
-            latent_size,  
-            layers_channels, 
+            self,
+            in_channels,
+            hidden_size,
+            latent_size,
+            layers_channels,
             input_size,
             d_hidden_size,
             d_num_layers,
             lr_vae,
             lr_d,
             kld_weight,
-            tc_weight
-            ):
+            tc_weight,
+            train_dataset,
+            val_dataset,
+    ):
         super(PlFactorVAE, self).__init__()
         # Important: This property activates manual optimization.
         self.automatic_optimization = False
         self.save_hyperparameters()
         # models
-        self.VAE = ConvVAE(in_channels, latent_size, layers_channels, input_size)
-        self.D = LinearDiscriminator(latent_size, d_hidden_size, 2, d_num_layers)
+        self.VAE = ConvVAE(in_channels, hidden_size,
+                           latent_size, layers_channels, input_size)
+        # self.VAE = VAE(input_size*input_size, hidden_size, latent_size)
+        # self.D = LinearDiscriminator(latent_size, d_hidden_size, 2, d_num_layers)
         # losses
         self.mse = nn.MSELoss()
+        # self.bce = nn.BCELoss()
+        # self.ce = nn.CrossEntropyLoss()
+        # self.ssim = SSIM(n_channels=in_channels)
         self.kld = kld_loss
         self.kld_weight = kld_weight
         self.tc_weight = tc_weight
         # learning rates
         self.lr_vae = lr_vae
         self.lr_d = lr_d
-
+        # datasets
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
 
     def forward(self, x):
         return self.VAE(x)
-    
 
     def encode(self, x):
         mean, logvar = self.VAE.encode(x)
         return self.VAE.reparameterize(mean, logvar)
-    
 
     def decode(self, z):
         return self.VAE.decoder(z)
 
-
     def training_step(self, batch, batch_idx):
         # get the optimizers
-        vae_optimizer, d_optimizer = self.optimizers()
+        # vae_optimizer, d_optimizer = self.optimizers()
+        vae_optimizer = self.optimizers()
 
         # get the batch
         x_1, x_2 = batch
         batch_size = x_1.shape[0]
 
         # create a batch of ones and zeros for the discriminator
-        ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
-        zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
+        # ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
+        # zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
-        vae_recon_loss = self.mse(x_recon, x_1)
+        # # flatten the input
+        # x_1_flatten = x_1.view(batch_size, -1)
+        # x_recon, mean, logvar, z = self.VAE(x_1_flatten)
+        # # unflatten the output
+        # x_recon = x_recon.view(
+        #     batch_size, 1, self.hparams.input_size, self.hparams.input_size)
+        # # make into binary
+        # x_recon = torch.where(x_recon > 0.5, torch.ones_like(
+        #     x_recon), torch.zeros_like(x_recon))
+        vae_recon_loss = self.mse(x_recon, x_1*4)
+        # vae_recon_loss = self.bce(x_recon, x_1)
+        # print(vae_recon_loss)
+        # print(x_recon.shape, x_1.shape)
+        # print(x_recon)
+        # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
+        # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
         kld_loss = self.kld(mean, logvar)
         # VAE TC loss
-        d_z = self.D(z)
-        vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean()
+        # d_z = self.D(z)
+        # vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean()
+        # L1 penalty
+        l1_weight = 1e-6
+        l1_penalty = l1_weight * sum([p.abs().sum()
+                                     for p in self.VAE.parameters()])
+
         # VAE loss
-        vae_loss = vae_recon_loss + self.kld_weight * kld_loss + self.tc_weight * vae_tc_loss
+        # vae_loss = vae_recon_loss + self.kld_weight * \
+        #     kld_loss  # + self.tc_weight * vae_tc_loss
+        vae_loss = vae_recon_loss + self.kld_weight * kld_loss + l1_penalty
 
         # VAE backward pass
         vae_optimizer.zero_grad()
-        self.manual_backward(vae_loss, retain_graph=True)
-        # vae_optimizer.step()
+        # self.manual_backward(vae_loss, retain_graph=True)
+        self.manual_backward(vae_loss)
+        vae_optimizer.step()
 
         # Discriminator forward pass
-        mean_2, logvar_2 = self.VAE.encode(x_2)
-        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
-        z_2_perm = permute_dims(z_2)
-        d_z_2_perm = self.D(z_2_perm.detach())
-        # print(d_z.shape, zeros.shape, d_z_2_perm.shape, ones.shape)
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) + F.cross_entropy(d_z_2_perm, ones))
+        # mean_2, logvar_2 = self.VAE.encode(x_2)
+        # z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        # z_2_perm = permute_dims(z_2)
+        # d_z_2_perm = self.D(z_2_perm.detach())
+        # # print(d_z.shape, zeros.shape, d_z_2_perm.shape, ones.shape)
+        # d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) + F.cross_entropy(d_z_2_perm, ones))
 
         # Discriminator backward pass
-        d_optimizer.zero_grad()
-        self.manual_backward(d_tc_loss)
-        vae_optimizer.step()
-        d_optimizer.step()
+        # d_optimizer.zero_grad()
+        # self.manual_backward(d_tc_loss)
+        # vae_optimizer.step()
+        # d_optimizer.step()
 
         # log the losses
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_recon_loss": vae_recon_loss,
             "vae_kld_loss": kld_loss,
-            "vae_tc_loss": vae_tc_loss,
-            "d_tc_loss": d_tc_loss
+            # "vae_tc_loss": vae_tc_loss,
+            # "d_tc_loss": d_tc_loss
         }, on_step=False, on_epoch=True)
 
-    
     def validation_step(self, batch, batch_idx):
         # get the batch
         x_1, x_2 = batch
@@ -170,52 +206,111 @@ class PlFactorVAE(LightningModule):
         # print('batch_size:', batch_size)
 
         # create a batch of ones and zeros for the discriminator
-        ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
-        zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
+        # ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
+        # zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
-        # print('x_recon:', x_recon.shape)
-        # print('mean:', mean.shape)
-        # print('logvar:', logvar.shape)
-        # print('z:', z.shape)
+        # # flatten the input
+        # x_1_flatten = x_1.view(batch_size, -1)
+        # x_recon, mean, logvar, z = self.VAE(x_1_flatten)
+        # # unflatten the output
+        # x_recon = x_recon.view(
+        #     batch_size, 1, self.hparams.input_size, self.hparams.input_size)
+        # # make into binary
+        # x_recon = torch.where(x_recon > 0.5, torch.ones_like(
+        #     x_recon), torch.zeros_like(x_recon))
         vae_recon_loss = self.mse(x_recon, x_1)
-        # print('vae_recon_loss:', vae_recon_loss)
+        # vae_recon_loss = self.bce(x_recon, x_1)
+        # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
+        # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
         kld_loss = self.kld(mean, logvar)
-        # print('kld_loss:', kld_loss)
         # VAE TC loss
-        d_z = self.D(z)
-        # print('d_z:', d_z.shape)
-        vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean()
-        # print('vae_tc_loss:', vae_tc_loss)
+        # d_z = self.D(z)
+        # vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean()
+
         # VAE loss
-        vae_loss = vae_recon_loss + self.kld_weight * kld_loss + self.tc_weight * vae_tc_loss
-        # print('vae_loss:', vae_loss)
+        vae_loss = vae_recon_loss + self.kld_weight * \
+            kld_loss  # + self.tc_weight * vae_tc_loss
 
         # Discriminator forward pass
-        mean_2, logvar_2 = self.VAE.encode(x_2)
-        # print('mean_2:', mean_2.shape)
-        # print('logvar_2:', logvar_2.shape)
-        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
-        # print('z_2:', z_2.shape)
-        z_2_perm = permute_dims(z_2)
-        # print('z_2_perm:', z_2_perm.shape)
-        d_z_2_perm = self.D(z_2_perm)
-        # print('d_z_2_perm:', d_z_2_perm.shape)
-        # print(d_z.shape, zeros.shape, d_z_2_perm.shape, ones.shape)
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) + F.cross_entropy(d_z_2_perm, ones))
+        # mean_2, logvar_2 = self.VAE.encode(x_2)
+        # z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        # z_2_perm = permute_dims(z_2)
+        # d_z_2_perm = self.D(z_2_perm)
+        # d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) + F.cross_entropy(d_z_2_perm, ones))
 
         # log the losses
         self.log_dict({
             "val_vae_loss": vae_loss,
             "val_vae_recon_loss": vae_recon_loss,
             "val_vae_kld_loss": kld_loss,
-            "val_vae_tc_loss": vae_tc_loss,
-            "val_d_tc_loss": d_tc_loss
+            # "val_vae_tc_loss": vae_tc_loss,
+            # "val_d_tc_loss": d_tc_loss
         }, on_step=False, on_epoch=True)
 
+    def on_validation_end(self) -> None:
+        # get a batch of images
+        num_val_samples = len(self.val_dataset)
+        # get a random image
+        idx = torch.randint(0, num_val_samples, (1,)).item()
+        x_1, x_2 = self.val_dataset[idx]
+        x_1, x_2 = x_1.unsqueeze(0).cuda(), x_2.unsqueeze(0).cuda()
+
+        x_1_recon, mean, logvar, z = self.VAE(x_1)
+        # # flatten the input
+        # x_1_flatten = x_1.view(1, -1)
+        # x_1_recon, mean, logvar, z = self.VAE(x_1_flatten)
+        # # unflatten the output
+        # x_1_recon = x_1_recon.view(
+        #     1, 1, self.hparams.input_size, self.hparams.input_size)
+        # # make into binary
+        # x_1_recon = torch.where(x_1_recon > 0.5, torch.ones_like(
+        #     x_1_recon), torch.zeros_like(x_1_recon))
+
+        # flatten the input
+        x_2_recon, mean, logvar, z = self.VAE(x_2)
+        # x_2_flatten = x_2.view(1, -1)
+        # x_2_recon, mean, logvar, z = self.VAE(x_2_flatten)
+        # # unflatten the output
+        # x_2_recon = x_2_recon.view(
+        #     1, 1, self.hparams.input_size, self.hparams.input_size)
+        # # make into binary
+        # x_2_recon = torch.where(x_2_recon > 0.5, torch.ones_like(
+        #     x_2_recon), torch.zeros_like(x_2_recon))
+
+        # log the images
+        # x_1_recon, _, _, _ = self.VAE(x_1.unsqueeze(0).cuda())
+        # x_2_recon, _, _, _ = self.VAE(x_2.unsqueeze(0).cuda())
+        # x_1_recon = F.softmax(x_1_recon, dim=1)
+        # x_2_recon = F.softmax(x_2_recon, dim=1)
+        self.log_tb_images([[x_1.squeeze(0), x_1_recon.squeeze(0)],
+                           [x_2.squeeze(0), x_2_recon.squeeze(0)]])
+
+    def log_tb_images(self, viz_batch) -> None:
+
+        # Get tensorboard logger
+        tb_logger = None
+        for logger in self.trainer.loggers:
+            if isinstance(logger, TensorBoardLogger):
+                tb_logger = logger.experiment
+                break
+
+        # get the epoch number from trainer
+        epoch = self.trainer.current_epoch
+
+        if tb_logger is None:
+            raise ValueError('TensorBoard Logger not found')
+
+        # Log the images (Give them different names)
+        for img_idx, pair in enumerate(viz_batch):
+            x_true, x_recon = pair
+            tb_logger.add_image(f"GroundTruth/{img_idx}", x_true, epoch)
+            tb_logger.add_image(f"Reconstruction/{img_idx}", x_recon, epoch)
 
     def configure_optimizers(self):
-        vae_optimizer = torch.optim.Adam(self.VAE.parameters(), lr=self.hparams.lr_vae, betas=(0.9, 0.999))
-        d_optimizer = torch.optim.Adam(self.D.parameters(), lr=self.hparams.lr_d, betas=(0.5, 0.9))
-        return vae_optimizer, d_optimizer
+        vae_optimizer = torch.optim.Adam(
+            self.VAE.parameters(), lr=self.hparams.lr_vae, betas=(0.9, 0.999))
+        # d_optimizer = torch.optim.Adam(self.D.parameters(), lr=self.hparams.lr_d, betas=(0.5, 0.9))
+        # return vae_optimizer, d_optimizer
+        return vae_optimizer
