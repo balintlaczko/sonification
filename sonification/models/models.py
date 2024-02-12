@@ -146,14 +146,7 @@ class PlFactorVAE(LightningModule):
         # # unflatten the output
         # x_recon = x_recon.view(
         #     batch_size, 1, self.hparams.input_size, self.hparams.input_size)
-        # # make into binary
-        # x_recon = torch.where(x_recon > 0.5, torch.ones_like(
-        #     x_recon), torch.zeros_like(x_recon))
         vae_recon_loss = self.mse(x_recon, x_1*4)
-        # vae_recon_loss = self.bce(x_recon, x_1)
-        # print(vae_recon_loss)
-        # print(x_recon.shape, x_1.shape)
-        # print(x_recon)
         # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
         kld_loss = self.kld(mean, logvar)
@@ -181,7 +174,6 @@ class PlFactorVAE(LightningModule):
         # z_2 = self.VAE.reparameterize(mean_2, logvar_2)
         # z_2_perm = permute_dims(z_2)
         # d_z_2_perm = self.D(z_2_perm.detach())
-        # # print(d_z.shape, zeros.shape, d_z_2_perm.shape, ones.shape)
         # d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) + F.cross_entropy(d_z_2_perm, ones))
 
         # Discriminator backward pass
@@ -217,11 +209,7 @@ class PlFactorVAE(LightningModule):
         # # unflatten the output
         # x_recon = x_recon.view(
         #     batch_size, 1, self.hparams.input_size, self.hparams.input_size)
-        # # make into binary
-        # x_recon = torch.where(x_recon > 0.5, torch.ones_like(
-        #     x_recon), torch.zeros_like(x_recon))
         vae_recon_loss = self.mse(x_recon, x_1)
-        # vae_recon_loss = self.bce(x_recon, x_1)
         # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
         kld_loss = self.kld(mean, logvar)
@@ -264,9 +252,6 @@ class PlFactorVAE(LightningModule):
         # # unflatten the output
         # x_1_recon = x_1_recon.view(
         #     1, 1, self.hparams.input_size, self.hparams.input_size)
-        # # make into binary
-        # x_1_recon = torch.where(x_1_recon > 0.5, torch.ones_like(
-        #     x_1_recon), torch.zeros_like(x_1_recon))
 
         # flatten the input
         x_2_recon, mean, logvar, z = self.VAE(x_2)
@@ -275,15 +260,8 @@ class PlFactorVAE(LightningModule):
         # # unflatten the output
         # x_2_recon = x_2_recon.view(
         #     1, 1, self.hparams.input_size, self.hparams.input_size)
-        # # make into binary
-        # x_2_recon = torch.where(x_2_recon > 0.5, torch.ones_like(
-        #     x_2_recon), torch.zeros_like(x_2_recon))
 
         # log the images
-        # x_1_recon, _, _, _ = self.VAE(x_1.unsqueeze(0).cuda())
-        # x_2_recon, _, _, _ = self.VAE(x_2.unsqueeze(0).cuda())
-        # x_1_recon = F.softmax(x_1_recon, dim=1)
-        # x_2_recon = F.softmax(x_2_recon, dim=1)
         self.log_tb_images([[x_1.squeeze(0), x_1_recon.squeeze(0)],
                            [x_2.squeeze(0), x_2_recon.squeeze(0)]])
 
