@@ -10,3 +10,4 @@ datasets/
 experiments/lsm_paper/workbench.py
 *.csv
 logs/
+experiments/lsm_paper/MNIST/
