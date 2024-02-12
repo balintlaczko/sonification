@@ -13,12 +13,13 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from sonification.utils.matrix import view
+from torch.utils.data import DataLoader
 
 # %%
 # load the dataset
 root_path = './'
-csv_path = 'white_squares_xy_16_4.csv'
-img_size = 16
+csv_path = 'white_squares_xy_64_4.csv'
+img_size = 64
 square_size = 4
 dataset = White_Square_dataset(
     root_path, csv_path, img_size, square_size, flag="train")
@@ -51,7 +52,12 @@ for i in range(8):
     x, y = dataset[i]
     ax[i//4, i % 4].imshow(x[0, ...], cmap="gray")
     ax[i//4, i % 4].set_title(f"{i}")
+plt.savefig("test_figure.png")
 plt.show()
+
+# %%
+# save plot to image
+plt.savefig("test_figure.png")
 
 # %%
 # plot 8 reconstructions
@@ -81,6 +87,14 @@ for i in range(4):
     ax[1, i].set_ylim(-3, 3)
     ax[1, i].set_title(f"Latent {i}")
 
+# %%
+loader = DataLoader(dataset, batch_size=64, shuffle=False, drop_last=False)
+# get dataset from loader
+
+# %%
+for batch_idx, data in enumerate(loader):
+    x, y = data
+    print(batch_idx, x.shape)
 
 # %%
 mnist_path = './MNIST'
