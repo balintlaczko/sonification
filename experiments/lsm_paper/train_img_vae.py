@@ -78,6 +78,8 @@ def main():
 
     args = parser.parse_args()
 
+    args.onpix_weight = args.img_size / args.square_size
+
     # create train dataset
     train_dataset = White_Square_dataset(
         root_path=args.root_path,

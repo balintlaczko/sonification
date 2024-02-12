@@ -100,6 +100,7 @@ class PlFactorVAE(LightningModule):
         self.kld_weight = args.kld_weight
         self.tc_weight = args.tc_weight
         self.l1_weight = args.l1_weight
+        self.onpix_weight = args.onpix_weight
 
         # learning rates
         self.lr_vae = args.lr_vae
@@ -137,7 +138,7 @@ class PlFactorVAE(LightningModule):
         x_recon, mean, logvar, z = self.VAE(x_1)
 
         # VAE reconstruction loss
-        vae_recon_loss = self.mse(x_recon, x_1*4)
+        vae_recon_loss = self.mse(x_recon, x_1 * self.onpix_weight)
         # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
 
@@ -182,6 +183,7 @@ class PlFactorVAE(LightningModule):
             "vae_kld_loss": kld_loss,
             # "vae_tc_loss": vae_tc_loss,
             # "d_tc_loss": d_tc_loss
+            "vae_l1_penalty": l1_penalty
         }, on_step=False, on_epoch=True)
 
     def validation_step(self, batch, batch_idx):
@@ -196,17 +198,26 @@ class PlFactorVAE(LightningModule):
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
-        vae_recon_loss = self.mse(x_recon, x_1)
+
+        # VAE reconstruction loss
+        vae_recon_loss = self.mse(x_recon, x_1 * self.onpix_weight)
         # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
-        kld_loss = self.kld(mean, logvar)
+
+        # VAE KLD loss
+        kld_loss = self.kld(mean, logvar) * self.kld_weight
+
         # VAE TC loss
         # d_z = self.D(z)
-        # vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean()
+        # vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean() * self.tc_weight
+
+        # L1 penalty
+        l1_penalty = sum([p.abs().sum()
+                         for p in self.VAE.parameters()]) * self.l1_weight
 
         # VAE loss
-        vae_loss = vae_recon_loss + self.kld_weight * \
-            kld_loss  # + self.tc_weight * vae_tc_loss
+        # vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
+        vae_loss = vae_recon_loss + kld_loss + l1_penalty
 
         # Discriminator forward pass
         # mean_2, logvar_2 = self.VAE.encode(x_2)
@@ -222,6 +233,7 @@ class PlFactorVAE(LightningModule):
             "val_vae_kld_loss": kld_loss,
             # "val_vae_tc_loss": vae_tc_loss,
             # "val_d_tc_loss": d_tc_loss
+            "val_vae_l1_penalty": l1_penalty
         }, on_step=False, on_epoch=True)
 
     def on_validation_end(self) -> None:
