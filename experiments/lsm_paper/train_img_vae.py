@@ -31,11 +31,13 @@ def main():
                         default=4, help='size of the square')
 
     # model
+    parser.add_argument('--in_channels', type=int,
+                        default=1, help='image color channels')
     parser.add_argument('--hidden_size', type=int,
                         default=1024, help='hidden size')
     parser.add_argument('--latent_size', type=int,
                         default=2, help='latent size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 64, 64],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[32, 64, 128],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=1000, help='mlp hidden size')
@@ -47,14 +49,17 @@ def main():
                         default=100000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=144, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=1e-4,
+    parser.add_argument('--lr_vae', type=float, default=1e-3,
                         help='learning rate for the vae')
-    parser.add_argument('--lr_decay_vae', type=float, default=0.999)
+    parser.add_argument('--lr_decay_vae', type=float, default=0.9999)
     parser.add_argument('--lr_d', type=float, default=1e-4,
                         help='learning rate for the discriminator')
     parser.add_argument('--kld_weight', type=float,
-                        default=0.05, help='kld weight')
-    parser.add_argument('--tc_weight', type=float, default=0, help='tc weight')
+                        default=0.25, help='kld weight')
+    parser.add_argument('--tc_weight', type=float,
+                        default=6.4, help='tc weight')
+    parser.add_argument('--l1_weight', type=float,
+                        default=1e-3, help='l1 weight')
     parser.add_argument('--train_steps_limit', type=int,
                         default=-1, help='train steps limit. -1 means no limit')
     parser.add_argument('--val_steps_limit', type=int, default=-1,
@@ -68,17 +73,18 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/white_squares_fvae', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='v6-vae-ssim', help='checkpoint name')
+                        default='vanilla-convvae-v7', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str, default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/white_squares_fvae', help='log directory')
+    parser.add_argument('--plot_interval', type=int, default=50)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='',
+    parser.add_argument('--comment', type=str, default='faster lr',
                         help='add a comment if needed')
 
     args = parser.parse_args()
-
+    # manually calc & add weight for active pixels (assuming a sparse binary image)
     args.onpix_weight = args.img_size / args.square_size
 
     # create train dataset
