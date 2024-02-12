@@ -5,47 +5,56 @@ import torch.nn.functional as F
 
 
 class LinearEncoder(nn.Module):
-    def __init__(self, input_size, hidden_size, latent_size):
+    def __init__(self, input_size, hidden_size, latent_size, num_layers=4, bias=False, dtype=torch.float32):
         super(LinearEncoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.latent_size = latent_size
-        self.layers = nn.Sequential(
-            nn.Linear(input_size, hidden_size,
-                      bias=False, dtype=torch.float32),
-            # nn.BatchNorm1d(hidden_size),
+
+        layers = []
+        for i in range(num_layers-1):
+            layers.extend([
+                nn.Linear(input_size, hidden_size, bias=bias, dtype=dtype),
+                nn.BatchNorm1d(hidden_size),
+                nn.LeakyReLU(0.2),
+            ])
+            input_size = hidden_size
+
+        layers.extend([
+            nn.Linear(hidden_size, latent_size, bias=bias, dtype=dtype),
+            nn.BatchNorm1d(latent_size),
             nn.LeakyReLU(0.2),
-            # nn.Linear(hidden_size, hidden_size),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(hidden_size, hidden_size),
-            # nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, latent_size, bias=False),
-            # nn.BatchNorm1d(latent_size),
-            nn.LeakyReLU(0.2),
-        )
+        ])
+
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.layers(x)
 
 
 class LinearDecoder(nn.Module):
-    def __init__(self, latent_size, hidden_size, output_size):
+    def __init__(self, latent_size, hidden_size, output_size, num_layers=4, bias=False, dtype=torch.float32):
         super(LinearDecoder, self).__init__()
         self.latent_size = latent_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.layers = nn.Sequential(
-            nn.Linear(latent_size, hidden_size, bias=False),
-            # nn.BatchNorm1d(hidden_size),
-            nn.LeakyReLU(0.2),
-            # nn.Linear(hidden_size, hidden_size),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(hidden_size, hidden_size),
-            # nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, output_size, bias=False),
-            # nn.BatchNorm1d(output_size),
+
+        layers = []
+        for i in range(num_layers-1):
+            layers.extend([
+                nn.Linear(latent_size, hidden_size, bias=bias, dtype=dtype),
+                nn.BatchNorm1d(hidden_size),
+                nn.LeakyReLU(0.2),
+            ])
+            latent_size = hidden_size
+
+        layers.extend([
+            nn.Linear(hidden_size, output_size, bias=bias, dtype=dtype),
+            nn.BatchNorm1d(output_size),
             nn.Sigmoid(),
-        )
+        ])
+
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.layers(x)
