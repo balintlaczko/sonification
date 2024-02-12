@@ -56,11 +56,11 @@ def main():
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.9999)
     parser.add_argument('--kld_weight', type=float,
-                        default=1, help='kld weight')
+                        default=0.025, help='kld weight')
     parser.add_argument('--tc_weight', type=float,
                         default=50, help='tc weight')
     parser.add_argument('--l1_weight', type=float,
-                        default=0, help='l1 weight')
+                        default=1e-6, help='l1 weight')
     parser.add_argument('--train_steps_limit', type=int,
                         default=-1, help='train steps limit. -1 means no limit')
     parser.add_argument('--val_steps_limit', type=int, default=-1,
@@ -81,7 +81,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=50)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='huge tc weight',
+    parser.add_argument('--comment', type=str, default='huge tc weight, small kld weight, slower lrs, little l1 penalty',
                         help='add a comment if needed')
 
     args = parser.parse_args()
