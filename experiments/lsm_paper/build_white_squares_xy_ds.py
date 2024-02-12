@@ -8,9 +8,9 @@ from sklearn.model_selection import train_test_split
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out_name", type=str,
-                        default="./experiments/lsm_paper/white_squares_xy_64_16.csv")
-    parser.add_argument("--img_size", type=int, default=64)
-    parser.add_argument("--square_size", type=int, default=16)
+                        default="./experiments/lsm_paper/white_squares_xy_16_4.csv")
+    parser.add_argument("--img_size", type=int, default=16)
+    parser.add_argument("--square_size", type=int, default=4)
     parser.add_argument("--val_split", type=float, default=0.2)
     args = parser.parse_args()
 
