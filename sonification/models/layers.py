@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from functools import reduce
+import torch.nn.functional as F
 
 
 class LinearEncoder(nn.Module):
@@ -10,11 +11,16 @@ class LinearEncoder(nn.Module):
         self.hidden_size = hidden_size
         self.latent_size = latent_size
         self.layers = nn.Sequential(
-            nn.Linear(input_size, hidden_size, dtype=torch.float32),
-            nn.BatchNorm1d(hidden_size),
+            nn.Linear(input_size, hidden_size,
+                      bias=False, dtype=torch.float32),
+            # nn.BatchNorm1d(hidden_size),
             nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, latent_size),
-            nn.BatchNorm1d(latent_size),
+            # nn.Linear(hidden_size, hidden_size),
+            # nn.LeakyReLU(0.2),
+            # nn.Linear(hidden_size, hidden_size),
+            # nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, latent_size, bias=False),
+            # nn.BatchNorm1d(latent_size),
             nn.LeakyReLU(0.2),
         )
 
@@ -29,11 +35,15 @@ class LinearDecoder(nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.layers = nn.Sequential(
-            nn.Linear(latent_size, hidden_size),
-            nn.BatchNorm1d(hidden_size),
+            nn.Linear(latent_size, hidden_size, bias=False),
+            # nn.BatchNorm1d(hidden_size),
             nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, output_size),
-            nn.BatchNorm1d(output_size),
+            # nn.Linear(hidden_size, hidden_size),
+            # nn.LeakyReLU(0.2),
+            # nn.Linear(hidden_size, hidden_size),
+            # nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, output_size, bias=False),
+            # nn.BatchNorm1d(output_size),
             nn.Sigmoid(),
         )
 
@@ -42,10 +52,10 @@ class LinearDecoder(nn.Module):
 
 
 class ConvEncoder(nn.Module):
-    def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
+    def __init__(self, in_channels, output_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
         super(ConvEncoder, self).__init__()
-        self.in_channels = in_channels # 2 for red and green
-        self.latent_size = latent_size
+        self.in_channels = in_channels  # 2 for red and green
+        self.output_size = output_size
 
         layers = []
         in_channel = self.in_channels
@@ -59,20 +69,20 @@ class ConvEncoder(nn.Module):
 
         # Calculate the size of the feature map when it reaches the linear layer
         feature_map_size = input_size // (2 ** len(layers_channels))
-        
+
         layers.extend([
             nn.Flatten(),
-            nn.Linear(layers_channels[-1] * feature_map_size * feature_map_size, self.latent_size),
-            nn.BatchNorm1d(self.latent_size),
+            nn.Linear(
+                layers_channels[-1] * feature_map_size * feature_map_size, self.output_size),
+            nn.BatchNorm1d(self.output_size),
             nn.LeakyReLU(0.2),
         ])
 
         self.layers = nn.Sequential(*layers)
-    
 
     def forward(self, x):
         return self.layers(x)
-    
+
 
 class ConvDecoder(nn.Module):
     def __init__(self, latent_size, out_channels, layers_channels=[512, 256, 128, 64, 32, 16], output_size=512):
@@ -84,24 +94,33 @@ class ConvDecoder(nn.Module):
         feature_map_size = output_size // (2 ** len(layers_channels))
 
         layers = [
-            nn.Linear(latent_size, layers_channels[0] * feature_map_size * feature_map_size),
-            nn.BatchNorm1d(layers_channels[0] * feature_map_size * feature_map_size),
+            nn.Linear(
+                latent_size, layers_channels[0] * feature_map_size * feature_map_size),
+            nn.BatchNorm1d(layers_channels[0] *
+                           feature_map_size * feature_map_size),
             nn.LeakyReLU(0.2),
-            nn.Unflatten(1, (layers_channels[0], feature_map_size, feature_map_size)),
+            nn.ReLU(),
+            nn.Unflatten(
+                1, (layers_channels[0], feature_map_size, feature_map_size)),
         ]
 
         in_channel = layers_channels[0]
         for out_channel in layers_channels[1:]:
             layers.extend([
-                nn.ConvTranspose2d(in_channel, out_channel, 3, stride=2, padding=1, output_padding=1),
+                nn.ConvTranspose2d(in_channel, out_channel,
+                                   3, stride=2, padding=1, output_padding=1),
                 nn.BatchNorm2d(out_channel),
                 nn.LeakyReLU(0.2),
+                nn.ReLU(),
             ])
             in_channel = out_channel
 
         layers.extend([
-            nn.ConvTranspose2d(layers_channels[-1], out_channels, 3, stride=2, padding=1, output_padding=1),
-            nn.BatchNorm2d(out_channels),
+            nn.ConvTranspose2d(
+                layers_channels[-1], out_channels, 3, stride=2, padding=1, output_padding=1),
+            # nn.BatchNorm2d(out_channels),
+            # nn.LeakyReLU(0.2),
+            # nn.Conv2d(layers_channels[-1], out_channels, 3, padding=1),
             nn.Sigmoid(),
         ])
 
@@ -109,7 +128,8 @@ class ConvDecoder(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
-    
+        # return torch.clamp(self.layers(x), 0, 1)
+
 
 class ResBlock(nn.Module):
     def __init__(self, in_channel, channel):
@@ -130,7 +150,7 @@ class ResBlock(nn.Module):
         out += input  # skip connection
 
         return out
-    
+
 
 class MultiScaleEncoder(nn.Module):
     def __init__(
@@ -205,7 +225,7 @@ class MultiScaleEncoder(nn.Module):
 
         # apply each block to the input, then sum the results
         return reduce(add_lane, [lane(input) for lane in self.lanes])
-    
+
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, relu_inplace=False):
@@ -231,12 +251,12 @@ class MLP(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
-    
+
 
 class LinearDiscriminator(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super(LinearDiscriminator, self).__init__()
-        
+
         layers = []
         for i in range(num_layers-1):
             layers.extend([
