@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 from .utils.matrix import square_over_bg
 
+
 class Amanis_RG_dataset(Dataset):
     """Amani's dataset of merged images of the RF, ST and BST"""
 
@@ -49,23 +50,21 @@ class White_Square_dataset(Dataset):
         self.square_size = square_size
 
         # parse flag
-        assert flag in ['train', 'val']
+        assert flag in ['train', 'val', 'all']
         self.flag = flag
 
         # read data
         self.__read_data__()
 
-
     def __read_data__(self):
         # read csv
         self.df = pd.read_csv(os.path.join(self.root_path, self.csv_path))
         # filter for the set we want (train/val)
-        self.df = self.df[self.df.dataset == self.flag]
-
+        if self.flag != 'all':
+            self.df = self.df[self.df.dataset == self.flag]
 
     def __len__(self):
         return len(self.df)
-    
 
     def __getitem__(self, idx):
         # get the row
