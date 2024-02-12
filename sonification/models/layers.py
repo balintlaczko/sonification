@@ -108,7 +108,6 @@ class ConvDecoder(nn.Module):
             nn.BatchNorm1d(layers_channels[0] *
                            feature_map_size * feature_map_size),
             nn.LeakyReLU(0.2),
-            nn.ReLU(),
             nn.Unflatten(
                 1, (layers_channels[0], feature_map_size, feature_map_size)),
         ]
@@ -120,16 +119,13 @@ class ConvDecoder(nn.Module):
                                    3, stride=2, padding=1, output_padding=1),
                 nn.BatchNorm2d(out_channel),
                 nn.LeakyReLU(0.2),
-                nn.ReLU(),
             ])
             in_channel = out_channel
 
         layers.extend([
             nn.ConvTranspose2d(
                 layers_channels[-1], out_channels, 3, stride=2, padding=1, output_padding=1),
-            # nn.BatchNorm2d(out_channels),
-            # nn.LeakyReLU(0.2),
-            # nn.Conv2d(layers_channels[-1], out_channels, 3, padding=1),
+            nn.BatchNorm2d(out_channels),
             nn.Sigmoid(),
         ])
 
@@ -137,7 +133,6 @@ class ConvDecoder(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
-        # return torch.clamp(self.layers(x), 0, 1)
 
 
 class ResBlock(nn.Module):
@@ -148,10 +143,10 @@ class ResBlock(nn.Module):
         self.conv = nn.Sequential(
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channel, channel, 3, padding=1),
-            # nn.BatchNorm2d(channel),
+            nn.BatchNorm2d(channel),
             nn.ReLU(inplace=True),
             nn.Conv2d(channel, in_channel, 1),
-            # nn.BatchNorm2d(in_channel),
+            nn.BatchNorm2d(in_channel),
         )
 
     def forward(self, input):
@@ -275,6 +270,7 @@ class LinearDiscriminator(nn.Module):
             input_dim = hidden_dim
         layers.extend([
             nn.Linear(hidden_dim, output_dim),
+            nn.Sigmoid(),
         ])
 
         self.discriminator = nn.Sequential(*layers)
