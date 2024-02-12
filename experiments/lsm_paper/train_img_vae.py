@@ -49,6 +49,7 @@ def main():
                         default=144, help='batch size')
     parser.add_argument('--lr_vae', type=float, default=1e-4,
                         help='learning rate for the vae')
+    parser.add_argument('--lr_decay_vae', type=float, default=0.999)
     parser.add_argument('--lr_d', type=float, default=1e-4,
                         help='learning rate for the discriminator')
     parser.add_argument('--kld_weight', type=float,

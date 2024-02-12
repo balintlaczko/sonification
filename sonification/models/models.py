@@ -104,6 +104,7 @@ class PlFactorVAE(LightningModule):
 
         # learning rates
         self.lr_vae = args.lr_vae
+        self.lr_decay_vae = args.lr_decay_vae
         self.lr_d = args.lr_d
 
         # models
@@ -122,9 +123,10 @@ class PlFactorVAE(LightningModule):
         return self.VAE.decoder(z)
 
     def training_step(self, batch, batch_idx):
-        # get the optimizers
+        # get the optimizers and schedulers
         # vae_optimizer, d_optimizer = self.optimizers()
         vae_optimizer = self.optimizers()
+        vae_scheduler = self.lr_schedulers()
 
         # get the batch
         x_1, x_2 = batch
@@ -175,6 +177,9 @@ class PlFactorVAE(LightningModule):
         # self.manual_backward(d_tc_loss)
         # vae_optimizer.step()
         # d_optimizer.step()
+
+        # LR scheduler step
+        vae_scheduler.step()
 
         # log the losses
         self.log_dict({
@@ -276,5 +281,6 @@ class PlFactorVAE(LightningModule):
         vae_optimizer = torch.optim.Adam(
             self.VAE.parameters(), lr=self.hparams.lr_vae, betas=(0.9, 0.999))
         # d_optimizer = torch.optim.Adam(self.D.parameters(), lr=self.hparams.lr_d, betas=(0.5, 0.9))
-        # return vae_optimizer, d_optimizer
-        return vae_optimizer
+        vae_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            vae_optimizer, gamma=self.hparams.lr_decay_vae)
+        return [vae_optimizer], [vae_scheduler]
