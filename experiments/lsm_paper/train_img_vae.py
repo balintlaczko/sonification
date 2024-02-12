@@ -78,50 +78,28 @@ def main():
 
     args = parser.parse_args()
 
-    # create train and val datasets
+    # create train dataset
     train_dataset = White_Square_dataset(
         root_path=args.root_path,
         csv_path=args.csv_path,
         img_size=args.img_size,
         square_size=args.square_size,
-        flag="train")
-    # val_dataset = White_Square_dataset(
-    #     root_path=args.root_path,
-    #     csv_path=args.csv_path,
-    #     img_size=args.img_size,
-    #     square_size=args.square_size,
-    #     flag="val")
+        flag="all")
 
     # create train and val dataloaders
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
-    # val_loader = DataLoader(
-    #     val_dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
 
     # create the model
-    model = PlFactorVAE(
-        in_channels=1,
-        hidden_size=args.hidden_size,
-        latent_size=args.latent_size,
-        layers_channels=args.layers_channels,
-        input_size=args.img_size,
-        d_hidden_size=args.d_hidden_size,
-        d_num_layers=args.d_num_layers,
-        lr_vae=args.lr_vae,
-        lr_d=args.lr_d,
-        kld_weight=args.kld_weight,
-        tc_weight=args.tc_weight,
-        train_dataset=train_dataset,
-        val_dataset=train_dataset,
-    )
+    model = PlFactorVAE(args)
 
     # checkpoint callbacks
     checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
-    val_checkpoint_callback = ModelCheckpoint(
-        monitor="val_vae_loss",
+    best_checkpoint_callback = ModelCheckpoint(
+        monitor="vae_loss",
         dirpath=checkpoint_path,
         filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
-        save_top_k=10,
+        save_top_k=3,
         mode="min",
     )
     last_checkpoint_callback = ModelCheckpoint(
@@ -150,12 +128,12 @@ def main():
         enable_checkpointing=True,
         limit_train_batches=train_steps_limit,
         limit_val_batches=val_steps_limit,
-        callbacks=[val_checkpoint_callback, last_checkpoint_callback],
+        callbacks=[best_checkpoint_callback, last_checkpoint_callback],
         logger=[csv_logger, tensorboard_logger],
     )
 
     trainer.fit(model=model, train_dataloaders=train_loader,
-                val_dataloaders=train_loader, ckpt_path=args.resume_ckpt_path)
+                ckpt_path=args.resume_ckpt_path)
 
 
 if __name__ == "__main__":
