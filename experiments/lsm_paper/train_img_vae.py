@@ -56,11 +56,11 @@ def main():
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.9999)
     parser.add_argument('--kld_weight', type=float,
-                        default=0, help='kld weight')
+                        default=1, help='kld weight')
     parser.add_argument('--tc_weight', type=float,
-                        default=12.8, help='tc weight')
+                        default=50, help='tc weight')
     parser.add_argument('--l1_weight', type=float,
-                        default=1e-6, help='l1 weight')
+                        default=0, help='l1 weight')
     parser.add_argument('--train_steps_limit', type=int,
                         default=-1, help='train steps limit. -1 means no limit')
     parser.add_argument('--val_steps_limit', type=int, default=-1,
@@ -74,14 +74,14 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/white_squares_fvae', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='factorvae-v3', help='checkpoint name')
+                        default='factorvae-v5', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str, default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/white_squares_fvae', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=50)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='double tc weight, 10x l1 penalty',
+    parser.add_argument('--comment', type=str, default='huge tc weight',
                         help='add a comment if needed')
 
     args = parser.parse_args()
