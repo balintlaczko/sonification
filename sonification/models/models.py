@@ -97,8 +97,8 @@ class PlFactorVAE(LightningModule):
         self.d_num_layers = args.d_num_layers
 
         # losses
-        # self.mse = nn.MSELoss()
-        self.bce = recon_loss
+        self.mse = nn.MSELoss()
+        # self.bce = recon_loss
         # self.ssim = SSIM(n_channels=in_channels)
         self.kld = kld_loss
         self.kld_weight = args.kld_weight
@@ -110,6 +110,7 @@ class PlFactorVAE(LightningModule):
         self.lr_vae = args.lr_vae
         self.lr_decay_vae = args.lr_decay_vae
         self.lr_d = args.lr_d
+        self.lr_decay_d = args.lr_decay_d
 
         # logging
         self.plot_interval = args.plot_interval
@@ -118,7 +119,8 @@ class PlFactorVAE(LightningModule):
         # models
         self.VAE = ConvVAE(self.in_channels, self.hidden_size,
                            self.latent_size, self.layers_channels, self.input_size)
-        # self.D = LinearDiscriminator(latent_size, d_hidden_size, 2, d_num_layers)
+        self.D = LinearDiscriminator(
+            self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
 
     def forward(self, x):
         return self.VAE(x)
@@ -132,25 +134,26 @@ class PlFactorVAE(LightningModule):
 
     def training_step(self, batch, batch_idx):
         self.VAE.train()
+        self.D.train()
         # get the optimizers and schedulers
-        # vae_optimizer, d_optimizer = self.optimizers()
-        vae_optimizer = self.optimizers()
-        vae_scheduler = self.lr_schedulers()
+        vae_optimizer, d_optimizer = self.optimizers()
+        # vae_optimizer = self.optimizers()
+        vae_scheduler, d_scheduler = self.lr_schedulers()
 
         # get the batch
         x_1, x_2 = batch
         batch_size = x_1.shape[0]
 
         # create a batch of ones and zeros for the discriminator
-        # ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
-        # zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
+        ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
+        zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
 
         # VAE reconstruction loss
-        # vae_recon_loss = self.mse(x_recon, x_1 * self.onpix_weight)
-        vae_recon_loss = self.bce(x_recon, x_1)
+        vae_recon_loss = self.mse(x_recon, x_1 * self.onpix_weight)
+        # vae_recon_loss = self.bce(x_recon, x_1)
         # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
 
@@ -158,46 +161,48 @@ class PlFactorVAE(LightningModule):
         kld_loss = self.kld(mean, logvar) * self.kld_weight
 
         # VAE TC loss
-        # d_z = self.D(z)
-        # vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean() * self.tc_weight
+        d_z = self.D(z)
+        vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean() * self.tc_weight
 
         # L1 penalty
         l1_penalty = sum([p.abs().sum()
                          for p in self.VAE.parameters()]) * self.l1_weight
 
         # VAE loss
-        # vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
-        vae_loss = vae_recon_loss + kld_loss + l1_penalty
+        vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
+        # vae_loss = vae_recon_loss + kld_loss + l1_penalty
 
         # VAE backward pass
         vae_optimizer.zero_grad()
-        # self.manual_backward(vae_loss, retain_graph=True)
-        self.manual_backward(vae_loss)
-        vae_optimizer.step()
+        self.manual_backward(vae_loss, retain_graph=True)
+        # self.manual_backward(vae_loss)
+        # vae_optimizer.step()
 
         # Discriminator forward pass
-        # mean_2, logvar_2 = self.VAE.encode(x_2)
-        # z_2 = self.VAE.reparameterize(mean_2, logvar_2)
-        # z_2_perm = permute_dims(z_2)
-        # d_z_2_perm = self.D(z_2_perm.detach())
-        # d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) + F.cross_entropy(d_z_2_perm, ones))
+        mean_2, logvar_2 = self.VAE.encode(x_2)
+        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        z_2_perm = permute_dims(z_2)
+        d_z_2_perm = self.D(z_2_perm.detach())
+        d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
+                           F.cross_entropy(d_z_2_perm, ones))
 
         # Discriminator backward pass
-        # d_optimizer.zero_grad()
-        # self.manual_backward(d_tc_loss)
-        # vae_optimizer.step()
-        # d_optimizer.step()
+        d_optimizer.zero_grad()
+        self.manual_backward(d_tc_loss)
+        vae_optimizer.step()
+        d_optimizer.step()
 
         # LR scheduler step
         vae_scheduler.step()
+        d_scheduler.step()
 
         # log the losses
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_recon_loss": vae_recon_loss,
             "vae_kld_loss": kld_loss,
-            # "vae_tc_loss": vae_tc_loss,
-            # "d_tc_loss": d_tc_loss
+            "vae_tc_loss": vae_tc_loss,
+            "d_tc_loss": d_tc_loss,
             "vae_l1_penalty": l1_penalty
         }, on_step=False, on_epoch=True)
 
@@ -338,7 +343,10 @@ class PlFactorVAE(LightningModule):
     def configure_optimizers(self):
         vae_optimizer = torch.optim.Adam(
             self.VAE.parameters(), lr=self.lr_vae, betas=(0.9, 0.999))
-        # d_optimizer = torch.optim.Adam(self.D.parameters(), lr=self.hparams.lr_d, betas=(0.5, 0.9))
+        d_optimizer = torch.optim.Adam(
+            self.D.parameters(), lr=self.lr_d, betas=(0.5, 0.9))
         vae_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             vae_optimizer, gamma=self.lr_decay_vae)
-        return [vae_optimizer], [vae_scheduler]
+        d_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            d_optimizer, gamma=self.lr_decay_d)
+        return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
