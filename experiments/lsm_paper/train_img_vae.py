@@ -46,7 +46,7 @@ def main():
 
     # training
     parser.add_argument('--train_epochs', type=int,
-                        default=100000, help='number of training epochs')
+                        default=1000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=144, help='batch size')
     parser.add_argument('--lr_vae', type=float, default=1e-3,
@@ -56,7 +56,7 @@ def main():
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.9999)
     parser.add_argument('--kld_weight', type=float,
-                        default=0.025, help='kld weight')
+                        default=0.01, help='kld weight')
     parser.add_argument('--tc_weight', type=float,
                         default=50, help='tc weight')
     parser.add_argument('--l1_weight', type=float,
@@ -74,14 +74,14 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/white_squares_fvae', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='factorvae-v5', help='checkpoint name')
+                        default='factorvae-v6', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str, default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/white_squares_fvae', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=50)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='huge tc weight, small kld weight, slower lrs, little l1 penalty',
+    parser.add_argument('--comment', type=str, default='tiny kld',
                         help='add a comment if needed')
 
     args = parser.parse_args()
