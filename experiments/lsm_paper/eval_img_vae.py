@@ -18,15 +18,15 @@ from torch.utils.data import DataLoader
 # %%
 # load the dataset
 root_path = './'
-csv_path = 'white_squares_xy_64_4.csv'
-img_size = 64
+csv_path = 'white_squares_xy_16_4.csv'
+img_size = 16
 square_size = 4
 dataset = White_Square_dataset(
-    root_path, csv_path, img_size, square_size, flag="train")
+    root_path, csv_path, img_size, square_size, flag="all")
 
 # %%
 # load the model from the checkpoint
-ckpt_path = '../../ckpt/white_squares_fvae/v6-vae-tanh/v6-vae-tanh_last_epoch=3012.ckpt'
+ckpt_path = '../../ckpt/white_squares_fvae/factorvae-v6/factorvae-v6_last_epoch=129780.ckpt'
 model = PlFactorVAE.load_from_checkpoint(ckpt_path)
 model.eval()
 
@@ -65,7 +65,7 @@ fig, ax = plt.subplots(2, 4, figsize=(20, 10))
 for i in range(8):
     x, y = dataset[i]
     x = x.unsqueeze(0)
-    x_recon, _, _, _ = model(x.cuda())
+    x_recon, _, _, _ = model(x.to(model.device))
     ax[i//4, i %
         4].imshow(x_recon[0, 0, ...].detach().cpu().numpy(), cmap="gray")
     ax[i//4, i % 4].set_title(f"{i}")
@@ -86,6 +86,61 @@ for i in range(4):
     ax[1, i].set_xlim(-3, 3)
     ax[1, i].set_ylim(-3, 3)
     ax[1, i].set_title(f"Latent {i}")
+
+# %%
+batch_size = 128
+loader = DataLoader(dataset, batch_size=batch_size,
+                    shuffle=False, drop_last=False)
+z_all = torch.zeros(
+    len(dataset), model.args.latent_size).to(model.device)
+for batch_idx, data in enumerate(loader):
+    x, y = data
+    x_recon, mean, logvar, z = model.VAE(x.to(model.device))
+    z = z.detach()
+    z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
+z_all = z_all.cpu().numpy()
+# create the figure
+fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+ax.scatter(z_all[:, 0], z_all[:, 1])
+ax.set_title(
+    f"Latent space")
+plt.show()
+
+# %%
+z_x_min, z_x_max = z_all[:, 0].min(), z_all[:, 0].max()
+z_y_min, z_y_max = z_all[:, 1].min(), z_all[:, 1].max()
+
+z_x_min, z_x_max, z_y_min, z_y_max
+
+# %%
+x_steps = torch.linspace(z_x_min, z_x_max, 20)
+y_steps = torch.linspace(z_y_min, z_y_max, 20)
+
+x_steps, y_steps
+
+# %%
+test_latent = torch.tensor([x_steps[0], y_steps[0]])
+test_latent
+
+# %%
+x_recon = model.decode(test_latent.unsqueeze(0).to(model.device))
+x_recon.shape
+
+# %%
+# create a plot for traversing in the latent space
+fig, ax = plt.subplots(len(x_steps), len(y_steps), figsize=(20, 10))
+for y_idx, y_step in enumerate(y_steps):
+    for x_idx, x_step in enumerate(x_steps):
+        latent_sample = torch.tensor([x_step, y_step]).unsqueeze(0)
+        decoded = model.decode(latent_sample.to(model.device))
+        ax[x_idx, y_idx].imshow(
+            decoded[0, 0, ...].detach().cpu().numpy(), cmap="gray")
+        # ax[x_idx, y_idx].set_title(
+        #     f"{str(x_idx).zfill(2)}_{str(y_idx).zfill(2)}")
+        # remove axis labels
+        ax[x_idx, y_idx].axis('off')
+plt.show()
+
 
 # %%
 loader = DataLoader(dataset, batch_size=64, shuffle=False, drop_last=False)
