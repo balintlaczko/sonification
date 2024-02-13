@@ -99,7 +99,7 @@ class PlFactorVAE(LightningModule):
         # losses
         self.mse = nn.MSELoss()
         # self.bce = recon_loss
-        # self.ssim = SSIM(n_channels=in_channels)
+        self.ssim = SSIM(n_channels=self.in_channels)
         self.kld = kld_loss
         self.kld_weight = args.kld_weight
         self.tc_weight = args.tc_weight
@@ -152,9 +152,9 @@ class PlFactorVAE(LightningModule):
         x_recon, mean, logvar, z = self.VAE(x_1)
 
         # VAE reconstruction loss
-        vae_recon_loss = self.mse(x_recon, x_1 * self.onpix_weight)
+        # vae_recon_loss = self.mse(x_recon, x_1 * self.onpix_weight)
         # vae_recon_loss = self.bce(x_recon, x_1)
-        # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
+        vae_recon_loss = 1 - self.ssim(x_recon, x_1)
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
 
         # VAE KLD loss
@@ -204,7 +204,7 @@ class PlFactorVAE(LightningModule):
             "vae_tc_loss": vae_tc_loss,
             "d_tc_loss": d_tc_loss,
             "vae_l1_penalty": l1_penalty
-        }, on_step=False, on_epoch=True)
+        }, on_step=True, on_epoch=False)
 
     # def validation_step(self, batch, batch_idx):
     #     # get the batch
@@ -291,7 +291,7 @@ class PlFactorVAE(LightningModule):
         os.makedirs(save_dir, exist_ok=True)
         fig_name = f"recons_{str(self.trainer.current_epoch).zfill(5)}.png"
         plt.savefig(os.path.join(save_dir, fig_name))
-        plt.close()
+        plt.close(fig)
 
     def save_latent_space_plot(self, batch_size=128):
         """Save a figure of the latent space"""
@@ -318,7 +318,7 @@ class PlFactorVAE(LightningModule):
         os.makedirs(save_dir, exist_ok=True)
         fig_name = f"latent_{str(self.trainer.current_epoch).zfill(5)}.png"
         plt.savefig(os.path.join(save_dir, fig_name))
-        plt.close()
+        plt.close(fig)
 
     def log_tb_images(self, viz_batch) -> None:
         # Get tensorboard logger
