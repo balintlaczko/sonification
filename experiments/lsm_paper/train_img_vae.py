@@ -25,8 +25,8 @@ def main():
 
     # dataset
     parser.add_argument('--csv_path', type=str,
-                        default='white_squares_xy_16_4.csv', help='csv path')
-    parser.add_argument('--img_size', type=int, default=16, help='image size')
+                        default='white_squares_xy_64_4.csv', help='csv path')
+    parser.add_argument('--img_size', type=int, default=64, help='image size')
     parser.add_argument('--square_size', type=int,
                         default=4, help='size of the square')
 
@@ -48,19 +48,19 @@ def main():
     parser.add_argument('--train_epochs', type=int,
                         default=1000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
-                        default=144, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=1e-3,
+                        default=360, help='batch size')
+    parser.add_argument('--lr_vae', type=float, default=1e-4,
                         help='learning rate for the vae')
-    parser.add_argument('--lr_decay_vae', type=float, default=0.9999)
-    parser.add_argument('--lr_d', type=float, default=1e-3,
+    parser.add_argument('--lr_decay_vae', type=float, default=0.999)
+    parser.add_argument('--lr_d', type=float, default=1e-4,
                         help='learning rate for the discriminator')
-    parser.add_argument('--lr_decay_d', type=float, default=0.9999)
+    parser.add_argument('--lr_decay_d', type=float, default=0.999)
     parser.add_argument('--kld_weight', type=float,
-                        default=0.01, help='kld weight')
+                        default=1, help='kld weight')
     parser.add_argument('--tc_weight', type=float,
-                        default=50, help='tc weight')
+                        default=10, help='tc weight')
     parser.add_argument('--l1_weight', type=float,
-                        default=1e-6, help='l1 weight')
+                        default=0, help='l1 weight')
     parser.add_argument('--train_steps_limit', type=int,
                         default=-1, help='train steps limit. -1 means no limit')
     parser.add_argument('--val_steps_limit', type=int, default=-1,
@@ -74,14 +74,14 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/white_squares_fvae', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='factorvae-v6', help='checkpoint name')
+                        default='factorvae-large-v1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str, default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/white_squares_fvae', help='log directory')
-    parser.add_argument('--plot_interval', type=int, default=50)
+    parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='tiny kld',
+    parser.add_argument('--comment', type=str, default='similar setup to factorvae paper',
                         help='add a comment if needed')
 
     args = parser.parse_args()
@@ -109,7 +109,7 @@ def main():
         monitor="vae_loss",
         dirpath=checkpoint_path,
         filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
-        save_top_k=3,
+        save_top_k=1,
         mode="min",
     )
     last_checkpoint_callback = ModelCheckpoint(
