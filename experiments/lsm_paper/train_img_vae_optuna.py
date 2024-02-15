@@ -25,11 +25,11 @@ def objective(trial: optuna.trial.Trial) -> float:
     hidden_size = trial.suggest_categorical(
         "hidden_size", [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])
     layers_channels = [
-        trial.suggest_categorical("layers_channels_l{}".format(i), [4, 8, 16, 32, 64, 128, 256, 512, 1024]) for i in range(n_layers)
+        trial.suggest_categorical("layers_channels_l{}".format(i), [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]) for i in range(n_layers)
     ]
     d_hidden_size = trial.suggest_categorical(
         "d_hidden_size", [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])
-    d_num_layers = trial.suggest_int("d_num_layers", 1, 8)
+    d_num_layers = trial.suggest_int("d_num_layers", 1, 10)
     lr_vae = trial.suggest_float("lr_vae", 1e-6, 1e-1, log=True)
     lr_decay_vae = trial.suggest_float("lr_decay_vae", 0.9, 0.999)
     lr_d = trial.suggest_float("lr_d", 1e-6, 1e-1, log=True)
@@ -51,7 +51,7 @@ def objective(trial: optuna.trial.Trial) -> float:
         d_num_layers=d_num_layers,
         # training
         train_epochs=1001,
-        batch_size=144,
+        batch_size=64,
         dataset_size=144,
         lr_vae=lr_vae,
         lr_decay_vae=lr_decay_vae,
