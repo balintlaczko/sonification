@@ -23,12 +23,12 @@ def objective(trial: optuna.trial.Trial) -> float:
     # We optimize the number of layers, hidden units in each layer and dropouts.
     n_layers = trial.suggest_int("n_layers", 1, 3)
     hidden_size = trial.suggest_categorical(
-        "hidden_size", [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])
+        "hidden_size", [32, 64, 128, 256, 512, 1024, 2048])
     layers_channels = [
-        trial.suggest_categorical("layers_channels_l{}".format(i), [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]) for i in range(n_layers)
+        trial.suggest_categorical("layers_channels_l{}".format(i), [32, 64, 128, 256, 512, 1024, 2048]) for i in range(n_layers)
     ]
     d_hidden_size = trial.suggest_categorical(
-        "d_hidden_size", [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])
+        "d_hidden_size", [64, 128, 256, 512, 1024, 2048])
     d_num_layers = trial.suggest_int("d_num_layers", 1, 10)
     lr_vae = trial.suggest_float("lr_vae", 1e-6, 1e-1, log=True)
     lr_decay_vae = trial.suggest_float("lr_decay_vae", 0.9, 0.999)
