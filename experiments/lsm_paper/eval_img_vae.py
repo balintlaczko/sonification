@@ -200,4 +200,78 @@ bce_loss = torch.nn.BCELoss()
 x_recon = torch.sigmoid(x_recon)
 loss = bce_loss(x_recon, x.cuda())
 loss
+
+# %%
+samples_uniform = torch.rand(144, 2)
+# compute the distance matrix
+dist = torch.cdist(samples_uniform, samples_uniform)
+# take the median of the upper triangle
+dist = torch.triu(dist, diagonal=1)
+dist = dist[dist != 0]
+dist.median()
+# plot the samples
+fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+ax.scatter(samples_uniform[:, 0], samples_uniform[:, 1])
+ax.set_title(
+    f"Uniform samples")
+plt.show()
+# %%
+
+
+def gap_loss(latent_vectors):
+    # normalize the latent vectors between 0 and 1
+    latent_vectors = (latent_vectors - latent_vectors.min()) / \
+        (latent_vectors.max() - latent_vectors.min())
+    # Calculate pairwise distances
+    pairwise_distances = torch.cdist(latent_vectors, latent_vectors, p=2)
+
+    # Set diagonal to infinity to ignore self-distances
+    pairwise_distances.fill_diagonal_(float('inf'))
+    print(pairwise_distances.shape)
+    # Minimize the smallest distance
+    return pairwise_distances.min()
+
+
+# Example usage
+# A batch of 32 latent vectors of size 100
+latent_vectors = torch.rand(144, 2)
+loss = gap_loss(latent_vectors)
+loss
+# %%
+
+
+def gap_loss(latent_vectors):
+    # normalize the latent vectors between 0 and 1
+    latent_vectors_norm = (latent_vectors - latent_vectors.min()) / \
+        (latent_vectors.max() - latent_vectors.min())
+    num_dims = latent_vectors.shape[1]
+    # loop over the dimensions
+    loss = 0
+    for i in range(num_dims):
+        # sort the latent vectors
+        sorted_latent, _ = torch.sort(latent_vectors_norm[:, i])
+        # calculate the difference between the sorted vectors
+        diff = sorted_latent[1:] - sorted_latent[:-1]
+        # take the standard deviation of the differences
+        loss += diff.std().abs()
+    return loss
+
+
+# %%
+latent_vectors = torch.rand(144, 2)
+loss = gap_loss(latent_vectors)
+loss
+# %%
+
+
+def gap_loss(latent_vectors):
+    # normalize the latent vectors between 0 and 1
+    latent_vectors_norm = (latent_vectors - latent_vectors.min()) / \
+        (latent_vectors.max() - latent_vectors.min())
+    # Calculate pairwise distances
+    dist = torch.cdist(latent_vectors_norm, latent_vectors_norm, p=2)
+    dist = torch.triu(dist, diagonal=1)
+    dist = dist[dist != 0]
+    return dist.std()
+
 # %%
