@@ -274,4 +274,95 @@ def gap_loss(latent_vectors):
     dist = dist[dist != 0]
     return dist.std()
 
+
+# %%
+dataset_size = 10
+latent_size = 2
+lattice = torch.linspace(0, 1, dataset_size)
+
+# %%
+
+
+def sample_lattice(batch_size):
+    # sample random coordinates from the lattice for each latent dimension for a batch
+    lattice_samples = []
+    for i in range(latent_size):
+        # shuffle the lattice
+        z_lattice = lattice[torch.randperm(dataset_size)]
+        # sample from the shuffled lattice
+        lattice_samples.append(z_lattice[:batch_size])
+    return torch.stack(lattice_samples, dim=1)
+
+
+# %%
+dataset_size = 144
+latent_size = 2
+side_size = int(dataset_size**(1/latent_size))
+lattice = torch.linspace(0, 1, side_size)
+
+
+def sample_lattice(batch_size):
+    # sample random coordinates from the lattice for each latent dimension for a batch
+    lattice_samples = []
+    for i in range(latent_size):
+        # get n random values (repetitions allowed) from the lattice
+        z_lattice = lattice[torch.randint(0, side_size, (batch_size,))]
+        # z_lattice = lattice[torch.randperm(side_size)]
+        # sample from the shuffled lattice
+        lattice_samples.append(z_lattice[:batch_size])
+    return torch.stack(lattice_samples, dim=1)
+
+
+# %%
+sample_lattice(10)
+# %%
+# plot sampled points from the lattice
+samples = sample_lattice(144)
+fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+ax.scatter(samples[:, 0], samples[:, 1])
+ax.set_title(
+    f"Samples from the lattice")
+plt.show()
+# %%
+inpoints = torch.rand(100, 2)
+rachet = 1/12
+outpoints = rachet * torch.round(inpoints / rachet)
+# plot inpoints and outpoints
+fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+ax.scatter(inpoints[:, 0], inpoints[:, 1], label="inpoints")
+ax.scatter(outpoints[:, 0], outpoints[:, 1], label="outpoints")
+ax.set_title(
+    f"Samples from the lattice")
+plt.show()
+
+# %%
+inpoints = sample_lattice(144)
+# inpoints = torch.cat((inpoints, inpoints))
+dist = torch.cdist(inpoints, inpoints)
+# print(dist)
+dist = dist.fill_diagonal_(float('inf'))
+# dist = torch.triu(dist, diagonal=1)
+dist = dist[dist == 0]
+len(dist)//2
+
+# %%
+
+
+def count_repetitions(samples):
+    # count the number of repetitions in the lattice samples
+    # calculate the distance matrixs
+    dist = torch.cdist(samples, samples)
+    # set the diagonal to infinity to ignore self-distances
+    dist = dist.fill_diagonal_(float('inf'))
+    # count the number of repetitions
+    dist = dist[dist == 0]
+    return len(dist)//2
+
+
+# %%
+inpoints = sample_lattice(144)
+print(inpoints.shape)
+print(torch.unique(inpoints, dim=0).shape[0])
+print(count_repetitions(inpoints))
+print(torch.unique(inpoints, dim=0).shape[0] + count_repetitions(inpoints))
 # %%
