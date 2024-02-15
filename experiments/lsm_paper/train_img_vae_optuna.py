@@ -22,14 +22,12 @@ def objective(trial: optuna.trial.Trial) -> float:
 
     # We optimize the number of layers, hidden units in each layer and dropouts.
     n_layers = trial.suggest_int("n_layers", 1, 3)
-    hidden_size = trial.suggest_categorical(
-        "hidden_size", [64, 128, 256, 512, 1024, 2048])
     layers_channels = [
         trial.suggest_categorical("layers_channels_l{}".format(i), [64, 128, 256, 512, 1024, 2048]) for i in range(n_layers)
     ]
     d_hidden_size = trial.suggest_categorical(
         "d_hidden_size", [512, 1024])
-    d_num_layers = trial.suggest_int("d_num_layers", 1, 10)
+    d_num_layers = trial.suggest_int("d_num_layers", 2, 6)
     lr_vae = trial.suggest_float("lr_vae", 1e-6, 1e-1, log=True)
     lr_decay_vae = trial.suggest_float("lr_decay_vae", 0.9, 0.999)
     lr_d = trial.suggest_float("lr_d", 1e-6, 1e-1, log=True)
@@ -44,14 +42,13 @@ def objective(trial: optuna.trial.Trial) -> float:
         square_size=4,
         # model
         in_channels=1,
-        hidden_size=hidden_size,
         latent_size=2,
         layers_channels=layers_channels,
         d_hidden_size=d_hidden_size,
         d_num_layers=d_num_layers,
         # training
         train_epochs=1001,
-        batch_size=64,
+        batch_size=144,
         dataset_size=144,
         lr_vae=lr_vae,
         lr_decay_vae=lr_decay_vae,
@@ -62,7 +59,6 @@ def objective(trial: optuna.trial.Trial) -> float:
         l1_weight=0.0,
         mmd_prior_distribution="gaussian",
         mmd_weight=0,
-        gap_weight=0,
         # checkpoint & logging
         ckpt_path='./ckpt/factorvae-optuna',
         ckpt_name=f'factorvae-optuna_{str(trial.number).zfill(3)}',
@@ -102,7 +98,6 @@ def objective(trial: optuna.trial.Trial) -> float:
 
     hyperparameters = dict(
         n_layers=n_layers,
-        hidden_size=hidden_size,
         layers_channels=layers_channels,
         d_hidden_size=d_hidden_size,
         d_num_layers=d_num_layers,
