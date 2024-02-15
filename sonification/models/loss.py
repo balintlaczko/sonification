@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch import Tensor
 import torch.nn.functional as F
+from ..utils.misc import quickSort
 
 # taken from https://github.com/1Konny/FactorVAE/blob/master/ops.py
 
@@ -22,6 +23,25 @@ def kld_loss(mu: Tensor, logvar: Tensor) -> Tensor:
     """
     kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1)
     return kld.mean()
+
+
+def gap_loss(latent_vectors):
+    # normalize the latent vectors between 0 and 1
+    latent_vectors_norm = (latent_vectors - latent_vectors.min()) / \
+        (latent_vectors.max() - latent_vectors.min())
+    num_dims = latent_vectors.shape[1]
+    # loop over the dimensions
+    loss = 0
+    for i in range(num_dims):
+        # sort the latent vectors
+        sorted_latent, _ = torch.sort(latent_vectors_norm[:, i])
+        # sorted_latent = latent_vectors_norm[:, i]
+        # quickSort(sorted_latent, 0, len(sorted_latent)-1)
+        # calculate the difference between the sorted vectors
+        diff = sorted_latent[1:] - sorted_latent[:-1]
+        # take the standard deviation of the differences
+        loss += diff.std().abs()
+    return loss
 
 
 # taken form: https://github.com/AntixK/PyTorch-VAE/blob/master/models/info_vae.py
@@ -102,9 +122,15 @@ class MMDloss(nn.Module):
 
         return result
 
-    def compute_mmd(self, z: Tensor) -> Tensor:
-        # Sample from prior (Gaussian) distribution
-        prior_z = torch.randn_like(z)
+    def compute_mmd(self, z: Tensor, prior_distribution: str = "gaussian") -> Tensor:
+        assert prior_distribution in [
+            "gaussian", "uniform"], "prior distribution must be either 'gaussian' or 'uniform'"
+        if prior_distribution == "gaussian":
+            # Sample from prior (Gaussian) distribution
+            prior_z = torch.randn_like(z)
+        else:
+            # Sample from prior (Uniform) distribution
+            prior_z = torch.rand_like(z)
 
         prior_z__kernel = self.compute_kernel(prior_z, prior_z)
         z__kernel = self.compute_kernel(z, z)
