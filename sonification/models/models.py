@@ -80,18 +80,24 @@ class ConvVAE(nn.Module):
 
 
 class ConvWAE(nn.Module):
-    def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
+    def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512, z_quantization=0.0):
         super(ConvWAE, self).__init__()
         self.encoder = ConvEncoder(
             in_channels, latent_size, layers_channels, input_size)
         self.decoder = ConvDecoder(
             latent_size, in_channels, layers_channels, input_size)
+        self.z_quantization = z_quantization
 
     def encode(self, x):
         return self.encoder(x)
 
+    def quantize(self, z, z_quantization):
+        return z_quantization * torch.round(z / z_quantization)
+
     def forward(self, x):
         z = self.encode(x)
+        if self.z_quantization > 0:
+            z = self.quantize(z, self.z_quantization)
         recon = self.decoder(z)
         return recon, z
 
@@ -102,7 +108,7 @@ class PlFactorVAE(LightningModule):
         super(PlFactorVAE, self).__init__()
         # Important: This property activates manual optimization.
         self.automatic_optimization = False
-        self.save_hyperparameters()
+        # self.save_hyperparameters()
 
         # data params
         self.in_channels = args.in_channels
@@ -138,11 +144,15 @@ class PlFactorVAE(LightningModule):
         self.plot_interval = args.plot_interval
         self.args = args
 
+        # dataset
+        self.dataset_size = args.dataset_size
+        self.latent_side_size = int(self.dataset_size**(1/self.latent_size))
+
         # models
-        # self.VAE = ConvVAE(self.in_channels, self.hidden_size,
-        #                    self.latent_size, self.layers_channels, self.input_size)
-        self.VAE = ConvWAE(self.in_channels, self.latent_size,
-                           self.layers_channels, self.input_size)
+        self.VAE = ConvVAE(self.in_channels, self.hidden_size,
+                           self.latent_size, self.layers_channels, self.input_size)
+        # self.VAE = ConvWAE(self.in_channels, self.latent_size,
+        #                    self.layers_channels, self.input_size)
         self.D = LinearDiscriminator(
             self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
 
@@ -150,9 +160,9 @@ class PlFactorVAE(LightningModule):
         return self.VAE(x)
 
     def encode(self, x):
-        # mean, logvar = self.VAE.encode(x)
-        # return self.VAE.reparameterize(mean, logvar)
-        return self.VAE.encode(x)
+        mean, logvar = self.VAE.encode(x)
+        return self.VAE.reparameterize(mean, logvar)
+        # return self.VAE.encode(x)
 
     def decode(self, z):
         return self.VAE.decoder(z)
@@ -162,7 +172,6 @@ class PlFactorVAE(LightningModule):
         self.D.train()
         # get the optimizers and schedulers
         vae_optimizer, d_optimizer = self.optimizers()
-        # vae_optimizer = self.optimizers()
         vae_scheduler, d_scheduler = self.lr_schedulers()
 
         # get the batch
@@ -174,8 +183,8 @@ class PlFactorVAE(LightningModule):
         zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
 
         # VAE forward pass
-        # x_recon, mean, logvar, z = self.VAE(x_1)
-        x_recon, z = self.VAE(x_1)
+        x_recon, mean, logvar, z = self.VAE(x_1)
+        # x_recon, z = self.VAE(x_1)
 
         # VAE reconstruction loss
         vae_recon_loss = self.mse(x_recon, x_1 * self.onpix_weight)
@@ -184,26 +193,31 @@ class PlFactorVAE(LightningModule):
         # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
 
         # VAE KLD loss
-        # kld_loss = self.kld(mean, logvar) * self.kld_weight
+        kld_loss = self.kld(mean, logvar) * self.kld_weight
 
         # WAE MMD loss
-        mmd_loss = self.MMD.compute_mmd(
-            z, self.mmd_prior_distribution) * self.mmd_weight
-
-        # GAP loss
-        gap_loss = self.gap(z) * self.gap_weight
+        # mmd_loss = self.MMD.compute_mmd(
+        #     z, self.mmd_prior_distribution) * self.mmd_weight
 
         # VAE TC loss
         d_z = self.D(z)
-        vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).mean() * self.tc_weight
+        # TODO: I think the goal here is to confuse the Discriminator
+        # so that it always returns [0.5, 0.5] probabilities
+        # without abs() this will collapse into [0, 1] to minimize the loss
+        # I think...
+        # vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).abs().mean() * self.tc_weight
+        # another option is to fool the Discriminator into thinking
+        # that the real embeddings are the permutated ones
+        vae_tc_loss = F.cross_entropy(d_z, ones) * self.tc_weight
 
         # L1 penalty
-        l1_penalty = sum([p.abs().sum()
-                         for p in self.VAE.parameters()]) * self.l1_weight
+        l1_penalty = torch.tensor(0, dtype=torch.float32, device=self.device)
+        if self.l1_weight > 0:
+            l1_penalty = sum([p.abs().sum()
+                              for p in self.VAE.parameters()]) * self.l1_weight
 
         # VAE loss
-        # vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
-        vae_loss = vae_recon_loss + mmd_loss + vae_tc_loss + l1_penalty + gap_loss
+        vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
         # vae_loss = vae_recon_loss + kld_loss + l1_penalty
 
         # VAE backward pass
@@ -213,9 +227,9 @@ class PlFactorVAE(LightningModule):
         # vae_optimizer.step()
 
         # Discriminator forward pass
-        # mean_2, logvar_2 = self.VAE.encode(x_2)
-        # z_2 = self.VAE.reparameterize(mean_2, logvar_2)
-        z_2 = self.VAE.encode(x_2)
+        mean_2, logvar_2 = self.VAE.encode(x_2)
+        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        # z_2 = self.VAE.encode(x_2)
         z_2_perm = permute_dims(z_2)
         d_z_2_perm = self.D(z_2_perm.detach())
         d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
@@ -224,6 +238,8 @@ class PlFactorVAE(LightningModule):
         # Discriminator backward pass
         d_optimizer.zero_grad()
         self.manual_backward(d_tc_loss)
+
+        # Optimizer step
         vae_optimizer.step()
         d_optimizer.step()
 
@@ -235,9 +251,8 @@ class PlFactorVAE(LightningModule):
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_recon_loss": vae_recon_loss,
-            # "vae_kld_loss": kld_loss,
-            "vae_mmd_loss": mmd_loss,
-            "vae_gap_loss": gap_loss,
+            "vae_kld_loss": kld_loss,
+            # "vae_mmd_loss": mmd_loss,
             "vae_tc_loss": vae_tc_loss,
             "d_tc_loss": d_tc_loss,
             "vae_l1_penalty": l1_penalty
@@ -264,8 +279,8 @@ class PlFactorVAE(LightningModule):
             idx = torch.randint(0, len(dataset), (1,)).item()
             x, _ = dataset[idx]
             x_in = x.unsqueeze(0).to(self.device)
-            # x_recon, mean, logvar, z = self.VAE(x_in)
-            x_recon, z = self.VAE(x_in)
+            x_recon, mean, logvar, z = self.VAE(x_in)
+            # x_recon, z = self.VAE(x_in)
             x_recon = x_recon[0, 0, ...].detach().cpu().numpy()
             # plot ground truth image
             ax[0, i].imshow(x[0, ...], cmap="gray")
@@ -291,8 +306,8 @@ class PlFactorVAE(LightningModule):
             len(dataset), self.args.latent_size).to(self.device)
         for batch_idx, data in enumerate(loader):
             x, y = data
-            # x_recon, mean, logvar, z = self.VAE(x.to(self.device))
-            x_recon, z = self.VAE(x.to(self.device))
+            x_recon, mean, logvar, z = self.VAE(x.to(self.device))
+            # x_recon, z = self.VAE(x.to(self.device))
             z = z.detach()
             z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
         z_all = z_all.cpu().numpy()
