@@ -6,7 +6,7 @@ from .layers import *
 from lightning.pytorch import LightningModule
 from lightning.pytorch.loggers import TensorBoardLogger
 from ..utils.tensor import permute_dims
-from .loss import kld_loss, recon_loss, MMDloss, gap_loss
+from .loss import kld_loss, recon_loss, MMDloss
 from piqa import SSIM
 import matplotlib.pyplot as plt
 import os
@@ -54,12 +54,12 @@ class VAE(nn.Module):
 
 
 class ConvVAE(nn.Module):
-    def __init__(self, in_channels, hidden_size, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
+    def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
         super(ConvVAE, self).__init__()
         self.encoder = ConvEncoder(
-            in_channels, hidden_size, layers_channels, input_size)
-        self.mu = nn.Linear(hidden_size, latent_size)
-        self.logvar = nn.Linear(hidden_size, latent_size)
+            in_channels, latent_size, layers_channels, input_size)
+        self.mu = nn.Linear(latent_size, latent_size)
+        self.logvar = nn.Linear(latent_size, latent_size)
         self.decoder = ConvDecoder(
             latent_size, in_channels, layers_channels, input_size)
 
@@ -113,7 +113,6 @@ class PlFactorVAE(LightningModule):
         # data params
         self.in_channels = args.in_channels
         self.input_size = args.img_size
-        self.hidden_size = args.hidden_size
         self.latent_size = args.latent_size
         self.layers_channels = args.layers_channels
         self.d_hidden_size = args.d_hidden_size
@@ -125,11 +124,9 @@ class PlFactorVAE(LightningModule):
         self.ssim = SSIM(n_channels=self.in_channels)
         self.kld = kld_loss
         self.MMD = MMDloss()
-        self.gap = gap_loss
         self.mmd_prior_distribution = args.mmd_prior_distribution
         self.kld_weight = args.kld_weight
         self.mmd_weight = args.mmd_weight
-        self.gap_weight = args.gap_weight
         self.tc_weight = args.tc_weight
         self.l1_weight = args.l1_weight
         self.onpix_weight = args.onpix_weight
@@ -149,8 +146,8 @@ class PlFactorVAE(LightningModule):
         self.latent_side_size = int(self.dataset_size**(1/self.latent_size))
 
         # models
-        self.VAE = ConvVAE(self.in_channels, self.hidden_size,
-                           self.latent_size, self.layers_channels, self.input_size)
+        self.VAE = ConvVAE(self.in_channels, self.latent_size,
+                           self.layers_channels, self.input_size)
         # self.VAE = ConvWAE(self.in_channels, self.latent_size,
         #                    self.layers_channels, self.input_size)
         self.D = LinearDiscriminator(
@@ -263,7 +260,7 @@ class PlFactorVAE(LightningModule):
         # get the epoch number from trainer
         epoch = self.trainer.current_epoch
 
-        if epoch % self.plot_interval != 0:
+        if epoch % self.plot_interval != 0 and epoch != 0:
             return
 
         self.save_recon_plot()
