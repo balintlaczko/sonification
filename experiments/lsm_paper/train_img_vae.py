@@ -76,7 +76,7 @@ def main():
     parser.add_argument('--ckpt_name', type=str,
                         default='factorvae-opt-v1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
-                        default=None,)
+                        default='./ckpt/white_squares_fvae_opt/factorvae-opt-v1/factorvae-opt-v1_last_epoch=51805.ckpt',)
     parser.add_argument(
         '--logdir', type=str, default='./logs/white_squares_fvae_opt', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=100)
