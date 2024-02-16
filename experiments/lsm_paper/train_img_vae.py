@@ -33,16 +33,14 @@ def main():
     # model
     parser.add_argument('--in_channels', type=int,
                         default=1, help='image color channels')
-    parser.add_argument('--hidden_size', type=int,
-                        default=1024, help='hidden size')
     parser.add_argument('--latent_size', type=int,
                         default=2, help='latent size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[32, 64, 128],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[512, 256, 1024],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
-                        default=1000, help='mlp hidden size')
+                        default=512, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
-                        default=6, help='mlp number of layers')
+                        default=5, help='mlp number of layers')
 
     # training
     parser.add_argument('--train_epochs', type=int,
@@ -51,28 +49,22 @@ def main():
                         default=144, help='batch size')
     parser.add_argument('--dataset_size', type=int,
                         default=144, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=1e-5,
+    parser.add_argument('--lr_vae', type=float, default=0.03,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float, default=0.999)
-    parser.add_argument('--lr_d', type=float, default=1e-5,
+    parser.add_argument('--lr_d', type=float, default=1e-3,
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.999)
     parser.add_argument('--kld_weight', type=float,
-                        default=1, help='kld weight')
+                        default=0.05, help='kld weight')
     parser.add_argument('--mmd_weight', type=float,
                         default=1e-1, help='mmd weight')
     parser.add_argument('--mmd_prior_distribution', type=str,
                         default='gaussian',)  # gaussian or uniform
     parser.add_argument('--tc_weight', type=float,
                         default=10, help='tc weight')
-    parser.add_argument('--gap_weight', type=float, default=0,
-                        help='gap weight')
     parser.add_argument('--l1_weight', type=float,
                         default=0, help='l1 weight')
-    parser.add_argument('--train_steps_limit', type=int,
-                        default=-1, help='train steps limit. -1 means no limit')
-    parser.add_argument('--val_steps_limit', type=int, default=-1,
-                        help='validation steps limit. -1 means no limit')
 
     # GPU
     parser.add_argument('--num_devices', type=int, nargs='*', default=[0],
@@ -80,17 +72,17 @@ def main():
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str,
-                        default='./ckpt/white_squares_fvae', help='checkpoint path')
+                        default='./ckpt/white_squares_fvae_opt', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='factorvae-v13', help='checkpoint name')
+                        default='factorvae-opt-v1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
-        '--logdir', type=str, default='./logs/white_squares_fvae', help='log directory')
+        '--logdir', type=str, default='./logs/white_squares_fvae_opt', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='test a different discriminator loss for vae',
+    parser.add_argument('--comment', type=str, default='long run with optuna-based hparams',
                         help='add a comment if needed')
 
     args = parser.parse_args()
@@ -134,23 +126,30 @@ def main():
     tensorboard_logger = TensorBoardLogger(
         save_dir=args.logdir, name=args.ckpt_name)
 
-    train_steps_limit = args.train_steps_limit if args.train_steps_limit > 0 else None
-    val_steps_limit = args.val_steps_limit if args.val_steps_limit > 0 else None
-
-    # trainer_strategy = "ddp_find_unused_parameters_true" if len(args.num_devices) != 1 else "auto"
-    trainer_strategy = "auto"
     trainer = Trainer(
-        strategy=trainer_strategy,
-        # devices=args.num_devices,
-        # accelerator="gpu",
         max_epochs=args.train_epochs,
         enable_checkpointing=True,
-        limit_train_batches=train_steps_limit,
-        limit_val_batches=val_steps_limit,
         callbacks=[best_checkpoint_callback, last_checkpoint_callback],
         logger=[csv_logger, tensorboard_logger],
-        log_every_n_steps=1,
+        log_every_n_steps=10,
     )
+
+    hyperparameters = dict(
+        img_size=args.img_size,
+        square_size=args.square_size,
+        latent_size=args.latent_size,
+        layers_channels=args.layers_channels,
+        d_hidden_size=args.d_hidden_size,
+        d_num_layers=args.d_num_layers,
+        lr_vae=args.lr_vae,
+        lr_decay_vae=args.lr_decay_vae,
+        lr_d=args.lr_d,
+        lr_decay_d=args.lr_decay_d,
+        kld_weight=args.kld_weight,
+        tc_weight=args.tc_weight,
+        comment=args.comment,
+    )
+    trainer.logger.log_hyperparams(hyperparameters)
 
     trainer.fit(model=model, train_dataloaders=train_loader,
                 ckpt_path=args.resume_ckpt_path)
