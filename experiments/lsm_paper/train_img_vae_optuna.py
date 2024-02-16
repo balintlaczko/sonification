@@ -21,16 +21,17 @@ def objective(trial: optuna.trial.Trial) -> float:
                 setattr(self, k, v)
 
     # We optimize the number of layers, hidden units in each layer and dropouts.
-    n_layers = trial.suggest_int("n_layers", 1, 3)
+    n_layers = 3
+    # n_layers = trial.suggest_int("n_layers", 1, 3)
     layers_channels = [
-        trial.suggest_categorical("layers_channels_l{}".format(i), [64, 128, 256, 512, 1024, 2048]) for i in range(n_layers)
+        trial.suggest_categorical("layers_channels_l{}".format(i), [256, 512, 1024, 2048]) for i in range(n_layers)
     ]
     d_hidden_size = trial.suggest_categorical(
         "d_hidden_size", [512, 1024])
-    d_num_layers = trial.suggest_int("d_num_layers", 2, 6)
-    lr_vae = trial.suggest_float("lr_vae", 1e-6, 1e-1, log=True)
+    d_num_layers = trial.suggest_int("d_num_layers", 4, 6)
+    lr_vae = trial.suggest_float("lr_vae", 1e-3, 1e-1, log=True)
     lr_decay_vae = trial.suggest_float("lr_decay_vae", 0.9, 0.999)
-    lr_d = trial.suggest_float("lr_d", 1e-6, 1e-1, log=True)
+    lr_d = trial.suggest_float("lr_d", 1e-3, 1e-1, log=True)
     lr_decay_d = trial.suggest_float("lr_decay_d", 0.9, 0.999)
 
     args = Args(
@@ -54,15 +55,15 @@ def objective(trial: optuna.trial.Trial) -> float:
         lr_decay_vae=lr_decay_vae,
         lr_d=lr_d,
         lr_decay_d=lr_decay_d,
-        kld_weight=1.0,
+        kld_weight=0.1,
         tc_weight=10.0,
         l1_weight=0.0,
         mmd_prior_distribution="gaussian",
         mmd_weight=0,
         # checkpoint & logging
-        ckpt_path='./ckpt/factorvae-optuna',
-        ckpt_name=f'factorvae-optuna_{str(trial.number).zfill(3)}',
-        logdir='./logs/factorvae-optuna',
+        ckpt_path='./ckpt/factorvae-optuna-kld_0_1',
+        ckpt_name=f'factorvae-optuna-kld_0_1_{str(trial.number).zfill(3)}',
+        logdir='./logs/factorvae-optuna-kld_0_1',
         plot_interval=500,
     )
     # manually calc & add weight for active pixels (assuming a sparse binary image)
@@ -118,6 +119,8 @@ if __name__ == "__main__":
     random.seed(fix_seed)
     torch.manual_seed(fix_seed)
     np.random.seed(fix_seed)
+
+    torch.set_float32_matmul_precision("high")
 
     pruner = optuna.pruners.MedianPruner()
 
