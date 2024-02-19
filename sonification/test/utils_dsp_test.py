@@ -1,6 +1,7 @@
 import numpy as np
 from sonification.utils import dsp
 
+
 def test_history():
     # test that the shift is correct
     for i in range(5):
@@ -13,7 +14,20 @@ def test_history():
         # test that the shift is correct
         assert np.allclose(out_array[1:], in_array[:-1])
 
-test_history()
+
+def test_switch():
+    for i in range(5):
+        in_array_length = np.random.randint(10, 1000)
+        switch_sig = np.random.rand(in_array_length)
+        switch_sig = np.where(switch_sig > 0.5, 1, 0)
+        true_sig = np.random.rand(in_array_length)
+        false_sig = np.random.rand(in_array_length)
+        out_switch = dsp.switch(switch_sig, true_sig, false_sig)
+        out_where = np.where(switch_sig, true_sig, false_sig)
+        # test that length is correct
+        assert len(out_switch) == in_array_length
+        # test that the switch is correct
+        assert np.allclose(out_switch, out_where)
 
 
 def test_ramp2trigger():
@@ -23,13 +37,16 @@ def test_ramp2trigger():
         for i in range(5):
             random_length_s = np.random.randint(1, 10)
             random_freq_hz = np.random.randint(1, 10)
-            test_ramp = dsp.phasor(sr * random_length_s, sr, np.array([random_freq_hz]))
+            test_ramp = dsp.phasor(sr * random_length_s,
+                                   sr, np.array([random_freq_hz]))
             test_trigger = dsp.ramp2trigger(test_ramp)
             # test that length is correct
             assert len(test_trigger) == random_length_s * sr
             # test that the trigger is correct
             assert np.sum(test_trigger) == random_length_s * random_freq_hz
 
+
+###### RUN TESTS ######
+test_history()
+test_switch()
 test_ramp2trigger()
-
-
