@@ -63,7 +63,7 @@ def test_mix():
     # test that length is correct
     assert len(out_mix) == in_array_length
     # test that the mix is correct
-    assert np.allclose(1 - out_mix, in_b * mix_signal)
+    assert np.allclose(out_mix, in_b * mix_signal)
 
 
 def test_ramp2trigger():
