@@ -695,7 +695,50 @@ def mix(
     Returns:
         np.ndarray: The mixed signal.
     """
-    return mix_signal * a + (1 - mix_signal) * b
+    return (1 - mix_signal) * a + mix_signal * b
+
+
+@jit(nopython=True)
+def onepole(
+    input_signal: np.ndarray,
+    frequency: np.ndarray,
+    sr: int,
+    mode: str = "lowpass"
+) -> np.ndarray:
+    """
+    One-pole filter.
+
+    Args:
+        input_signal (np.ndarray): The signal to filter.
+        frequency (np.ndarray): Filter frequency.
+        sr (int): Sample rate.
+        mode (str, optional): Filter mode. Can be "lowpass" or "highpass". Defaults to "lowpass".
+
+    Returns:
+        np.ndarray: The filtered signal.
+    """
+    assert mode.lower() in [
+        "lowpass", "highpass"], "Mode must be 'lowpass' or 'highpass'."
+    samples = len(input_signal)
+    # limit frequency to be within Nyquist
+    frequency = np.clip(frequency, 0, sr/2)
+    # create array to hold output
+    output = np.zeros(samples, dtype=np.float64)
+    frequency_resized = np.array([0], dtype=np.float64)
+    if len(frequency) == 1:
+        frequency_resized = np.repeat(frequency[0], samples).astype(np.float64)
+    elif len(frequency) == samples:
+        frequency_resized = frequency.astype(np.float64)
+    else:
+        frequency_resized = array.resize_interp(frequency, samples)
+    a = np.exp(-2 * np.pi / sr * np.abs(frequency_resized))
+    input_history = 0
+    for i in range(len(input_signal)):
+        output[i] = mix(input_signal[i], input_history, a[i])
+        input_history = output[i]
+    if mode.lower() == "highpass":
+        output = input_signal - output
+    return output
 
 
 def ramp2trigger(
