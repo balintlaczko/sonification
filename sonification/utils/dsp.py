@@ -5,7 +5,7 @@ import cv2
 import librosa
 import scipy.io.wavfile as wav
 from scipy import interpolate
-from misc import generate_outfilename
+from .misc import generate_outfilename
 from . import array
 
 
@@ -236,7 +236,6 @@ class Sinetable():
         wav.write(target_name, sr, buffer.astype(np.float32))
         # return path to written file
         return target_name
-
 
 
 def image2sines(
@@ -619,6 +618,26 @@ def history(
     history = np.zeros_like(signal, dtype=np.float64)
     history[1:] = signal[:-1]
     return history
+
+
+@jit(nopython=True)
+def switch(
+        switch_signal: np.ndarray,
+        out_true: np.ndarray,
+        out_false: np.ndarray,
+) -> np.ndarray:
+    """
+    Switch between two signals based on a trigger signal.
+
+    Args:
+        switch_signal (np.ndarray): A trigger signal.
+        out_true (np.ndarray): The signal to output if the trigger is true (non-zero).
+        out_false (np.ndarray): The signal to output if the trigger is false.
+
+    Returns:
+        np.ndarray: The switched signal.
+    """
+    return np.where(switch_signal != 0, out_true, out_false)
 
 
 def ramp2trigger(
