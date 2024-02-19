@@ -26,8 +26,47 @@ dataset = White_Square_dataset(
 
 # %%
 # load the model from the checkpoint
-ckpt_path = '../../ckpt/white_squares_fvae/factorvae-v6/factorvae-v6_last_epoch=129780.ckpt'
+ckpt_path = '../../ckpt/white_squares_fvae_opt/factorvae-opt-v3/factorvae-opt-v3_last_epoch=258706.ckpt'
 model = PlFactorVAE.load_from_checkpoint(ckpt_path)
+model.eval()
+
+# %%
+# create args
+
+
+class Args:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
+args = Args(
+    in_channels=1,
+    img_size=16,
+    latent_size=2,
+    layers_channels=[512, 256, 1024],
+    d_hidden_size=512,
+    d_num_layers=5,
+    dataset_size=144,
+    mmd_prior_distribution="gaussian",
+    kld_weight=0.02,
+    mmd_weight=0.02,
+    tc_weight=2,
+    l1_weight=0,
+    onpix_weight=1,
+    lr_vae=0.03,
+    lr_decay_vae=0.99,
+    lr_d=1e-4,
+    lr_decay_d=0.99,
+    plot_interval=1000,
+)
+
+# %%
+# load model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+ckpt_path = '../../ckpt/white_squares_fvae_opt/factorvae-opt-v3/factorvae-opt-v3_last_epoch=258706.ckpt'
+ckpt = torch.load(ckpt_path, map_location=device)
+model = PlFactorVAE(args).to(device)
+model.load_state_dict(ckpt['state_dict'])
 model.eval()
 
 # %%
@@ -52,12 +91,8 @@ for i in range(8):
     x, y = dataset[i]
     ax[i//4, i % 4].imshow(x[0, ...], cmap="gray")
     ax[i//4, i % 4].set_title(f"{i}")
-plt.savefig("test_figure.png")
 plt.show()
 
-# %%
-# save plot to image
-plt.savefig("test_figure.png")
 
 # %%
 # plot 8 reconstructions
