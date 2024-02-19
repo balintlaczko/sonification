@@ -51,18 +51,18 @@ def main():
                         default=144, help='batch size')
     parser.add_argument('--lr_vae', type=float, default=0.03,
                         help='learning rate for the vae')
-    parser.add_argument('--lr_decay_vae', type=float, default=0.999)
-    parser.add_argument('--lr_d', type=float, default=1e-3,
+    parser.add_argument('--lr_decay_vae', type=float, default=0.99)
+    parser.add_argument('--lr_d', type=float, default=1e-4,
                         help='learning rate for the discriminator')
-    parser.add_argument('--lr_decay_d', type=float, default=0.999)
+    parser.add_argument('--lr_decay_d', type=float, default=0.99)
     parser.add_argument('--kld_weight', type=float,
-                        default=0.05, help='kld weight')
+                        default=0.02, help='kld weight')
     parser.add_argument('--mmd_weight', type=float,
                         default=1e-1, help='mmd weight')
     parser.add_argument('--mmd_prior_distribution', type=str,
                         default='gaussian',)  # gaussian or uniform
     parser.add_argument('--tc_weight', type=float,
-                        default=10, help='tc weight')
+                        default=1, help='tc weight')
     parser.add_argument('--l1_weight', type=float,
                         default=0, help='l1 weight')
 
@@ -74,15 +74,15 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/white_squares_fvae_opt', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='factorvae-opt-v1', help='checkpoint name')
+                        default='factorvae-opt-v4', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
-                        default='./ckpt/white_squares_fvae_opt/factorvae-opt-v1/factorvae-opt-v1_last_epoch=51805.ckpt',)
+                        default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/white_squares_fvae_opt', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='long run with optuna-based hparams',
+    parser.add_argument('--comment', type=str, default='less tc weight, faster lr decay',
                         help='add a comment if needed')
 
     args = parser.parse_args()
@@ -99,7 +99,7 @@ def main():
 
     # create train and val dataloaders
     train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+        train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
 
     # create the model
     model = PlFactorVAE(args)
@@ -131,7 +131,7 @@ def main():
         enable_checkpointing=True,
         callbacks=[best_checkpoint_callback, last_checkpoint_callback],
         logger=[csv_logger, tensorboard_logger],
-        log_every_n_steps=10,
+        log_every_n_steps=20,
     )
 
     hyperparameters = dict(
