@@ -163,17 +163,23 @@ x_recon.shape
 
 # %%
 # create a plot for traversing in the latent space
-fig, ax = plt.subplots(len(x_steps), len(y_steps), figsize=(20, 10))
+fig, ax = plt.subplots(len(x_steps), len(y_steps), figsize=(20, 20))
 for y_idx, y_step in enumerate(y_steps):
     for x_idx, x_step in enumerate(x_steps):
         latent_sample = torch.tensor([x_step, y_step]).unsqueeze(0)
         decoded = model.decode(latent_sample.to(model.device))
         ax[x_idx, y_idx].imshow(
             decoded[0, 0, ...].detach().cpu().numpy(), cmap="gray")
-        # ax[x_idx, y_idx].set_title(
-        #     f"{str(x_idx).zfill(2)}_{str(y_idx).zfill(2)}")
         # remove axis labels
         ax[x_idx, y_idx].axis('off')
+        # remove margins
+        # ax[x_idx, y_idx].xaxis.set_major_locator(plt.NullLocator())
+        # ax[x_idx, y_idx].yaxis.set_major_locator(plt.NullLocator())
+# smaller margins between subplots
+plt.subplots_adjust(wspace=0.1, hspace=0.1)
+# reduce the overall margins
+plt.tight_layout()
+plt.savefig("traverse_latent_space.png")
 plt.show()
 
 
