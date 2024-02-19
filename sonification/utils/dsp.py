@@ -640,6 +640,44 @@ def switch(
     return np.where(switch_signal != 0, out_true, out_false)
 
 
+@jit(nopython=True)
+def accum(
+        accum_signal: np.ndarray,
+        reset_signal: np.ndarray,
+        reset_mode: str = "post",
+) -> np.ndarray:
+    """Accumulate a signal based on a reset signal.
+
+    Args:
+        accum_signal (np.ndarray): The signal to accumulate.
+        reset_signal (np.ndarray): The signal to reset the accumulation. Non-zero elements indicate a reset.
+        reset_mode (str, optional): The reset mode. If "post", the reset happens on the sample after the reset trigger, in "pre" the reset happens at the sample index of the reset trigger. Defaults to "post".
+
+    Returns:
+        np.ndarray: The accumulated signal.
+    """
+    assert reset_mode.lower() in ["pre", "post"], "Invalid reset mode."
+    # the indices of the non-zero elements
+    reset_indices = np.where(reset_signal != 0)[0]
+    if reset_mode == "post":
+        reset_indices += 1
+    # if there is no trigger on the last sample, add the length of the signal
+    # so the last chunk is also included
+    if reset_signal[-1] == 0:
+        reset_indices = np.append(reset_indices, len(reset_signal))
+    # create output container
+    output = np.zeros(len(accum_signal), dtype=np.float64)
+    # loop through chunks and accumulate
+    ind = 0
+    for i in reset_indices:
+        accum_slice = accum_signal[ind:i]
+        if len(accum_slice) != 0:
+            accum_sig = np.cumsum(accum_slice)
+            output[ind:i] = accum_sig
+        ind = i
+    return output
+
+
 def ramp2trigger(
         ramp: np.ndarray,
 ) -> np.ndarray:

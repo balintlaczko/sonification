@@ -30,6 +30,22 @@ def test_switch():
         assert np.allclose(out_switch, out_where)
 
 
+def test_accum():
+    reset_signal = np.array([0, 1, 0, 0, 1, 1, 1, 0, 0, 0])
+    in_array_length = len(reset_signal)
+    accum_signal = np.ones(in_array_length)
+    out_accum_post = dsp.accum(accum_signal, reset_signal, "post")
+    out_accum_pre = dsp.accum(accum_signal, reset_signal, "pre")
+    solution_post = np.array([1, 2, 1, 2, 3, 1, 1, 1, 2, 3])
+    solution_pre = np.array([1, 1, 2, 3, 1, 1, 1, 2, 3, 4])
+    # test that length is correct
+    assert len(out_accum_post) == in_array_length
+    assert len(out_accum_pre) == in_array_length
+    # test that the accum is correct
+    assert np.allclose(out_accum_post, solution_post)
+    assert np.allclose(out_accum_pre, solution_pre)
+
+
 def test_ramp2trigger():
     # test that the trigger is correct
     sr_list = [48000, 44100, 96000]
@@ -49,4 +65,5 @@ def test_ramp2trigger():
 ###### RUN TESTS ######
 test_history()
 test_switch()
+test_accum()
 test_ramp2trigger()
