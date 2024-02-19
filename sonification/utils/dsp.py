@@ -678,6 +678,26 @@ def accum(
     return output
 
 
+@jit(nopython=True)
+def mix(
+    a: np.ndarray,
+    b: np.ndarray,
+    mix_signal: np.ndarray
+) -> np.ndarray:
+    """
+    Linearly interpolates between two signals based on a mixing signal.
+
+    Args:
+        a (np.ndarray): Signal A.
+        b (np.ndarray): Signal B.
+        mix_signal (np.ndarray): Mixing signal (0-1). When 0, the output is signal A, when 1, the output is signal B.
+
+    Returns:
+        np.ndarray: The mixed signal.
+    """
+    return mix_signal * a + (1 - mix_signal) * b
+
+
 def ramp2trigger(
         ramp: np.ndarray,
 ) -> np.ndarray:

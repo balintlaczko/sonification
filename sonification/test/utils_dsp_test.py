@@ -46,6 +46,26 @@ def test_accum():
     assert np.allclose(out_accum_pre, solution_pre)
 
 
+def test_mix():
+    # test that it works with a single mix value
+    in_array_length = 100
+    in_a = np.zeros(in_array_length)
+    in_b = np.ones(in_array_length)
+    mix_value = 0.5
+    out_mix = dsp.mix(in_a, in_b, mix_value)
+    # test that length is correct
+    assert len(out_mix) == in_array_length
+    # test that the mix is correct
+    assert np.allclose(out_mix, in_b * mix_value)
+    # test that it works with a mix array
+    mix_signal = np.random.rand(in_array_length)
+    out_mix = dsp.mix(in_a, in_b, mix_signal)
+    # test that length is correct
+    assert len(out_mix) == in_array_length
+    # test that the mix is correct
+    assert np.allclose(1 - out_mix, in_b * mix_signal)
+
+
 def test_ramp2trigger():
     # test that the trigger is correct
     sr_list = [48000, 44100, 96000]
@@ -66,4 +86,5 @@ def test_ramp2trigger():
 test_history()
 test_switch()
 test_accum()
+test_mix()
 test_ramp2trigger()
