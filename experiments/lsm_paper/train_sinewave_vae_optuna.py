@@ -23,19 +23,19 @@ def objective(trial: optuna.trial.Trial) -> float:
     # n_layers = trial.suggest_int("n_layers", 3, 5)
     n_layers = 5
     layers_channels = [
-        trial.suggest_categorical("layers_channels_l{}".format(i), [256, 512, 1024, 2048]) for i in range(n_layers)
+        trial.suggest_categorical("layers_channels_l{}".format(i), [128, 256, 512, 1024, 2048]) for i in range(n_layers)
     ]
     d_hidden_size = trial.suggest_categorical(
         "d_hidden_size", [256, 512, 1024])
-    d_num_layers = trial.suggest_int("d_num_layers", 3, 6)
-    lr_vae = trial.suggest_float("lr_vae", 1e-6, 1e-2, log=True)
+    d_num_layers = trial.suggest_int("d_num_layers", 3, 5)
+    lr_vae = trial.suggest_float("lr_vae", 1e-5, 1e-1, log=True)
     lr_decay_vae = trial.suggest_float("lr_decay_vae", 0.9, 0.999)
     # lr_d = trial.suggest_float("lr_d", 1e-6, 1e-2, log=True)
     lr_d = lr_vae
     # lr_decay_d = trial.suggest_float("lr_decay_d", 0.9, 0.999)
     lr_decay_d = lr_decay_vae
     batch_size = trial.suggest_categorical(
-        "batch_size", [256, 512, 1024])
+        "batch_size", [128, 256, 512, 1024])
 
     args = Args(
         # root path
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
     torch.set_float32_matmul_precision("high")
 
-    pruner = optuna.pruners.MedianPruner()
+    pruner = optuna.pruners.MedianPruner(n_warmup_steps=15, interval_steps=2)
 
     study = optuna.create_study(direction="minimize", pruner=pruner)
     study.optimize(objective, n_trials=1000)
