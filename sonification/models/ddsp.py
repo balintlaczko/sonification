@@ -3,7 +3,7 @@ from torch import nn
 from ..utils.tensor import wrap
 from ..utils.dsp import num_hops
 from ..utils.misc import scale_linear, midi2frequency
-from layers import MLP, MultiScaleEncoder
+from .layers import MLP, MultiScaleEncoder
 import torchaudio
 import torchyin
 
@@ -21,7 +21,8 @@ class Phasor(nn.Module):
         batch_size = freq.shape[0]
         increment = freq[:, :-1] / self.sr
         phase = torch.cumsum(increment, dim=-1)
-        phase = torch.cat([torch.zeros(batch_size, 1).to(phase.device), phase], dim=-1)
+        phase = torch.cat(
+            [torch.zeros(batch_size, 1).to(phase.device), phase], dim=-1)
         phasor = wrap(phase, 0.0, 1.0)
         return phasor
 
@@ -84,7 +85,7 @@ class Mel2Params(nn.Module):
         mel_spec = mel_spec.reshape(-1, self.num_mels * self.num_hops)
         params = self.layers(mel_spec)
         return params
-    
+
 
 class Mel2Params2(nn.Module):
     def __init__(self, num_mels, num_hops, num_params, dim=256):
@@ -94,7 +95,8 @@ class Mel2Params2(nn.Module):
         self.num_hops = num_hops
         self.num_params = num_params
 
-        self.mel_encoder = MultiScaleEncoder(input_dim_h=num_mels, input_dim_w=num_hops)
+        self.mel_encoder = MultiScaleEncoder(
+            input_dim_h=num_mels, input_dim_w=num_hops)
 
         self.layers = nn.Sequential(
             nn.Linear(128 * 20 * 47, dim),
@@ -150,7 +152,7 @@ class Wave2MFCCEncoder(nn.Module):
         # mfcc_norm = self.norm(mfcc_mean)
         z = self.fc(mfcc_mean)
         return z
-    
+
 
 class MFCCEncoder(nn.Module):
     def __init__(
@@ -207,7 +209,7 @@ class MFCCEncoder(nn.Module):
         mfcc = self.mlp(mfcc)
         # (batch_size, n_frames, mlp_out_dim)
         return mfcc
-    
+
 
 class MelbandsEncoder(nn.Module):
     def __init__(
@@ -261,7 +263,7 @@ class MelbandsEncoder(nn.Module):
         melspec = self.mlp(melspec)
         # (batch_size, n_frames, mlp_out_dim)
         return melspec
-    
+
 
 class PitchEncoder(nn.Module):
     def __init__(
@@ -297,7 +299,7 @@ class PitchEncoder(nn.Module):
         pitch = pitch.unsqueeze(-1)
         pitch = self.mlp(pitch)
         return pitch
-    
+
 
 class Wave2Params(nn.Module):
     def __init__(
