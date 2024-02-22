@@ -10,6 +10,9 @@ from .loss import kld_loss, recon_loss, MMDloss
 from piqa import SSIM
 import matplotlib.pyplot as plt
 import os
+import matplotlib.gridspec as gridspec
+import matplotlib.colors as colors
+import numpy as np
 
 
 class AE(nn.Module):
@@ -61,6 +64,32 @@ class ConvVAE(nn.Module):
         self.mu = nn.Linear(latent_size, latent_size)
         self.logvar = nn.Linear(latent_size, latent_size)
         self.decoder = ConvDecoder(
+            latent_size, in_channels, layers_channels, input_size)
+
+    def encode(self, x):
+        x = self.encoder(x)
+        return self.mu(x), self.logvar(x)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return eps.mul(std).add_(mu)
+
+    def forward(self, x):
+        mean, logvar = self.encode(x)
+        z = self.reparameterize(mean, logvar)
+        recon = self.decoder(z)
+        return recon, mean, logvar, z
+
+
+class ConvVAE1D(nn.Module):
+    def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256], input_size=64):
+        super(ConvVAE1D, self).__init__()
+        self.encoder = ConvEncoder1D(
+            in_channels, latent_size, layers_channels, input_size)
+        self.mu = nn.Linear(latent_size, latent_size)
+        self.logvar = nn.Linear(latent_size, latent_size)
+        self.decoder = ConvDecoder1D(
             latent_size, in_channels, layers_channels, input_size)
 
     def encode(self, x):
@@ -340,6 +369,273 @@ class PlFactorVAE(LightningModule):
             x_true, x_recon = pair
             tb_logger.add_image(f"GroundTruth/{img_idx}", x_true, epoch)
             tb_logger.add_image(f"Reconstruction/{img_idx}", x_recon, epoch)
+
+    def configure_optimizers(self):
+        vae_optimizer = torch.optim.Adam(
+            self.VAE.parameters(), lr=self.lr_vae, betas=(0.9, 0.999))
+        d_optimizer = torch.optim.Adam(
+            self.D.parameters(), lr=self.lr_d, betas=(0.5, 0.9))
+        vae_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            vae_optimizer, gamma=self.lr_decay_vae)
+        d_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            d_optimizer, gamma=self.lr_decay_d)
+        return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
+
+
+class PlFactorVAE1D(LightningModule):
+    def __init__(self, args):
+        super(PlFactorVAE1D, self).__init__()
+        # Important: This property activates manual optimization.
+        self.automatic_optimization = False
+        # self.save_hyperparameters()
+
+        # data params
+        self.in_channels = args.in_channels
+        self.input_size = args.img_size
+        self.latent_size = args.latent_size
+        self.layers_channels = args.layers_channels
+        self.d_hidden_size = args.d_hidden_size
+        self.d_num_layers = args.d_num_layers
+
+        # losses
+        self.mse = nn.MSELoss()
+        self.bce = recon_loss
+        self.kld = kld_loss
+        self.kld_weight = args.kld_weight
+        self.tc_weight = args.tc_weight
+        self.l1_weight = args.l1_weight
+
+        # learning rates
+        self.lr_vae = args.lr_vae
+        self.lr_decay_vae = args.lr_decay_vae
+        self.lr_d = args.lr_d
+        self.lr_decay_d = args.lr_decay_d
+
+        # logging
+        self.plot_interval = args.plot_interval
+        self.args = args
+
+        # models
+        self.VAE = ConvVAE1D(self.in_channels, self.latent_size,
+                             self.layers_channels, self.input_size)
+        self.D = LinearDiscriminator(
+            self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+
+        # train dataset scaler
+        self.train_scaler = args.train_scaler
+
+    def forward(self, x):
+        return self.VAE(x)
+
+    def encode(self, x):
+        mean, logvar = self.VAE.encode(x)
+        return self.VAE.reparameterize(mean, logvar)
+
+    def decode(self, z):
+        return self.VAE.decoder(z)
+
+    def training_step(self, batch, batch_idx):
+        self.VAE.train()
+        self.D.train()
+        # get the optimizers and schedulers
+        vae_optimizer, d_optimizer = self.optimizers()
+        vae_scheduler, d_scheduler = self.lr_schedulers()
+
+        # get the batch
+        x_1, x_2 = batch
+        batch_size = x_1.shape[0]
+
+        # create a batch of ones and zeros for the discriminator
+        ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
+        zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
+
+        # VAE forward pass
+        x_recon, mean, logvar, z = self.VAE(x_1)
+
+        # VAE reconstruction loss
+        vae_recon_loss = self.mse(x_recon, x_1)
+
+        # VAE KLD loss
+        kld_loss = self.kld(mean, logvar) * self.kld_weight
+
+        # VAE TC loss
+        d_z = self.D(z)
+        vae_tc_loss = F.cross_entropy(d_z, ones) * self.tc_weight
+
+        # L1 penalty
+        l1_penalty = torch.tensor(0, dtype=torch.float32, device=self.device)
+        if self.l1_weight > 0:
+            l1_penalty = sum([p.abs().sum()
+                              for p in self.VAE.parameters()]) * self.l1_weight
+
+        # VAE loss
+        vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
+
+        # VAE backward pass
+        vae_optimizer.zero_grad()
+        self.manual_backward(vae_loss, retain_graph=True)
+
+        # Discriminator forward pass
+        mean_2, logvar_2 = self.VAE.encode(x_2)
+        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        z_2_perm = permute_dims(z_2)
+        d_z_2_perm = self.D(z_2_perm.detach())
+        d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
+                           F.cross_entropy(d_z_2_perm, ones))
+
+        # Discriminator backward pass
+        d_optimizer.zero_grad()
+        self.manual_backward(d_tc_loss)
+
+        # Optimizer step
+        vae_optimizer.step()
+        d_optimizer.step()
+
+        # LR scheduler step
+        vae_scheduler.step()
+        d_scheduler.step()
+
+        # log the losses
+        self.log_dict({
+            "vae_loss": vae_loss,
+            "vae_recon_loss": vae_recon_loss,
+            "vae_kld_loss": kld_loss,
+            "vae_tc_loss": vae_tc_loss,
+            "d_tc_loss": d_tc_loss,
+            "vae_l1_penalty": l1_penalty
+        })
+
+    def validation_step(self, batch, batch_idx):
+        self.VAE.eval()
+        self.D.eval()
+
+        # get the batch
+        x_1, x_2 = batch
+        batch_size = x_1.shape[0]
+
+        # create a batch of ones and zeros for the discriminator
+        ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
+        zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
+
+        # VAE forward pass
+        x_recon, mean, logvar, z = self.VAE(x_1)
+
+        # VAE reconstruction loss
+        vae_recon_loss = self.mse(x_recon, x_1)
+
+        # VAE KLD loss
+        kld_loss = self.kld(mean, logvar) * self.kld_weight
+
+        # VAE TC loss
+        d_z = self.D(z)
+        vae_tc_loss = F.cross_entropy(d_z, ones) * self.tc_weight
+
+        # L1 penalty
+        l1_penalty = torch.tensor(0, dtype=torch.float32, device=self.device)
+        if self.l1_weight > 0:
+            l1_penalty = sum([p.abs().sum()
+                              for p in self.VAE.parameters()]) * self.l1_weight
+
+        # VAE loss
+        vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
+
+        # Discriminator forward pass
+        mean_2, logvar_2 = self.VAE.encode(x_2)
+        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        z_2_perm = permute_dims(z_2)
+        d_z_2_perm = self.D(z_2_perm.detach())
+        d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
+                           F.cross_entropy(d_z_2_perm, ones))
+
+        # log the losses
+        self.log_dict({
+            "val_vae_loss": vae_loss,
+            "val_vae_recon_loss": vae_recon_loss,
+            "val_vae_kld_loss": kld_loss,
+            "val_vae_tc_loss": vae_tc_loss,
+            "val_d_tc_loss": d_tc_loss,
+            "val_vae_l1_penalty": l1_penalty
+        })
+
+    def on_validation_epoch_end(self) -> None:
+        self.VAE.eval()
+        # get the epoch number from trainer
+        epoch = self.trainer.current_epoch
+
+        if epoch % self.plot_interval != 0 and epoch != 0:
+            return
+
+        self.save_recon_plot()
+        self.save_latent_space_plot()
+
+    def save_recon_plot(self, num_recons=64):
+        """Save a figure of N reconstructions"""
+        # get the length of the training dataset
+        dataset = self.trainer.val_dataloaders.dataset
+        # get the train dataset's scaler
+        scaler = self.train_scaler
+        # get a random indices
+        indices = torch.randint(0, len(dataset), (num_recons,))
+        x, _ = dataset[indices]
+        x_recon, mean, logvar, z = self.VAE(x.to(self.device))
+        x = x.squeeze(1).cpu().numpy()
+        x_recon = x_recon.detach().squeeze(1).cpu().numpy()
+        x_scaled = scaler.inverse_transform(x).T
+        x_recon_scaled = scaler.inverse_transform(x_recon).T
+        # Create a normalization object for colormap
+        vmin = min(np.min(x_scaled), np.min(x_recon_scaled))
+        vmax = max(np.max(x_scaled), np.max(x_recon_scaled))
+        norm = colors.Normalize(vmin=vmin, vmax=vmax)
+        # create figure
+        fig = plt.figure(figsize=(10, 4))
+        gs = gridspec.GridSpec(1, 3, width_ratios=[1, 1, 0.05])
+        ax0 = plt.subplot(gs[0])
+        ax1 = plt.subplot(gs[1])
+        ax2 = plt.subplot(gs[2])
+        # Create the first subplot
+        cax0 = ax0.matshow(x_scaled, interpolation='nearest',
+                           cmap='viridis', norm=norm)
+        ax0.set_title('Ground Truth')
+        # Create the second subplot
+        cax1 = ax1.matshow(
+            x_recon_scaled, interpolation='nearest', cmap='viridis', norm=norm)
+        ax1.set_title('Reconstruction')
+        # Create a colorbar that is shared between the two subplots
+        fig.colorbar(cax1, cax=ax2)
+        # save figure to checkpoint folder/recons
+        save_dir = os.path.join(self.args.ckpt_path,
+                                self.args.ckpt_name, "recons")
+        os.makedirs(save_dir, exist_ok=True)
+        fig_name = f"recons_{str(self.trainer.current_epoch).zfill(5)}.png"
+        plt.savefig(os.path.join(save_dir, fig_name))
+        plt.close(fig)
+
+    def save_latent_space_plot(self, batch_size=256):
+        """Save a figure of the latent space"""
+        # get the length of the training dataset
+        dataset = self.trainer.val_dataloaders.dataset
+        loader = DataLoader(dataset, batch_size=batch_size,
+                            shuffle=False, drop_last=False)
+        z_all = torch.zeros(
+            len(dataset), self.args.latent_size).to(self.device)
+        for batch_idx, data in enumerate(loader):
+            x, y = data
+            x_recon, mean, logvar, z = self.VAE(x.to(self.device))
+            z = z.detach()
+            z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
+        z_all = z_all.cpu().numpy()
+        # create the figure
+        fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+        ax.scatter(z_all[:, 0], z_all[:, 1])
+        ax.set_title(
+            f"Latent space at epoch {self.trainer.current_epoch}")
+        # save figure to checkpoint folder/latent
+        save_dir = os.path.join(self.args.ckpt_path,
+                                self.args.ckpt_name, "latent")
+        os.makedirs(save_dir, exist_ok=True)
+        fig_name = f"latent_{str(self.trainer.current_epoch).zfill(5)}.png"
+        plt.savefig(os.path.join(save_dir, fig_name))
+        plt.close(fig)
 
     def configure_optimizers(self):
         vae_optimizer = torch.optim.Adam(
