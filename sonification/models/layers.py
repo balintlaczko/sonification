@@ -135,6 +135,81 @@ class ConvDecoder(nn.Module):
         return self.layers(x)
 
 
+class ConvEncoder1D(nn.Module):
+    def __init__(self, in_channels, output_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
+        super(ConvEncoder1D, self).__init__()
+        self.in_channels = in_channels  # 2 for red and green
+        self.output_size = output_size
+
+        layers = []
+        in_channel = self.in_channels
+        for out_channel in layers_channels:
+            layers.extend([
+                nn.Conv1d(in_channel, out_channel, 3, stride=2, padding=1),
+                nn.BatchNorm1d(out_channel),
+                nn.LeakyReLU(0.2)
+            ])
+            in_channel = out_channel
+
+        # Calculate the size of the feature map when it reaches the linear layer
+        feature_map_size = input_size // (2 ** len(layers_channels))
+
+        layers.extend([
+            nn.Flatten(),
+            nn.Linear(
+                layers_channels[-1] * feature_map_size, self.output_size),
+            nn.BatchNorm1d(self.output_size),
+            nn.LeakyReLU(0.2),
+        ])
+
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.layers(x)
+
+
+class ConvDecoder1D(nn.Module):
+    def __init__(self, latent_size, out_channels, layers_channels=[512, 256, 128, 64, 32, 16], output_size=512):
+        super(ConvDecoder1D, self).__init__()
+        self.latent_size = latent_size
+        self.out_channels = out_channels
+
+        # Calculate the size of the feature map when it reaches the linear layer
+        feature_map_size = output_size // (2 ** len(layers_channels))
+
+        layers = [
+            nn.Linear(
+                latent_size, layers_channels[0] * feature_map_size),
+            nn.BatchNorm1d(layers_channels[0] *
+                           feature_map_size),
+            nn.LeakyReLU(0.2),
+            nn.Unflatten(
+                1, (layers_channels[0], feature_map_size)),
+        ]
+
+        in_channel = layers_channels[0]
+        for out_channel in layers_channels[1:]:
+            layers.extend([
+                nn.ConvTranspose1d(in_channel, out_channel,
+                                   3, stride=2, padding=1, output_padding=1),
+                nn.BatchNorm1d(out_channel),
+                nn.LeakyReLU(0.2),
+            ])
+            in_channel = out_channel
+
+        layers.extend([
+            nn.ConvTranspose1d(
+                layers_channels[-1], out_channels, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm1d(out_channels),
+            nn.Sigmoid(),
+        ])
+
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.layers(x)
+
+
 class ResBlock(nn.Module):
     def __init__(self, in_channel, channel):
         super(ResBlock, self).__init__()
