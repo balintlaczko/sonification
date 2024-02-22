@@ -54,6 +54,38 @@ def seconds2samples(
 
 
 @jit(nopython=True)
+def db2amp(
+    db: float,
+) -> float:
+    """
+    Convert decibels to amplitude.
+
+    Args:
+        db (float): Decibels.
+
+    Returns:
+        float: Amplitude.
+    """
+    return 10 ** (db / 20)
+
+
+@jit(nopython=True)
+def amp2db(
+    amp: float,
+) -> float:
+    """
+    Convert amplitude to decibels.
+
+    Args:
+        amp (float): Amplitude.
+
+    Returns:
+        float: Decibels.
+    """
+    return 20 * np.log10(amp)
+
+
+@jit(nopython=True)
 def midi2frequency(
         midi: np.ndarray,
         base_frequency: float = 440.0,
