@@ -5,8 +5,7 @@ from torch.utils.data import DataLoader
 import random
 import numpy as np
 from lightning.pytorch import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
+from lightning.pytorch.loggers import TensorBoardLogger
 from sonification.models.models import PlFactorVAE
 from sonification.datasets import White_Square_dataset
 import optuna
