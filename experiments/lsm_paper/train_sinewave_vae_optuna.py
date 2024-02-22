@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
     torch.set_float32_matmul_precision("high")
 
-    pruner = optuna.pruners.MedianPruner(n_warmup_steps=50)
+    pruner = optuna.pruners.MedianPruner(n_warmup_steps=150)
 
     study = optuna.create_study(direction="minimize", pruner=pruner)
     study.optimize(objective, n_trials=1000)
