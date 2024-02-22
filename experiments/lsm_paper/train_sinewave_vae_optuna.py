@@ -25,14 +25,14 @@ def objective(trial: optuna.trial.Trial) -> float:
         trial.suggest_categorical("layers_channels_l{}".format(i), [256, 512, 1024, 2048]) for i in range(n_layers)
     ]
     d_hidden_size = trial.suggest_categorical(
-        "d_hidden_size", [512, 1024])
-    d_num_layers = trial.suggest_int("d_num_layers", 4, 6)
+        "d_hidden_size", [256, 512, 1024])
+    d_num_layers = trial.suggest_int("d_num_layers", 3, 6)
     lr_vae = trial.suggest_float("lr_vae", 1e-6, 1e-2, log=True)
     lr_decay_vae = trial.suggest_float("lr_decay_vae", 0.9, 0.999)
     lr_d = trial.suggest_float("lr_d", 1e-6, 1e-2, log=True)
     lr_decay_d = trial.suggest_float("lr_decay_d", 0.9, 0.999)
     batch_size = trial.suggest_categorical(
-        "batch_size", [32, 64, 128, 256, 512, 1024])
+        "batch_size", [64, 128, 256, 512, 1024])
 
     args = Args(
         # root path
@@ -47,20 +47,20 @@ def objective(trial: optuna.trial.Trial) -> float:
         d_hidden_size=d_hidden_size,
         d_num_layers=d_num_layers,
         # training
-        train_epochs=101,
+        train_epochs=31,
         batch_size=batch_size,
         lr_vae=lr_vae,
         lr_decay_vae=lr_decay_vae,
         lr_d=lr_d,
         lr_decay_d=lr_decay_d,
         kld_weight=0.02,
-        tc_weight=0.05,
+        tc_weight=0.02,
         l1_weight=0.0,
         # checkpoint & logging
-        ckpt_path='./ckpt/sinewave_fvae-optuna-kld_0_02-tc_0_05',
-        ckpt_name=f'sinewave_fvae-optuna-kld_0_02-tc_0_05_{str(trial.number).zfill(3)}',
-        logdir='./logs/sinewave_fvae-optuna-kld_0_02-tc_0_05',
-        plot_interval=1,
+        ckpt_path='./ckpt/sinewave_fvae-optuna-kld_0_02-tc_0_02',
+        ckpt_name=f'sinewave_fvae-optuna-kld_0_02-tc_0_02_{str(trial.number).zfill(3)}',
+        logdir='./logs/sinewave_fvae-optuna-kld_0_02-tc_0_02',
+        plot_interval=15,
     )
 
     # create train and val datasets and loaders
