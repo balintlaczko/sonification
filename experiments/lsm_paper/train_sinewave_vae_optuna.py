@@ -57,9 +57,9 @@ def objective(trial: optuna.trial.Trial) -> float:
         tc_weight=0.05,
         l1_weight=0.0,
         # checkpoint & logging
-        ckpt_path='./ckpt/factorvae-optuna-kld_0_02-tc_0_05',
-        ckpt_name=f'factorvae-optuna-kld_0_02-tc_0_05_{str(trial.number).zfill(3)}',
-        logdir='./logs/factorvae-optuna-kld_0_02-tc_0_05',
+        ckpt_path='./ckpt/sinewave_fvae-optuna-kld_0_02-tc_0_05',
+        ckpt_name=f'sinewave_fvae-optuna-kld_0_02-tc_0_05_{str(trial.number).zfill(3)}',
+        logdir='./logs/sinewave_fvae-optuna-kld_0_02-tc_0_05',
         plot_interval=1,
     )
 
