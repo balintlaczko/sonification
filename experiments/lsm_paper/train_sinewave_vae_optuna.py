@@ -28,14 +28,14 @@ def objective(trial: optuna.trial.Trial) -> float:
     d_hidden_size = trial.suggest_categorical(
         "d_hidden_size", [256, 512, 1024])
     d_num_layers = trial.suggest_int("d_num_layers", 3, 5)
-    lr_vae = trial.suggest_float("lr_vae", 1e-5, 1e-1, log=True)
+    lr_vae = trial.suggest_float("lr_vae", 1e-4, 1e-2, log=True)
     lr_decay_vae = trial.suggest_float("lr_decay_vae", 0.9, 0.999)
     # lr_d = trial.suggest_float("lr_d", 1e-6, 1e-2, log=True)
     lr_d = lr_vae
     # lr_decay_d = trial.suggest_float("lr_decay_d", 0.9, 0.999)
     lr_decay_d = lr_decay_vae
     batch_size = trial.suggest_categorical(
-        "batch_size", [128, 256, 512, 1024])
+        "batch_size", [256, 512, 1024])
 
     args = Args(
         # root path
