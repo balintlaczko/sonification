@@ -37,9 +37,9 @@ class VAE(nn.Module):
         self.encoder = LinearEncoder(
             input_size, hidden_size, hidden_size, num_layers, bias, dtype)
         self.mu = nn.Linear(hidden_size, latent_size)
-        self.logvar = nn.Linear(latent_size, hidden_size)
+        self.logvar = nn.Linear(hidden_size, latent_size)
         self.decoder = LinearDecoder(
-            hidden_size, hidden_size, input_size, num_layers, bias, dtype)
+            latent_size, hidden_size, input_size, num_layers, bias, dtype)
 
     def encode(self, x):
         x = self.encoder(x)
@@ -53,7 +53,8 @@ class VAE(nn.Module):
     def forward(self, x):
         mean, logvar = self.encode(x)
         z = self.reparameterize(mean, logvar)
-        return self.decoder(z), mean, logvar, z
+        recon = self.decoder(z)
+        return recon, mean, logvar, z
 
 
 class ConvVAE(nn.Module):
@@ -401,8 +402,13 @@ class PlFactorVAE1D(LightningModule):
         self.mse = nn.MSELoss()
         self.bce = recon_loss
         self.kld = kld_loss
+        self.recon_weight = args.recon_weight
         self.kld_weight = args.kld_weight
+        self.kld_start = args.kld_start
+        self.kld_warmup_epochs = args.kld_warmup_epochs
         self.tc_weight = args.tc_weight
+        self.tc_start = args.tc_start
+        self.tc_warmup_epochs = args.tc_warmup_epochs
         self.l1_weight = args.l1_weight
 
         # learning rates
@@ -437,6 +443,7 @@ class PlFactorVAE1D(LightningModule):
     def training_step(self, batch, batch_idx):
         self.VAE.train()
         self.D.train()
+        epoch_idx = self.trainer.current_epoch
         # get the optimizers and schedulers
         vae_optimizer, d_optimizer = self.optimizers()
         vae_scheduler, d_scheduler = self.lr_schedulers()
@@ -454,22 +461,34 @@ class PlFactorVAE1D(LightningModule):
 
         # VAE reconstruction loss
         vae_recon_loss = self.mse(x_recon, x_1)
+        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
+        # vae_recon_loss = self.bce(x_1, x_recon)
 
         # VAE KLD loss
-        kld_loss = self.kld(mean, logvar) * self.kld_weight
+        kld_scale = self.kld_weight * \
+            min(1.0, (epoch_idx - self.kld_start) /
+                self.kld_warmup_epochs) if epoch_idx > self.kld_start else 0
+        kld_loss = self.kld(mean, logvar)
+        scaled_kld_loss = kld_loss * kld_scale
 
         # VAE TC loss
         d_z = self.D(z)
-        vae_tc_loss = F.cross_entropy(d_z, ones) * self.tc_weight
+        vae_tc_scale = self.tc_weight * \
+            min(1.0, (epoch_idx - self.tc_start) /
+                self.tc_warmup_epochs) if epoch_idx > self.tc_start else 0
+        vae_tc_loss = F.cross_entropy(d_z, ones)
+        scaled_vae_tc_loss = vae_tc_loss * vae_tc_scale
 
         # L1 penalty
         l1_penalty = torch.tensor(0, dtype=torch.float32, device=self.device)
         if self.l1_weight > 0:
             l1_penalty = sum([p.abs().sum()
-                              for p in self.VAE.parameters()]) * self.l1_weight
+                              for p in self.VAE.parameters()])
+        scaled_l1_penalty = l1_penalty * self.l1_weight
 
         # VAE loss
-        vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + \
+            scaled_vae_tc_loss + scaled_l1_penalty
 
         # VAE backward pass
         vae_optimizer.zero_grad()
@@ -522,19 +541,20 @@ class PlFactorVAE1D(LightningModule):
 
         # VAE reconstruction loss
         vae_recon_loss = self.mse(x_recon, x_1)
+        # vae_recon_loss = self.bce(x_1, x_recon)
 
         # VAE KLD loss
-        kld_loss = self.kld(mean, logvar) * self.kld_weight
+        kld_loss = self.kld(mean, logvar)
 
         # VAE TC loss
         d_z = self.D(z)
-        vae_tc_loss = F.cross_entropy(d_z, ones) * self.tc_weight
+        vae_tc_loss = F.cross_entropy(d_z, ones)
 
         # L1 penalty
         l1_penalty = torch.tensor(0, dtype=torch.float32, device=self.device)
         if self.l1_weight > 0:
             l1_penalty = sum([p.abs().sum()
-                              for p in self.VAE.parameters()]) * self.l1_weight
+                              for p in self.VAE.parameters()])
 
         # VAE loss
         vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
