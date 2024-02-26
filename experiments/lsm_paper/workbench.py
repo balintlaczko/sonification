@@ -816,7 +816,7 @@ def handle_pictslider(unused_addr, x, y):
     # add a channel dimension
     img = img.unsqueeze(0).unsqueeze(0)
     # encode the image
-    z_1 = img_model.encode(img)
+    z_1 = img_model.encode(img.to(device))
     # project to audio latent space
     z_2 = model(z_1.to(device))
     # decode the audio
