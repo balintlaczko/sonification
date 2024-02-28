@@ -44,6 +44,82 @@ def gap_loss(latent_vectors):
     return loss
 
 
+# based on: https://github.com/ChunjinSong/audioviewer_code
+def preserve_distance_loss(source_latent, target_latent, e=1e-8, weight=1):
+    batch_size = source_latent.shape[0]
+    N = batch_size // 2
+
+    source_z1 = source_latent[:N, :]
+    source_z2 = source_latent[N: 2*N, :]
+
+    target_z1 = target_latent[:N, :]
+    target_z2 = target_latent[N: 2*N, :]
+
+    dist_source = torch.sqrt(torch.sum((source_z1 - source_z2)
+                                       ** 2, -1, keepdim=True)) * weight
+    dist_target = torch.sqrt(
+        torch.sum((target_z1 - target_z2) ** 2, -1, keepdim=True))
+
+    loss = F.mse_loss(torch.log(torch.abs(dist_target + e)),
+                      torch.log(torch.abs(dist_source)))
+    loss /= N
+
+    return loss
+
+
+def preserve_axiswise_distance_loss(source_latent, target_latent, e=1e-8, weight=1):
+    batch_size = source_latent.shape[0]
+    N = batch_size // 2
+    num_dims = source_latent.shape[1]
+
+    source_z1 = source_latent[:N, :]
+    source_z2 = source_latent[N: 2*N, :]
+
+    target_z1 = target_latent[:N, :]
+    target_z2 = target_latent[N: 2*N, :]
+
+    loss = 0
+    for i in range(num_dims):
+        dist_source = torch.sqrt(
+            (source_z1[:, i] - source_z2[:, i]) ** 2) * weight
+        dist_target = torch.sqrt((target_z1[:, i] - target_z2[:, i]) ** 2)
+
+        loss += F.mse_loss(torch.log(torch.abs(dist_target + e)),
+                           torch.log(torch.abs(dist_source))) / N
+
+    return loss
+
+
+def preserve_directions_and_distance_loss(source_latent, target_latent, e=1e-8):
+    batch_size = source_latent.shape[0]
+    N = batch_size // 2
+
+    # split latents into 2 groups
+    # for source latents
+    source_z1 = source_latent[:N, :]
+    source_z2 = source_latent[N: 2*N, :]
+    # for target latents
+    target_z1 = target_latent[:N, :]
+    target_z2 = target_latent[N: 2*N, :]
+
+    # create vectors between the two groups
+    v_source = source_z2 - source_z1
+    v_target = target_z2 - target_z1
+
+    # calculate the distance loss
+    dist_source = torch.linalg.vector_norm(v_source, dim=1, keepdim=True)
+    dist_target = torch.linalg.vector_norm(v_target, dim=1, keepdim=True)
+    loss = F.mse_loss(torch.log(dist_source + e),
+                      torch.log(dist_target + e)) / N
+
+    # calculate the direction loss
+    source_dir = F.normalize(source_z2 - source_z1)
+    target_dir = F.normalize(target_z2 - target_z1)
+    loss += F.mse_loss(source_dir, target_dir) / N
+
+    return loss
+
+
 # taken form: https://github.com/AntixK/PyTorch-VAE/blob/master/models/info_vae.py
 # then modified it into its own class
 class MMDloss(nn.Module):

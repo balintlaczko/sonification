@@ -6,7 +6,7 @@ from .layers import *
 from lightning.pytorch import LightningModule
 from lightning.pytorch.loggers import TensorBoardLogger
 from ..utils.tensor import permute_dims
-from .loss import kld_loss, recon_loss, MMDloss
+from .loss import kld_loss, recon_loss, MMDloss, preserve_distance_loss, preserve_axiswise_distance_loss
 from piqa import SSIM
 import matplotlib.pyplot as plt
 import os
@@ -667,3 +667,152 @@ class PlFactorVAE1D(LightningModule):
         d_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             d_optimizer, gamma=self.lr_decay_d)
         return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
+
+
+class PlMapper(LightningModule):
+    def __init__(self, args):
+        super(PlMapper, self).__init__()
+        # Important: This property activates manual optimization.
+        self.automatic_optimization = False
+        # self.save_hyperparameters()
+
+        # data params
+        self.in_features = args.in_features
+        self.out_features = args.out_features
+        self.hidden_layers_features = args.hidden_layers_features
+
+        # losses
+        self.mse = nn.MSELoss()
+        self.l1 = nn.L1Loss()
+        self.locality_weight = args.locality_weight
+        self.cycle_consistency_weight = args.cycle_consistency_weight
+        self.cycle_consistency_start = args.cycle_consistency_start
+        self.cycle_consistency_warmup_epochs = args.cycle_consistency_warmup_epochs
+
+        # learning rate
+        self.lr = args.lr
+        self.lr_decay = args.lr_decay
+
+        # logging
+        self.plot_interval = args.plot_interval
+        self.args = args
+
+        # models
+        self.model = LinearProjector(
+            in_features=self.in_features, out_features=self.out_features, hidden_layers_features=self.hidden_layers_features)
+        self.in_model = args.in_model
+        self.out_model = args.out_model
+        self.in_model.eval()
+        self.out_model.eval()
+        self.out_latent_space = args.out_latent_space
+
+    def forward(self, x):
+        return self.model(x)
+
+    def training_step(self, batch, batch_idx):
+        self.model.train()
+        self.in_model.eval()
+        self.out_model.eval()
+        epoch_idx = self.trainer.current_epoch
+
+        # get the optimizer and scheduler
+        optimizer = self.optimizers()
+        scheduler = self.lr_schedulers()
+
+        # get the batch
+        x, _ = batch
+        batch_size = x.shape[0]
+
+        # encode with input model
+        z_1 = self.in_model.encode(x)
+
+        # project to output space
+        z_2 = self.model(z_1)
+
+        # decode with output model
+        x_hat = self.out_model.decode(z_2)
+
+        # re-encode with output model
+        z_3 = self.out_model.encode(x_hat.detach())
+
+        # LOSSES
+        # locality loss
+        # TODO: have to do it per axis, since the axes have different meanings
+        # TODO: use l1 or mse?
+        # TODO: this assumes that z_1 and z_2 have the same dimensions
+        num_dims = z_1.shape[1]
+        locality_loss = 0
+        for dim in range(num_dims):
+            locality_loss += self.l1(z_2[:, dim], z_1[:, dim])
+        scaled_locality_loss = self.locality_weight * locality_loss
+
+        # cycle consistency loss
+        cycle_consistency_loss = self.mse(z_3, z_2)
+        cycle_consistency_scale = self.cycle_consistency_weight * \
+            min(1.0, (epoch_idx - self.cycle_consistency_start) /
+                self.cycle_consistency_warmup_epochs) if epoch_idx > self.cycle_consistency_start else 0
+        scaled_cycle_consistency_loss = cycle_consistency_scale * cycle_consistency_loss
+
+        # total loss
+        loss = scaled_locality_loss + scaled_cycle_consistency_loss
+
+        # backward pass
+        optimizer.zero_grad()
+        self.manual_backward(loss)
+        optimizer.step()
+        scheduler.step()
+
+        # log losses
+        self.log_dict({
+            "locality_loss": locality_loss,
+            "cycle_consistency_loss": cycle_consistency_loss,
+            "train_loss": loss,
+        })
+
+    def on_train_epoch_end(self) -> None:
+        self.model.eval()
+        # get the epoch number from trainer
+        epoch = self.trainer.current_epoch
+
+        if epoch % self.plot_interval != 0 and epoch != 0:
+            return
+
+        self.save_latent_space_plot()
+
+    def save_latent_space_plot(self, batch_size=64):
+        """Save a figure of the latent space"""
+        # get the length of the training dataset
+        dataset = self.trainer.train_dataloader.dataset
+        loader = DataLoader(dataset, batch_size=batch_size,
+                            shuffle=False, drop_last=False)
+        z_all = torch.zeros(
+            len(dataset), self.out_features).to(self.device)
+        for batch_idx, data in enumerate(loader):
+            x, y = data
+            x_recon, mean, logvar, z = self.in_model(x.to(self.device))
+            z = self.model(z)
+            z = z.detach()
+            z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
+        z_all = z_all.cpu().numpy()
+        # create the figure
+        fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+        out_latent_space = self.out_latent_space.cpu().numpy()
+        ax.scatter(out_latent_space[:, 0],
+                   out_latent_space[:, 1], c="blue")
+        ax.scatter(z_all[:, 0], z_all[:, 1], c="red")
+        ax.set_title(
+            f"Latent space at epoch {self.trainer.current_epoch}")
+        # save figure to checkpoint folder/latent
+        save_dir = os.path.join(self.args.ckpt_path,
+                                self.args.ckpt_name, "latent")
+        os.makedirs(save_dir, exist_ok=True)
+        fig_name = f"latent_{str(self.trainer.current_epoch).zfill(5)}.png"
+        plt.savefig(os.path.join(save_dir, fig_name))
+        plt.close(fig)
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=self.lr)
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            optimizer, gamma=self.lr_decay)
+        return [optimizer], [scheduler]

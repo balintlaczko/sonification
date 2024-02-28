@@ -352,3 +352,32 @@ class LinearDiscriminator(nn.Module):
 
     def forward(self, x):
         return self.discriminator(x)
+
+
+class LinearProjector(nn.Module):
+    def __init__(self, in_features, out_features, hidden_layers_features=[64, 128, 256, 128, 64]):
+        super(LinearProjector, self).__init__()
+
+        layers = []
+
+        # add first layer
+        layers.extend([
+            nn.Linear(in_features, hidden_layers_features[0]),
+            nn.LeakyReLU(0.2, inplace=True),
+        ])
+
+        # add hidden layers
+        for i in range(len(hidden_layers_features)-1):
+            layers.extend([
+                nn.Linear(hidden_layers_features[i],
+                          hidden_layers_features[i+1]),
+                nn.LeakyReLU(0.2, inplace=True),
+            ])
+
+        # add output layer
+        layers.append(nn.Linear(hidden_layers_features[-1], out_features))
+
+        self.linear_projector = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.linear_projector(x)
