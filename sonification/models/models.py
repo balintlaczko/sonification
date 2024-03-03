@@ -150,16 +150,14 @@ class PlFactorVAE(LightningModule):
 
         # losses
         self.mse = nn.MSELoss()
-        self.bce = recon_loss
-        self.ssim = SSIM(n_channels=self.in_channels)
         self.kld = kld_loss
-        self.MMD = MMDloss()
-        self.mmd_prior_distribution = args.mmd_prior_distribution
-        self.kld_weight = args.kld_weight
-        self.mmd_weight = args.mmd_weight
+        self.recon_weight = args.recon_weight
+        self.kld_weight_max = args.kld_weight_max
+        self.kld_weight_min = args.kld_weight_min
+        self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        self.kld_start_epoch = args.kld_start_epoch
+        self.kld_warmup_epochs = args.kld_warmup_epochs
         self.tc_weight = args.tc_weight
-        self.l1_weight = args.l1_weight
-        self.onpix_weight = args.onpix_weight
 
         # learning rates
         self.lr_vae = args.lr_vae
@@ -173,13 +171,10 @@ class PlFactorVAE(LightningModule):
 
         # dataset
         self.dataset_size = args.dataset_size
-        self.latent_side_size = int(self.dataset_size**(1/self.latent_size))
 
         # models
         self.VAE = ConvVAE(self.in_channels, self.latent_size,
                            self.layers_channels, self.input_size)
-        # self.VAE = ConvWAE(self.in_channels, self.latent_size,
-        #                    self.layers_channels, self.input_size)
         self.D = LinearDiscriminator(
             self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
 
@@ -189,7 +184,6 @@ class PlFactorVAE(LightningModule):
     def encode(self, x):
         mean, logvar = self.VAE.encode(x)
         return self.VAE.reparameterize(mean, logvar)
-        # return self.VAE.encode(x)
 
     def decode(self, z):
         return self.VAE.decoder(z)
@@ -204,6 +198,7 @@ class PlFactorVAE(LightningModule):
         # get the batch
         x_1, x_2 = batch
         batch_size = x_1.shape[0]
+        epoch_idx = self.trainer.current_epoch
 
         # create a batch of ones and zeros for the discriminator
         ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
@@ -211,52 +206,38 @@ class PlFactorVAE(LightningModule):
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
-        # x_recon, z = self.VAE(x_1)
 
         # VAE reconstruction loss
-        vae_recon_loss = self.mse(x_recon, x_1 * self.onpix_weight)
-        # vae_recon_loss = self.bce(x_recon, x_1)
-        # vae_recon_loss = 1 - self.ssim(x_recon, x_1)
-        # vae_recon_loss = self.mse(x_recon, x_1) + (1 - self.ssim(x_recon, x_1))
+        vae_recon_loss = self.mse(x_recon, x_1)
+        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
 
         # VAE KLD loss
-        kld_loss = self.kld(mean, logvar) * self.kld_weight
-
-        # WAE MMD loss
-        # mmd_loss = self.MMD.compute_mmd(
-        #     z, self.mmd_prior_distribution) * self.mmd_weight
+        if self.args.dynamic_kld > 0:
+            kld_scale = self.kld_weight_dynamic
+        else:
+            kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
+                min(1.0, (epoch_idx - self.kld_start_epoch) /
+                    self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
+        kld_loss = self.kld(mean, logvar)
+        scaled_kld_loss = kld_loss * kld_scale
 
         # VAE TC loss
         d_z = self.D(z)
-        # TODO: I think the goal here is to confuse the Discriminator
-        # so that it always returns [0.5, 0.5] probabilities
-        # without abs() this will collapse into [0, 1] to minimize the loss
-        # I think...
-        # vae_tc_loss = (d_z[:, 0] - d_z[:, 1]).abs().mean() * self.tc_weight
-        # another option is to fool the Discriminator into thinking
-        # that the real embeddings are the permutated ones
-        vae_tc_loss = F.cross_entropy(d_z, ones) * self.tc_weight
-
-        # L1 penalty
-        l1_penalty = torch.tensor(0, dtype=torch.float32, device=self.device)
-        if self.l1_weight > 0:
-            l1_penalty = sum([p.abs().sum()
-                              for p in self.VAE.parameters()]) * self.l1_weight
+        vae_tc_loss = F.cross_entropy(d_z, ones)
+        scaled_vae_tc_loss = vae_tc_loss * self.tc_weight
 
         # VAE loss
-        vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
-        # vae_loss = vae_recon_loss + kld_loss + l1_penalty
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
 
         # VAE backward pass
         vae_optimizer.zero_grad()
         self.manual_backward(vae_loss, retain_graph=True)
-        # self.manual_backward(vae_loss)
-        # vae_optimizer.step()
+        self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
+                            gradient_clip_algorithm="norm")
 
         # Discriminator forward pass
         mean_2, logvar_2 = self.VAE.encode(x_2)
         z_2 = self.VAE.reparameterize(mean_2, logvar_2)
-        # z_2 = self.VAE.encode(x_2)
         z_2_perm = permute_dims(z_2)
         d_z_2_perm = self.D(z_2_perm.detach())
         d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
@@ -275,20 +256,25 @@ class PlFactorVAE(LightningModule):
         d_scheduler.step()
 
         # log the losses
+        self.last_recon_loss = vae_recon_loss
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_recon_loss": vae_recon_loss,
             "vae_kld_loss": kld_loss,
-            # "vae_mmd_loss": mmd_loss,
             "vae_tc_loss": vae_tc_loss,
             "d_tc_loss": d_tc_loss,
-            "vae_l1_penalty": l1_penalty
-        }, on_step=True, on_epoch=False)
+        })
+        if self.args.dynamic_kld > 0:
+            self.log_dict({"kld_scale": kld_scale})
 
     def on_train_epoch_end(self) -> None:
         self.VAE.eval()
         # get the epoch number from trainer
         epoch = self.trainer.current_epoch
+
+        if self.args.dynamic_kld > 0:
+            if self.last_recon_loss < self.args.target_recon_loss:
+                self.kld_weight_dynamic *= 1.01
 
         if epoch % self.plot_interval != 0 and epoch != 0:
             return
@@ -334,7 +320,6 @@ class PlFactorVAE(LightningModule):
         for batch_idx, data in enumerate(loader):
             x, y = data
             x_recon, mean, logvar, z = self.VAE(x.to(self.device))
-            # x_recon, z = self.VAE(x.to(self.device))
             z = z.detach()
             z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
         z_all = z_all.cpu().numpy()
@@ -350,26 +335,6 @@ class PlFactorVAE(LightningModule):
         fig_name = f"latent_{str(self.trainer.current_epoch).zfill(5)}.png"
         plt.savefig(os.path.join(save_dir, fig_name))
         plt.close(fig)
-
-    def log_tb_images(self, viz_batch) -> None:
-        # Get tensorboard logger
-        tb_logger = None
-        for logger in self.trainer.loggers:
-            if isinstance(logger, TensorBoardLogger):
-                tb_logger = logger.experiment
-                break
-
-        # get the epoch number from trainer
-        epoch = self.trainer.current_epoch
-
-        if tb_logger is None:
-            raise ValueError('TensorBoard Logger not found')
-
-        # Log the images (Give them different names)
-        for img_idx, pair in enumerate(viz_batch):
-            x_true, x_recon = pair
-            tb_logger.add_image(f"GroundTruth/{img_idx}", x_true, epoch)
-            tb_logger.add_image(f"Reconstruction/{img_idx}", x_recon, epoch)
 
     def configure_optimizers(self):
         vae_optimizer = torch.optim.Adam(
@@ -403,13 +368,15 @@ class PlFactorVAE1D(LightningModule):
         self.bce = recon_loss
         self.kld = kld_loss
         self.recon_weight = args.recon_weight
-        self.kld_weight = args.kld_weight
-        self.kld_start = args.kld_start
+        self.last_recon_loss = float("inf")  # initialize to infinity
+        self.kld_weight_max = args.kld_weight_max
+        self.kld_weight_min = args.kld_weight_min
+        self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        self.kld_start_epoch = args.kld_start_epoch
         self.kld_warmup_epochs = args.kld_warmup_epochs
         self.tc_weight = args.tc_weight
         self.tc_start = args.tc_start
         self.tc_warmup_epochs = args.tc_warmup_epochs
-        self.l1_weight = args.l1_weight
 
         # learning rates
         self.lr_vae = args.lr_vae
@@ -462,12 +429,14 @@ class PlFactorVAE1D(LightningModule):
         # VAE reconstruction loss
         vae_recon_loss = self.mse(x_recon, x_1)
         scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
-        # vae_recon_loss = self.bce(x_1, x_recon)
 
         # VAE KLD loss
-        kld_scale = self.kld_weight * \
-            min(1.0, (epoch_idx - self.kld_start) /
-                self.kld_warmup_epochs) if epoch_idx > self.kld_start else 0
+        if self.args.dynamic_kld > 0:
+            kld_scale = self.kld_weight_dynamic
+        else:
+            kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
+                min(1.0, (epoch_idx - self.kld_start_epoch) /
+                    self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
         kld_loss = self.kld(mean, logvar)
         scaled_kld_loss = kld_loss * kld_scale
 
@@ -479,20 +448,14 @@ class PlFactorVAE1D(LightningModule):
         vae_tc_loss = F.cross_entropy(d_z, ones)
         scaled_vae_tc_loss = vae_tc_loss * vae_tc_scale
 
-        # L1 penalty
-        l1_penalty = torch.tensor(0, dtype=torch.float32, device=self.device)
-        if self.l1_weight > 0:
-            l1_penalty = sum([p.abs().sum()
-                              for p in self.VAE.parameters()])
-        scaled_l1_penalty = l1_penalty * self.l1_weight
-
         # VAE loss
-        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + \
-            scaled_vae_tc_loss + scaled_l1_penalty
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
 
         # VAE backward pass
         vae_optimizer.zero_grad()
         self.manual_backward(vae_loss, retain_graph=True)
+        self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
+                            gradient_clip_algorithm="norm")
 
         # Discriminator forward pass
         mean_2, logvar_2 = self.VAE.encode(x_2)
@@ -515,14 +478,16 @@ class PlFactorVAE1D(LightningModule):
         d_scheduler.step()
 
         # log the losses
+        self.last_recon_loss = vae_recon_loss
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_recon_loss": vae_recon_loss,
             "vae_kld_loss": kld_loss,
             "vae_tc_loss": vae_tc_loss,
             "d_tc_loss": d_tc_loss,
-            "vae_l1_penalty": l1_penalty
         })
+        if self.args.dynamic_kld > 0:
+            self.log_dict({"kld_scale": kld_scale})
 
     def validation_step(self, batch, batch_idx):
         self.VAE.eval()
@@ -550,14 +515,8 @@ class PlFactorVAE1D(LightningModule):
         d_z = self.D(z)
         vae_tc_loss = F.cross_entropy(d_z, ones)
 
-        # L1 penalty
-        l1_penalty = torch.tensor(0, dtype=torch.float32, device=self.device)
-        if self.l1_weight > 0:
-            l1_penalty = sum([p.abs().sum()
-                              for p in self.VAE.parameters()])
-
         # VAE loss
-        vae_loss = vae_recon_loss + kld_loss + vae_tc_loss + l1_penalty
+        vae_loss = vae_recon_loss + kld_loss + vae_tc_loss
 
         # Discriminator forward pass
         mean_2, logvar_2 = self.VAE.encode(x_2)
@@ -574,13 +533,16 @@ class PlFactorVAE1D(LightningModule):
             "val_vae_kld_loss": kld_loss,
             "val_vae_tc_loss": vae_tc_loss,
             "val_d_tc_loss": d_tc_loss,
-            "val_vae_l1_penalty": l1_penalty
         })
 
     def on_validation_epoch_end(self) -> None:
         self.VAE.eval()
         # get the epoch number from trainer
         epoch = self.trainer.current_epoch
+
+        if self.args.dynamic_kld > 0:
+            if self.last_recon_loss < self.args.target_recon_loss:
+                self.kld_weight_dynamic += 0.0001
 
         if epoch % self.plot_interval != 0 and epoch != 0:
             return
