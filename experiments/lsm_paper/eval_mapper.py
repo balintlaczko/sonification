@@ -40,8 +40,8 @@ def main():
                         default='./ckpt/white_squares_fvae_opt/with_falloff-v12/with_falloff-v12_epoch=4807-val_loss=0.0000.ckpt', help='image model checkpoint path')
 
     # audio model
-    parser.add_argument('--audio_model_ckpt_path', type=str,
-                        default='./ckpt/sinewave_fvae-opt/opt-v27/opt-v27_last_epoch=10405.ckpt', help='sound model checkpoint path')
+    parser.add_argument('--audio_model_ckpt_path', type=str,  # v27 is the previous best
+                        default='./ckpt/sinewave_fvae-opt/opt-v41/opt-v41_last_epoch=50001.ckpt', help='sound model checkpoint path')
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str,
@@ -49,7 +49,7 @@ def main():
     parser.add_argument('--ckpt_name', type=str,
                         default='mapper-avstyle', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
-                        default="ckpt/mapper/mapper-64x2-v2/mapper-64x2-v2_last_epoch=6001.ckpt",)
+                        default="ckpt/mapper/mapper-64x2-v5/mapper-64x2-v5_last_epoch=10352.ckpt",)
     parser.add_argument('--logdir', type=str,
                         default='./logs/mapper', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=10)
@@ -113,25 +113,28 @@ def main():
         # model
         in_channels=1,
         latent_size=2,
-        layers_channels=[64, 128, 256, 512],
+        layers_channels=[64, 128, 256, 512, 1024],
         d_hidden_size=512,
         d_num_layers=5,
         # training
-        recon_weight=200,
-        kld_weight=0.1,
-        kld_start=0,
+        recon_weight=1,
+        target_recon_loss=1e-3,
+        dynamic_kld=1,
+        kld_weight_max=0.01,
+        kld_weight_min=0.001,
+        kld_start_epoch=0,
         kld_warmup_epochs=1,
-        tc_weight=4,
+        tc_weight=6,
         tc_start=0,
         tc_warmup_epochs=1,
         l1_weight=0.0,
-        lr_d=0.01,
-        lr_decay_d=0.999,
-        lr_decay_vae=0.999,
-        lr_vae=0.01,
+        lr_d=1e-2,
+        lr_decay_d=0.9999,
+        lr_decay_vae=0.9999,
+        lr_vae=1e-2,
         # checkpoint & logging
         ckpt_path='./ckpt/sinewave_fvae-opt',
-        ckpt_name='opt-v33',
+        ckpt_name='opt-v41',
         logdir='./logs/sinewave_fvae-opt',
         plot_interval=1,
     )
@@ -163,6 +166,26 @@ def main():
         z = z.detach()
         audio_model_latent_space[batch_idx *
                                  batch_size: batch_idx*batch_size + batch_size] = z
+    print("Pre-rendered audio model latent space")
+
+    # pre-render the reconstructions for the entire dataset
+    # (we'll use this to fit a KD tree for the OSC server)
+    batch_size = 256
+    sinewave_ds_all = Sinewave_dataset(root_path=audio_model_args.root_path, csv_path=audio_model_args.csv_path,
+                                       flag="all", scaler=sinewave_ds_train.scaler)
+    dataset = sinewave_ds_all
+    loader = DataLoader(dataset, batch_size=batch_size,
+                        shuffle=False, drop_last=False)
+    reconstructions = torch.zeros(
+        len(dataset), 1, audio_model.args.img_size).to(audio_model.device)
+    for batch_idx, data in enumerate(loader):
+        x, y = data
+        x_recon, mean, logvar, z = audio_model.VAE(x.to(audio_model.device))
+        x_recon = x_recon.detach()
+        reconstructions[batch_idx *
+                        batch_size: batch_idx*batch_size + batch_size] = x_recon
+    reconstructions = reconstructions.squeeze(1).detach().cpu().numpy()
+    print("Pre-rendered audio reconstructions")
 
     # add missing args
     mapper_args.batch_size = img_model_args.dataset_size
@@ -177,12 +200,8 @@ def main():
     model.load_state_dict(ckpt['state_dict'])
     model.eval()
 
-    # fit a KD tree to the scaled sinewave dataset
-    sinewave_ds_all = Sinewave_dataset(root_path=audio_model_args.root_path, csv_path=audio_model_args.csv_path,
-                                       flag="all", scaler=sinewave_ds_train.scaler)
-
-    melbands = sinewave_ds_all.all_tensors.squeeze(-1).cpu().numpy()
-    tree = KDTree(melbands)
+    # fit a KD tree to the (scaled) reconstructions
+    tree = KDTree(reconstructions)
 
     # create osc client
     ip = "127.0.0.1"
