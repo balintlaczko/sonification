@@ -37,25 +37,28 @@ args = Args(
     # model
     in_channels=1,
     latent_size=2,
-    layers_channels=[64, 128, 256, 512],
+    layers_channels=[64, 128, 256, 512, 1024],
     d_hidden_size=512,
     d_num_layers=5,
     # training
-    recon_weight=200,
-    kld_weight=0.1,
-    kld_start=0,
+    recon_weight=1,
+    target_recon_loss=1e-3,
+    dynamic_kld=1,
+    kld_weight_max=0.01,
+    kld_weight_min=0.001,
+    kld_start_epoch=0,
     kld_warmup_epochs=1,
-    tc_weight=4,
+    tc_weight=6,
     tc_start=0,
     tc_warmup_epochs=1,
     l1_weight=0.0,
-    lr_d=0.01,
-    lr_decay_d=0.999,
-    lr_decay_vae=0.999,
-    lr_vae=0.01,
+    lr_d=1e-2,
+    lr_decay_d=0.9999,
+    lr_decay_vae=0.9999,
+    lr_vae=1e-2,
     # checkpoint & logging
     ckpt_path='./ckpt/sinewave_fvae-opt',
-    ckpt_name='opt-v33',
+    ckpt_name='opt-v41',
     logdir='./logs/sinewave_fvae-opt',
     plot_interval=1,
 )
@@ -70,7 +73,7 @@ sinewave_ds_val = Sinewave_dataset(
 # %%
 # load model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-ckpt_path = '../../ckpt/sinewave_fvae-opt/opt-v27/opt-v27_last_epoch=10405.ckpt'
+ckpt_path = '../../ckpt/sinewave_fvae-opt/opt-v41/opt-v41_last_epoch=50001.ckpt'
 ckpt = torch.load(ckpt_path, map_location=device)
 args.train_scaler = sinewave_ds_train.scaler
 model = PlFactorVAE1D(args).to(device)
@@ -105,17 +108,9 @@ z_x_min, z_x_max, z_y_min, z_y_max
 
 # %%
 x_steps = torch.linspace(z_x_min, z_x_max, 64)
-y_steps = torch.linspace(z_y_min, z_y_max, 10)
+y_steps = torch.linspace(z_y_min, z_y_max, 64)
 
 x_steps, y_steps
-
-# %%
-test_latent = torch.tensor([x_steps[0], y_steps[0]])
-test_latent
-
-# %%
-x_recon = model.decode(test_latent.unsqueeze(0).to(model.device))
-x_recon.shape
 
 # %%
 # create a plot for traversing in the latent space
@@ -147,7 +142,9 @@ for y_idx, y_step in enumerate(y_steps):
 plt.subplots_adjust(wspace=0.1, hspace=0.1)
 # reduce the overall margins
 plt.tight_layout()
-plt.savefig("traverse_latent_space_sinewave.png")
+# remove white background
+fig.patch.set_visible(False)
+plt.savefig("traverse_latent_space_sinewave_big.png")
 plt.show()
 
 # %%
@@ -254,6 +251,6 @@ plt.subplots_adjust(wspace=0.1, hspace=0.1)
 plt.tight_layout()
 # remove white background
 fig.patch.set_visible(False)
-plt.savefig("traverse_latent_space_sinewave_2.png")
+plt.savefig("traverse_latent_space_sinewave_big_2.png")
 plt.show()
 # %%
