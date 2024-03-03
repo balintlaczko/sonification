@@ -18,17 +18,11 @@ from torch.utils.data import DataLoader
 # %%
 # load the dataset
 root_path = './'
-csv_path = 'white_squares_xy_16_4.csv'
-img_size = 16
-square_size = 4
+csv_path = 'white_squares_xy_64_2.csv'
+img_size = 64
+square_size = 2
 dataset = White_Square_dataset(
     root_path, csv_path, img_size, square_size, flag="all")
-
-# %%
-# load the model from the checkpoint
-ckpt_path = '../../ckpt/white_squares_fvae_opt/factorvae-opt-v3/factorvae-opt-v3_last_epoch=258706.ckpt'
-model = PlFactorVAE.load_from_checkpoint(ckpt_path)
-model.eval()
 
 # %%
 # create args
@@ -40,30 +34,38 @@ class Args:
 
 
 args = Args(
+    # root path
+    root_path='',
+    # dataset
+    csv_path='white_squares_xy_64_2.csv',
+    img_size=64,
+    square_size=2,
+    # model
     in_channels=1,
-    img_size=16,
     latent_size=2,
-    layers_channels=[512, 256, 1024],
+    layers_channels=[64, 128, 256, 512],
     d_hidden_size=512,
     d_num_layers=5,
-    dataset_size=144,
-    mmd_prior_distribution="gaussian",
-    kld_weight=0.02,
-    mmd_weight=0.02,
-    tc_weight=2,
-    l1_weight=0,
+    # training
+    dataset_size=3844,
+    recon_weight=20,
+    kld_weight_max=0.02,
+    kld_weight_min=0.002,
+    kld_start_epoch=5000,
+    kld_warmup_epochs=10000,
+    tc_weight=6,
     onpix_weight=1,
-    lr_vae=0.03,
-    lr_decay_vae=0.99,
-    lr_d=1e-4,
-    lr_decay_d=0.99,
-    plot_interval=1000,
+    lr_vae=1e-2,
+    lr_decay_vae=0.9999,
+    lr_d=1e-2,
+    lr_decay_d=0.9999,
+    plot_interval=10,
 )
 
 # %%
 # load model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-ckpt_path = '../../ckpt/white_squares_fvae_opt/factorvae-opt-v3/factorvae-opt-v3_last_epoch=258706.ckpt'
+ckpt_path = '../../ckpt/white_squares_fvae_opt/with_falloff-v12/with_falloff-v12_epoch=4807-val_loss=0.0000.ckpt'
 ckpt = torch.load(ckpt_path, map_location=device)
 model = PlFactorVAE(args).to(device)
 model.load_state_dict(ckpt['state_dict'])
@@ -179,7 +181,7 @@ for y_idx, y_step in enumerate(y_steps):
 plt.subplots_adjust(wspace=0.1, hspace=0.1)
 # reduce the overall margins
 plt.tight_layout()
-plt.savefig("traverse_latent_space.png")
+plt.savefig("traverse_latent_space_64x2.png")
 plt.show()
 
 
