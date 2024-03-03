@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import cv2
 import platform
+from .tensor import scale
 
 
 def view(matrix: np.ndarray, scale: float = 1.0, text: str = None, swap_rb: bool = True) -> None:
@@ -48,7 +49,7 @@ def stretch_contrast(
     out_min: int = None,
     out_max: int = None,
     clip: bool = True,
-    ) -> np.ndarray:
+) -> np.ndarray:
     """
     Implements the stretch contrast algorithm, a wide-spread method of normalization. The input and output ranges
     of the mapping can optionally be specified using `in_min` and `in_max` for the input and `out_min` and `out_max`
@@ -99,11 +100,11 @@ def stretch_contrast(
 
 
 def square_over_bg(
-        x: int, 
-        y: int, 
-        img_size: int=512, 
-        square_size: int=50,
-    ) -> torch.Tensor:
+    x: int,
+    y: int,
+    img_size: int = 512,
+    square_size: int = 50,
+) -> torch.Tensor:
     """
     Create a binary image of a square over a black background.
 
@@ -122,3 +123,40 @@ def square_over_bg(
     img[y:y + square_size, x:x + square_size] = 1
 
     return img
+
+
+def square_over_bg_falloff(
+    x: int,
+    y: int,
+    img_size: int = 64,
+    square_size: int = 2,
+    falloff_mult: int = 0.1
+) -> torch.Tensor:
+    """
+    Create a binary image of a square over a black background with a falloff.
+
+    Args:
+        x (int): The x coordinate of the top-left corner of the square.
+        y (int): The y coordinate of the top-left corner of the square.
+        img_size (int, optional): The size of each side of the image. Defaults to 512.
+        square_size (int, optional): The size of each side of the square. Defaults to 50.
+        falloff_mult (int, optional): The falloff multiplier. Defaults to 0.5.
+
+    Returns:
+        torch.Tensor: _description_
+    """
+    # create a black image
+    img = torch.zeros((img_size, img_size))
+    # set the square to white
+    img[y:y + square_size, x:x + square_size] = 1
+    # create falloff
+    falloff = torch.zeros((img_size, img_size))
+    _x, _y = x + square_size / 2, y + square_size / 2
+    i, j = torch.meshgrid(torch.arange(img_size), torch.arange(img_size))
+    v_to_square = torch.stack(
+        [i, j]) - torch.tensor([_y, _x], dtype=torch.float32).view(2, 1, 1)
+    v_length = torch.norm(v_to_square, dim=0)
+    falloff = 1 - torch.clip(scale(v_length, 0, img_size,
+                             0, img_size, exp=falloff_mult) / img_size, 0, 1)
+
+    return torch.clip(img + falloff, 0, 1)

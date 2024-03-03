@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-from .utils.matrix import square_over_bg
+from .utils.matrix import square_over_bg, square_over_bg_falloff
 from .utils.dsp import midi2frequency, db2amp
 from .models.ddsp import Sinewave
 from torchaudio.transforms import MelSpectrogram
@@ -45,7 +45,8 @@ class White_Square_dataset(Dataset):
             csv_path="white_squares_xy.csv",
             img_size=512,
             square_size=50,
-            flag="train") -> None:
+            flag="train",
+            all_in_memory=True) -> None:
         super().__init__()
 
         # parse inputs
@@ -59,6 +60,7 @@ class White_Square_dataset(Dataset):
         self.flag = flag
 
         # read data
+        self.all_in_memory = all_in_memory
         self.__read_data__()
 
     def __read_data__(self):
@@ -67,18 +69,22 @@ class White_Square_dataset(Dataset):
         # filter for the set we want (train/val)
         if self.flag != 'all':
             self.df = self.df[self.df.dataset == self.flag]
+        if self.all_in_memory:
+            self.render_all_to_memory()
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
+        if self.all_in_memory:
+            return self.all_tensors[idx], self.all_tensors[torch.randint(0, len(self.df), (1,))][0]
         # get the row
         row = self.df.iloc[idx]
         # get the x and y coordinates
         x = row.x
         y = row.y
         # create the image
-        img = square_over_bg(x, y, self.img_size, self.square_size)
+        img = square_over_bg_falloff(x, y, self.img_size, self.square_size)
         # add a channel dimension
         img = img.unsqueeze(0)
 
@@ -94,6 +100,22 @@ class White_Square_dataset(Dataset):
 
         # return the images
         return img, img2
+
+    def render_all_to_memory(self):
+        self.all_tensors = torch.zeros(
+            len(self.df), 1, self.img_size, self.img_size)
+        for idx in range(len(self.df)):
+            # get the row
+            row = self.df.iloc[idx]
+            # get the x and y coordinates
+            x = row.x
+            y = row.y
+            # create the image
+            img = square_over_bg_falloff(x, y, self.img_size, self.square_size)
+            # add a channel dimension
+            img = img.unsqueeze(0)
+            self.all_tensors[idx] = img[0]
+        print("All tensors rendered to memory")
 
 
 class Sinewave_dataset(Dataset):
