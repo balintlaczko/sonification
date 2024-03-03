@@ -28,7 +28,7 @@ from lightning.pytorch import LightningModule
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch import Trainer
-from sonification.utils.tensor import permute_dims
+from sonification.utils.tensor import permute_dims, scale
 from sonification.models.loss import kld_loss, recon_loss, MMDloss
 import torch.nn.functional as F
 from sonification.models.layers import LinearDiscriminator
@@ -219,3 +219,121 @@ fig, ax = plt.subplots()
 cax = ax.matshow(recon_np, interpolation='nearest', cmap='viridis')
 fig.colorbar(cax)
 plt.show()
+
+# %%
+
+
+def square_over_bg(
+    x: int,
+    y: int,
+    img_size: int = 512,
+    square_size: int = 50,
+) -> torch.Tensor:
+    """
+    Create a binary image of a square over a black background.
+
+    Args:
+        x (int): The x coordinate of the top-left corner of the square.
+        y (int): The y coordinate of the top-left corner of the square.
+        img_size (int, optional): The size of each side of the image. Defaults to 512.
+        square_size (int, optional): The size of each side of the square. Defaults to 50.
+
+    Returns:
+        torch.Tensor: _description_
+    """
+    # create a black image
+    img = torch.zeros((img_size, img_size))
+    # set the square to white
+    img[y:y + square_size, x:x + square_size] = 1
+
+    return img
+# %%
+# square over bg with falloff
+
+
+def square_over_bg_falloff(
+    x: int,
+    y: int,
+    img_size: int = 64,
+    square_size: int = 2,
+    falloff_mult: int = 0.5
+) -> torch.Tensor:
+    """
+    Create a binary image of a square over a black background with a falloff.
+
+    Args:
+        x (int): The x coordinate of the top-left corner of the square.
+        y (int): The y coordinate of the top-left corner of the square.
+        img_size (int, optional): The size of each side of the image. Defaults to 512.
+        square_size (int, optional): The size of each side of the square. Defaults to 50.
+        falloff_mult (int, optional): The falloff multiplier. Defaults to 0.5.
+
+    Returns:
+        torch.Tensor: _description_
+    """
+    # create a black image
+    img = torch.zeros((img_size, img_size))
+    # set the square to white
+    img[y:y + square_size, x:x + square_size] = 1
+    # create falloff
+    falloff = torch.zeros((img_size, img_size))
+    for i in range(img_size):
+        for j in range(img_size):
+            _x, _y = x + square_size / 2, y + square_size / 2
+            v_to_square = torch.tensor(
+                [i, j]) - torch.tensor([_y, _x], dtype=torch.float32)
+            v_length = torch.norm(v_to_square)
+            falloff[i, j] = 1 - torch.clip(scale(v_length, 0, img_size,
+                                           0, img_size, exp=falloff_mult) / img_size, 0, 1)
+
+    return torch.clip(img + falloff, 0, 1)
+
+# %%
+
+
+def square_over_bg_falloff(
+    x: int,
+    y: int,
+    img_size: int = 64,
+    square_size: int = 2,
+    falloff_mult: int = 0.5
+) -> torch.Tensor:
+    """
+    Create a binary image of a square over a black background with a falloff.
+
+    Args:
+        x (int): The x coordinate of the top-left corner of the square.
+        y (int): The y coordinate of the top-left corner of the square.
+        img_size (int, optional): The size of each side of the image. Defaults to 512.
+        square_size (int, optional): The size of each side of the square. Defaults to 50.
+        falloff_mult (int, optional): The falloff multiplier. Defaults to 0.5.
+
+    Returns:
+        torch.Tensor: _description_
+    """
+    # create a black image
+    img = torch.zeros((img_size, img_size))
+    # set the square to white
+    img[y:y + square_size, x:x + square_size] = 1
+    # create falloff
+    falloff = torch.zeros((img_size, img_size))
+    _x, _y = x + square_size / 2, y + square_size / 2
+    i, j = torch.meshgrid(torch.arange(img_size), torch.arange(img_size))
+    v_to_square = torch.stack(
+        [i, j]) - torch.tensor([_y, _x], dtype=torch.float32).view(2, 1, 1)
+    v_length = torch.norm(v_to_square, dim=0)
+    falloff = 1 - torch.clip(scale(v_length, 0, img_size,
+                             0, img_size, exp=falloff_mult) / img_size, 0, 1)
+
+    return torch.clip(img + falloff, 0, 1)
+
+
+# %%
+# plot it
+img = square_over_bg_falloff(30, 40, 64, 8)
+img_np = img.numpy()
+fig, ax = plt.subplots()
+cax = ax.matshow(img_np, interpolation='nearest', cmap='viridis')
+fig.colorbar(cax)
+plt.show()
+# %%
