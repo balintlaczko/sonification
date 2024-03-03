@@ -37,25 +37,25 @@ def main():
                         help='learning rate')
     parser.add_argument('--lr_decay', type=float, default=0.999)
     parser.add_argument('--locality_weight', type=float, default=1)
-    parser.add_argument('--cycle_consistency_weight', type=float, default=20)
+    parser.add_argument('--cycle_consistency_weight', type=float, default=4)
     parser.add_argument('--cycle_consistency_start', type=int,
                         default=300, help='cycle consistency start epoch')
     parser.add_argument('--cycle_consistency_warmup_epochs',
-                        type=int, default=1000)
+                        type=int, default=700)
 
     # image model
     parser.add_argument('--img_model_ckpt_path', type=str,
-                        default='./ckpt/white_squares_fvae_opt/factorvae-opt-v3/factorvae-opt-v3_last_epoch=258706.ckpt', help='image model checkpoint path')
+                        default='./ckpt/white_squares_fvae_opt/with_falloff-v12/with_falloff-v12_epoch=4807-val_loss=0.0000.ckpt', help='image model checkpoint path')
 
     # audio model
-    parser.add_argument('--audio_model_ckpt_path', type=str,
-                        default='./ckpt/sinewave_fvae-opt/opt-v27/opt-v27_last_epoch=10405.ckpt', help='sound model checkpoint path')
+    parser.add_argument('--audio_model_ckpt_path', type=str,  # v27 is the previous best
+                        default='./ckpt/sinewave_fvae-opt/opt-v41/opt-v41_last_epoch=50001.ckpt', help='sound model checkpoint path')
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/mapper', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mapper-clean-v1', help='checkpoint name')
+                        default='mapper-64x2-v5', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument('--logdir', type=str,
@@ -63,7 +63,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=10)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='no bbox, no target matching, and none of the avstyle stuff',
+    parser.add_argument('--comment', type=str, default='double cycle consistency weight, shorter ramp',
                         help='add a comment if needed')
 
     mapper_args = parser.parse_args()
@@ -80,28 +80,29 @@ def main():
         # root path
         root_path='./experiments/lsm_paper/',
         # dataset
-        csv_path='white_squares_xy_16_4.csv',
-        img_size=16,
-        square_size=4,
+        csv_path='white_squares_xy_64_2.csv',
+        img_size=64,
+        square_size=2,
         # model
         in_channels=1,
         latent_size=2,
-        layers_channels=[512, 256, 1024],
+        layers_channels=[64, 128, 256, 512],
         d_hidden_size=512,
         d_num_layers=5,
         # training
-        dataset_size=144,
-        mmd_prior_distribution="gaussian",
-        kld_weight=0.02,
-        mmd_weight=0.02,
-        tc_weight=2,
-        l1_weight=0,
+        dataset_size=3844,
+        recon_weight=20,
+        kld_weight_max=0.02,
+        kld_weight_min=0.002,
+        kld_start_epoch=5000,
+        kld_warmup_epochs=10000,
+        tc_weight=6,
         onpix_weight=1,
-        lr_vae=0.03,
-        lr_decay_vae=0.99,
-        lr_d=1e-4,
-        lr_decay_d=0.99,
-        plot_interval=1000,
+        lr_vae=1e-2,
+        lr_decay_vae=0.9999,
+        lr_d=1e-2,
+        lr_decay_d=0.9999,
+        plot_interval=10,
     )
 
     ckpt_path = mapper_args.img_model_ckpt_path
@@ -120,25 +121,28 @@ def main():
         # model
         in_channels=1,
         latent_size=2,
-        layers_channels=[64, 128, 256, 512],
+        layers_channels=[64, 128, 256, 512, 1024],
         d_hidden_size=512,
         d_num_layers=5,
         # training
-        recon_weight=200,
-        kld_weight=0.1,
-        kld_start=0,
+        recon_weight=1,
+        target_recon_loss=1e-3,
+        dynamic_kld=1,
+        kld_weight_max=0.01,
+        kld_weight_min=0.001,
+        kld_start_epoch=0,
         kld_warmup_epochs=1,
-        tc_weight=4,
+        tc_weight=6,
         tc_start=0,
         tc_warmup_epochs=1,
         l1_weight=0.0,
-        lr_d=0.01,
-        lr_decay_d=0.999,
-        lr_decay_vae=0.999,
-        lr_vae=0.01,
+        lr_d=1e-2,
+        lr_decay_d=0.9999,
+        lr_decay_vae=0.9999,
+        lr_vae=1e-2,
         # checkpoint & logging
         ckpt_path='./ckpt/sinewave_fvae-opt',
-        ckpt_name='opt-v33',
+        ckpt_name='opt-v41',
         logdir='./logs/sinewave_fvae-opt',
         plot_interval=1,
     )
