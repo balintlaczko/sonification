@@ -10,3 +10,4 @@ datasets/
 *.csv
 logs/
 experiments/lsm_paper/MNIST/
+MNIST/
