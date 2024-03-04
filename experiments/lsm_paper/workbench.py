@@ -1,5 +1,8 @@
 # %%
 # imports
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from torchvision.datasets import MNIST
 from pythonosc import udp_client
 from sonification.utils.matrix import square_over_bg
 from pythonosc import osc_server
@@ -33,7 +36,7 @@ from sonification.models.loss import kld_loss, recon_loss, MMDloss
 import torch.nn.functional as F
 from sonification.models.layers import LinearDiscriminator
 from sonification.datasets import Sinewave_dataset, White_Square_dataset
-from sonification.models.models import ConvVAE1D, PlFactorVAE1D, PlFactorVAE
+from sonification.models.models import ConvVAE, ConvVAE1D, PlFactorVAE1D, PlFactorVAE
 from sklearn.neighbors import KDTree
 
 # %%
@@ -220,120 +223,358 @@ cax = ax.matshow(recon_np, interpolation='nearest', cmap='viridis')
 fig.colorbar(cax)
 plt.show()
 
-# %%
-
-
-def square_over_bg(
-    x: int,
-    y: int,
-    img_size: int = 512,
-    square_size: int = 50,
-) -> torch.Tensor:
-    """
-    Create a binary image of a square over a black background.
-
-    Args:
-        x (int): The x coordinate of the top-left corner of the square.
-        y (int): The y coordinate of the top-left corner of the square.
-        img_size (int, optional): The size of each side of the image. Defaults to 512.
-        square_size (int, optional): The size of each side of the square. Defaults to 50.
-
-    Returns:
-        torch.Tensor: _description_
-    """
-    # create a black image
-    img = torch.zeros((img_size, img_size))
-    # set the square to white
-    img[y:y + square_size, x:x + square_size] = 1
-
-    return img
-# %%
-# square over bg with falloff
-
-
-def square_over_bg_falloff(
-    x: int,
-    y: int,
-    img_size: int = 64,
-    square_size: int = 2,
-    falloff_mult: int = 0.5
-) -> torch.Tensor:
-    """
-    Create a binary image of a square over a black background with a falloff.
-
-    Args:
-        x (int): The x coordinate of the top-left corner of the square.
-        y (int): The y coordinate of the top-left corner of the square.
-        img_size (int, optional): The size of each side of the image. Defaults to 512.
-        square_size (int, optional): The size of each side of the square. Defaults to 50.
-        falloff_mult (int, optional): The falloff multiplier. Defaults to 0.5.
-
-    Returns:
-        torch.Tensor: _description_
-    """
-    # create a black image
-    img = torch.zeros((img_size, img_size))
-    # set the square to white
-    img[y:y + square_size, x:x + square_size] = 1
-    # create falloff
-    falloff = torch.zeros((img_size, img_size))
-    for i in range(img_size):
-        for j in range(img_size):
-            _x, _y = x + square_size / 2, y + square_size / 2
-            v_to_square = torch.tensor(
-                [i, j]) - torch.tensor([_y, _x], dtype=torch.float32)
-            v_length = torch.norm(v_to_square)
-            falloff[i, j] = 1 - torch.clip(scale(v_length, 0, img_size,
-                                           0, img_size, exp=falloff_mult) / img_size, 0, 1)
-
-    return torch.clip(img + falloff, 0, 1)
 
 # %%
-
-
-def square_over_bg_falloff(
-    x: int,
-    y: int,
-    img_size: int = 64,
-    square_size: int = 2,
-    falloff_mult: int = 0.5
-) -> torch.Tensor:
-    """
-    Create a binary image of a square over a black background with a falloff.
-
-    Args:
-        x (int): The x coordinate of the top-left corner of the square.
-        y (int): The y coordinate of the top-left corner of the square.
-        img_size (int, optional): The size of each side of the image. Defaults to 512.
-        square_size (int, optional): The size of each side of the square. Defaults to 50.
-        falloff_mult (int, optional): The falloff multiplier. Defaults to 0.5.
-
-    Returns:
-        torch.Tensor: _description_
-    """
-    # create a black image
-    img = torch.zeros((img_size, img_size))
-    # set the square to white
-    img[y:y + square_size, x:x + square_size] = 1
-    # create falloff
-    falloff = torch.zeros((img_size, img_size))
-    _x, _y = x + square_size / 2, y + square_size / 2
-    i, j = torch.meshgrid(torch.arange(img_size), torch.arange(img_size))
-    v_to_square = torch.stack(
-        [i, j]) - torch.tensor([_y, _x], dtype=torch.float32).view(2, 1, 1)
-    v_length = torch.norm(v_to_square, dim=0)
-    falloff = 1 - torch.clip(scale(v_length, 0, img_size,
-                             0, img_size, exp=falloff_mult) / img_size, 0, 1)
-
-    return torch.clip(img + falloff, 0, 1)
-
+# create MNIST dataset
+# create a transform to pad the images to 32x32
+pad = transforms.Pad(padding=2)
+mnist_train = MNIST(root="./", train=True, transform=transforms.Compose(
+    [transforms.ToTensor(), pad]), download=True)
+mnist_val = MNIST(root="./", train=False, transform=transforms.Compose(
+    [transforms.ToTensor(), pad]), download=True)
 
 # %%
-# plot it
-img = square_over_bg_falloff(30, 40, 64, 8)
-img_np = img.numpy()
+# create dataloaders
+batch_size = 128
+train_loader = DataLoader(
+    mnist_train, batch_size=batch_size, shuffle=True, drop_last=True)
+val_loader = DataLoader(mnist_val, batch_size=batch_size,
+                        shuffle=False, drop_last=False)
+
+# %%
+# get a batch of data
+x, y = next(iter(train_loader))
+x.shape, y.shape
+
+# %%
+# plot a batch of MNIST images
+x_np = x.squeeze(1)[1].numpy()
+print(x_np.shape)
 fig, ax = plt.subplots()
-cax = ax.matshow(img_np, interpolation='nearest', cmap='viridis')
+cax = ax.matshow(x_np, interpolation='nearest', cmap='gray')
 fig.colorbar(cax)
 plt.show()
+
+# %%
+# create a VAE model
+conv_vae = ConvVAE(
+    in_channels=1, latent_size=2, layers_channels=[16, 32, 64, 128], input_size=32)
+conv_vae.eval()
+
+# %%
+# test that shapes are correct
+test_input = torch.rand(42, 1, 32, 32)
+print(test_input.shape)
+recon, mean, logvar, z = conv_vae(test_input)
+recon.shape, mean.shape, logvar.shape, z.shape
+
+# %%
+# plot reconstructions
+recon_np = recon.detach().squeeze(1).numpy()
+print(recon_np.shape)
+fig, ax = plt.subplots()
+cax = ax.matshow(recon_np[0], interpolation='nearest', cmap='gray')
+fig.colorbar(cax)
+plt.show()
+
+# %%
+# create a VAE model with pl
+
+
+class PlVAE(LightningModule):
+    def __init__(self, args):
+        super(PlVAE, self).__init__()
+        # Important: This property activates manual optimization.
+        self.automatic_optimization = False
+        # self.save_hyperparameters()
+
+        # data params
+        self.in_channels = args.in_channels
+        self.input_size = args.img_size
+        self.latent_size = args.latent_size
+        self.layers_channels = args.layers_channels
+
+        # losses
+        self.mse = nn.MSELoss()
+        self.kld = kld_loss
+        self.recon_weight = args.recon_weight
+        self.kld_weight_max = args.kld_weight_max
+        self.kld_weight_min = args.kld_weight_min
+        self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        self.kld_start_epoch = args.kld_start_epoch
+        self.kld_warmup_epochs = args.kld_warmup_epochs
+
+        # learning rates
+        self.lr_vae = args.lr_vae
+        self.lr_decay_vae = args.lr_decay_vae
+
+        # logging
+        self.plot_interval = args.plot_interval
+        self.args = args
+
+        # models
+        self.VAE = ConvVAE(self.in_channels, self.latent_size,
+                           self.layers_channels, self.input_size)
+
+    def forward(self, x):
+        return self.VAE(x)
+
+    def encode(self, x):
+        mean, logvar = self.VAE.encode(x)
+        return self.VAE.reparameterize(mean, logvar)
+
+    def decode(self, z):
+        return self.VAE.decoder(z)
+
+    def training_step(self, batch, batch_idx):
+        self.VAE.train()
+        # get the optimizers and schedulers
+        vae_optimizer = self.optimizers()
+        vae_scheduler = self.lr_schedulers()
+
+        # get the batch
+        x_1, x_2 = batch
+        batch_size = x_1.shape[0]
+        epoch_idx = self.trainer.current_epoch
+
+        # VAE forward pass
+        x_recon, mean, logvar, z = self.VAE(x_1)
+
+        # VAE reconstruction loss
+        vae_recon_loss = self.mse(x_recon, x_1)
+        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
+
+        # VAE KLD loss
+        if self.args.dynamic_kld > 0:
+            kld_scale = self.kld_weight_dynamic
+        else:
+            kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
+                min(1.0, (epoch_idx - self.kld_start_epoch) /
+                    self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
+        kld_loss = self.kld(mean, logvar)
+        scaled_kld_loss = kld_loss * kld_scale
+
+        # VAE loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss
+
+        # VAE backward pass
+        vae_optimizer.zero_grad()
+        self.manual_backward(vae_loss)
+        self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
+                            gradient_clip_algorithm="norm")
+
+        # Optimizer step
+        vae_optimizer.step()
+
+        # LR scheduler step
+        vae_scheduler.step()
+
+        # log the losses
+        self.last_recon_loss = vae_recon_loss
+        self.log_dict({
+            "vae_loss": vae_loss,
+            "vae_recon_loss": vae_recon_loss,
+            "vae_kld_loss": kld_loss,
+        })
+        if self.args.dynamic_kld > 0:
+            self.log_dict({"kld_scale": kld_scale})
+
+    def validation_step(self, batch, batch_idx):
+        self.VAE.eval()
+
+        # get the batch
+        x_1, x_2 = batch
+        batch_size = x_1.shape[0]
+
+        # VAE forward pass
+        x_recon, mean, logvar, z = self.VAE(x_1)
+
+        # VAE reconstruction loss
+        vae_recon_loss = self.mse(x_recon, x_1)
+
+        # VAE KLD loss
+        kld_loss = self.kld(mean, logvar)
+
+        # VAE loss
+        vae_loss = vae_recon_loss + kld_loss
+
+        # log the losses
+        self.last_recon_loss = vae_recon_loss
+        self.log_dict({
+            "val_vae_loss": vae_loss,
+            "val_vae_recon_loss": vae_recon_loss,
+            "val_vae_kld_loss": kld_loss,
+        })
+
+    def on_validation_epoch_end(self) -> None:
+        self.VAE.eval()
+        # get the epoch number from trainer
+        epoch = self.trainer.current_epoch
+
+        if self.args.dynamic_kld > 0:
+            if self.last_recon_loss < self.args.target_recon_loss:
+                self.kld_weight_dynamic += 0.0001
+
+        if epoch % self.plot_interval != 0 and epoch != 0:
+            return
+
+        self.save_recon_plot()
+        self.save_latent_space_plot()
+
+    def save_recon_plot(self, num_recons=4):
+        """Save a figure of N reconstructions"""
+        fig, ax = plt.subplots(2, num_recons, figsize=(20, 10))
+        # get the length of the training dataset
+        dataset = self.trainer.val_dataloaders.dataset
+        for i in range(num_recons):
+            # get a random index
+            idx = torch.randint(0, len(dataset), (1,)).item()
+            x, _ = dataset[idx]
+            x_in = x.unsqueeze(0).to(self.device)
+            x_recon, mean, logvar, z = self.VAE(x_in)
+            # x_recon, z = self.VAE(x_in)
+            x_recon = x_recon[0, 0, ...].detach().cpu().numpy()
+            # plot ground truth image
+            ax[0, i].imshow(x[0, ...], cmap="gray")
+            ax[0, i].set_title(f"GT_{idx}")
+            # plot reconstruction
+            ax[1, i].imshow(x_recon, cmap="gray")
+            ax[1, i].set_title(f"Recon_{idx}")
+        # save figure to checkpoint folder/recons
+        save_dir = os.path.join(self.args.ckpt_path,
+                                self.args.ckpt_name, "recons")
+        os.makedirs(save_dir, exist_ok=True)
+        fig_name = f"recons_{str(self.trainer.current_epoch).zfill(5)}.png"
+        plt.savefig(os.path.join(save_dir, fig_name))
+        plt.close(fig)
+
+    def save_latent_space_plot(self, batch_size=128):
+        """Save a figure of the latent space"""
+        # get the length of the training dataset
+        dataset = self.trainer.val_dataloaders.dataset
+        loader = DataLoader(dataset, batch_size=batch_size,
+                            shuffle=False, drop_last=False)
+        z_all = torch.zeros(
+            len(dataset), self.args.latent_size).to(self.device)
+        for batch_idx, data in enumerate(loader):
+            x, y = data
+            x_recon, mean, logvar, z = self.VAE(x.to(self.device))
+            z = z.detach()
+            z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
+        z_all = z_all.cpu().numpy()
+        # create the figure
+        fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+        ax.scatter(z_all[:, 0], z_all[:, 1])
+        ax.set_title(
+            f"Latent space at epoch {self.trainer.current_epoch}")
+        # save figure to checkpoint folder/latent
+        save_dir = os.path.join(self.args.ckpt_path,
+                                self.args.ckpt_name, "latent")
+        os.makedirs(save_dir, exist_ok=True)
+        fig_name = f"latent_{str(self.trainer.current_epoch).zfill(5)}.png"
+        plt.savefig(os.path.join(save_dir, fig_name))
+        plt.close(fig)
+
+    def configure_optimizers(self):
+        vae_optimizer = torch.optim.Adam(
+            self.VAE.parameters(), lr=self.lr_vae, betas=(0.9, 0.999))
+        vae_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            vae_optimizer, gamma=self.lr_decay_vae)
+        return [vae_optimizer], [vae_scheduler]
+
+# %%
+# create Args class
+
+
+class Args:
+    def __init__(self):
+        self.in_channels = 1
+        self.img_size = 32
+        self.latent_size = 2
+        self.layers_channels = [128, 256, 512, 1024]
+        self.batch_size = 2048
+        self.lr_vae = 1e-3
+        self.lr_decay_vae = 0.9999
+        self.recon_weight = 1.0
+        self.target_recon_loss = 0.01
+        self.dynamic_kld = 1
+        self.kld_weight_max = 1.0
+        self.kld_weight_min = 0.001
+        self.kld_start_epoch = 0
+        self.kld_warmup_epochs = 1
+        self.plot_interval = 1
+        self.ckpt_path = "./ckpt"
+        self.ckpt_name = "mnist_test-v2"
+        self.logdir = "./logs"
+        self.train_epochs = 100000
+        self.resume_ckpt_path = None
+
+
+args = Args()
+
+# %%
+# create the model
+model = PlVAE(args)
+
+# %%
+# checkpoint callbacks
+checkpoint_path = os.path.join(
+    args.ckpt_path, args.ckpt_name)
+best_checkpoint_callback = ModelCheckpoint(
+    monitor="val_vae_loss",
+    dirpath=checkpoint_path,
+    filename=args.ckpt_name + "_{epoch:02d}-{val_vae_loss:.4f}",
+    save_top_k=1,
+    mode="min",
+)
+last_checkpoint_callback = ModelCheckpoint(
+    monitor="epoch",
+    dirpath=checkpoint_path,
+    filename=args.ckpt_name + "_last_{epoch:02d}",
+    save_top_k=1,
+    mode="max",
+)
+
+# logger callbacks
+tensorboard_logger = TensorBoardLogger(
+    save_dir=args.logdir, name=args.ckpt_name)
+
+# %%
+# create Trainer
+
+trainer = Trainer(
+    max_epochs=args.train_epochs,
+    enable_checkpointing=True,
+    callbacks=[best_checkpoint_callback, last_checkpoint_callback],
+    logger=tensorboard_logger,
+)
+
+# save hyperparameters
+hyperparams = dict(
+    in_channels=args.in_channels,
+    img_size=args.img_size,
+    latent_size=args.latent_size,
+    layers_channels=args.layers_channels,
+    batch_size=args.batch_size,
+    lr_vae=args.lr_vae,
+    lr_decay_vae=args.lr_decay_vae,
+    recon_weight=args.recon_weight,
+    target_recon_loss=args.target_recon_loss,
+    dynamic_kld=args.dynamic_kld,
+    kld_weight_max=args.kld_weight_max,
+    kld_weight_min=args.kld_weight_min,
+    kld_start_epoch=args.kld_start_epoch,
+    kld_warmup_epochs=args.kld_warmup_epochs,
+    comment="test"
+)
+
+trainer.logger.log_hyperparams(hyperparams)
+
+# %%
+
+# train the model
+torch.set_float32_matmul_precision('high')
+trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader,
+            ckpt_path=args.resume_ckpt_path)
+
 # %%
