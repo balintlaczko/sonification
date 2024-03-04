@@ -40,13 +40,13 @@ def main():
                         default=0.9999)
     parser.add_argument('--recon_weight', type=float,
                         default=1, help='recon weight')
-    parser.add_argument('--target_recon_loss', type=float, default=0.01,
+    parser.add_argument('--target_recon_loss', type=float, default=0.02,
                         help='target recon loss to keep in case of dynamic kld')
     parser.add_argument('--dynamic_kld', type=int, default=1,
                         help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float,
                         default=0.01, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.01,
+    parser.add_argument('--kld_weight_min', type=float, default=0.001,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -61,7 +61,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/mnist_vae', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mnist-v3', help='checkpoint name')
+                        default='mnist-v4', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -69,7 +69,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=10)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='mnist vae test',
+    parser.add_argument('--comment', type=str, default='10x less kld to start with, higher target recon loss',
                         help='add a comment if needed')
 
     args = parser.parse_args()
