@@ -13,6 +13,8 @@ import os
 import matplotlib.gridspec as gridspec
 import matplotlib.colors as colors
 import numpy as np
+# import pca from sklearn
+from sklearn.decomposition import PCA
 
 
 class AE(nn.Module):
@@ -313,6 +315,10 @@ class PlVAE(LightningModule):
             z = z.detach()
             z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
         z_all = z_all.cpu().numpy()
+        # if latent space is more than 2D then use PCA to reduce to 2D
+        if self.args.latent_size > 2:
+            pca = PCA(n_components=2)
+            z_all = pca.fit_transform(z_all)
         # create the figure
         fig, ax = plt.subplots(1, 1, figsize=(20, 20))
         ax.scatter(z_all[:, 0], z_all[:, 1])

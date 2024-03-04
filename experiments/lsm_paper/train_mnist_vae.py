@@ -25,7 +25,7 @@ def main():
                         default=1, help='image color channels')
     parser.add_argument('--img_size', type=int, default=32, help='image size')
     parser.add_argument('--latent_size', type=int,
-                        default=2, help='latent size')
+                        default=32, help='latent size')
     parser.add_argument('--layers_channels', type=int, nargs='*', default=[128, 256, 512, 1024],
                         help='channels for the layers')
 
@@ -61,7 +61,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/mnist_vae', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mnist-v4', help='checkpoint name')
+                        default='mnist-v6', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -69,7 +69,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=10)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='10x less kld to start with, higher target recon loss',
+    parser.add_argument('--comment', type=str, default='try 32-D latent space',
                         help='add a comment if needed')
 
     args = parser.parse_args()
