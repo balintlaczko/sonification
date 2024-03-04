@@ -506,7 +506,6 @@ class PlFactorVAE1D(LightningModule):
 
         # VAE reconstruction loss
         vae_recon_loss = self.mse(x_recon, x_1)
-        # vae_recon_loss = self.bce(x_1, x_recon)
 
         # VAE KLD loss
         kld_loss = self.kld(mean, logvar)
