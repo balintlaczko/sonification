@@ -63,7 +63,7 @@ def main():
     parser.add_argument('--ckpt_name', type=str,
                         default='mnist-v8', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
-                        default='./ckpt/mnist_vae/mnist-v8_last_epoch=692.ckpt',)
+                        default='./ckpt/mnist_vae/mnist-v8/mnist-v8_last_epoch=692.ckpt',)
     parser.add_argument(
         '--logdir', type=str, default='./logs/mnist_vae', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=10)
