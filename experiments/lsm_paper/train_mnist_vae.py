@@ -46,7 +46,7 @@ def main():
                         help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float,
                         default=0.01, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.002,
+    parser.add_argument('--kld_weight_min', type=float, default=0.005,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -63,13 +63,13 @@ def main():
     parser.add_argument('--ckpt_name', type=str,
                         default='mnist-v8', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
-                        default='./ckpt/mnist_vae/mnist-v8/mnist-v8_last_epoch=692.ckpt',)
+                        default='./ckpt/mnist_vae/mnist-v8/mnist-v8_last_epoch=1020.ckpt',)
     parser.add_argument(
         '--logdir', type=str, default='./logs/mnist_vae', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=10)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='continue v8',
+    parser.add_argument('--comment', type=str, default='(v8 cont) halve kld again',
                         help='add a comment if needed')
 
     args = parser.parse_args()
