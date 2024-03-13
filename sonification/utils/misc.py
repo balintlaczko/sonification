@@ -133,3 +133,17 @@ def quickSort(array, low, high):
 
         # Recursive call on the right of pivot
         quickSort(array, pi + 1, high)
+
+
+def str2sec(time_string):
+    """
+    Converts a time code string into seconds.
+
+    Args:
+        time_string (str): The time code to convert. Eg. '01:33:42'.
+
+    Returns:
+        float: The time code converted to seconds.
+    """
+    elems = [float(elem) for elem in time_string.split(':')]
+    return elems[0]*3600 + elems[1]*60 + elems[2]

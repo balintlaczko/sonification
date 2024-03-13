@@ -11,3 +11,6 @@ datasets/
 logs/
 experiments/lsm_paper/MNIST/
 MNIST/
+experiments/params2feats_paper/checkpoints/
+experiments/params2feats_paper/embeddings/
+experiments/params2feats_paper/audio/
