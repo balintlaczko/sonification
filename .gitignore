@@ -8,6 +8,7 @@ datasets/
 .ipynb_checkpoints/
 *.egg-info/
 *.csv
+*.json
 logs/
 experiments/lsm_paper/MNIST/
 MNIST/
