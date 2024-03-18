@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from .utils.matrix import square_over_bg, square_over_bg_falloff
-from .utils.dsp import midi2frequency, db2amp
+from .utils.dsp import midi2frequency, db2amp, fm_synth_2
 from .models.ddsp import Sinewave
 from torchaudio.transforms import MelSpectrogram
 from torchaudio.functional import amplitude_to_DB
@@ -259,3 +259,22 @@ class Sinewave_dataset(Dataset):
                 self.all_tensors).unsqueeze(-1)  # (B, n_mels, C=1)
             self.scaler_fitted = True
             print("Scaler fit+transformed")
+
+
+class FmSynthDataset(Dataset):
+    def __init__(self, csv_path, sr=48000, dur=1):
+        self.df = pd.read_csv(csv_path)
+        self.sr = sr
+        self.dur = dur
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        f_carrier = np.array([row.freq])
+        harm_ratio = np.array([row.harm_ratio])
+        mod_idx = np.array([row.mod_index])
+        fm_synth = fm_synth_2(self.dur * self.sr, self.sr,
+                              f_carrier, harm_ratio, mod_idx)
+        return fm_synth, row.freq, row.harm_ratio, row.mod_index
