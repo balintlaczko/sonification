@@ -1,5 +1,6 @@
 # %%
 # imports
+import importlib
 from functools import partial
 from multiprocessing import Pool
 from tqdm import tqdm
@@ -261,50 +262,59 @@ for y in range(harm_ratio_steps):
     break
 
 # %%
+# reload timbral models package
+importlib.reload(timbral_models)
+
+# %%
 # iterate rows from the dataset, extract features, save them in a dataframe
-df_descriptors = pd.DataFrame()
 timbre_list = []
-for i in tqdm(range(len(df))):
+for i in tqdm(range(100)):
     y, freq, ratio, index = fm_synth_ds[i]
     # print(y.shape, freq, ratio, index)
     # timbre = timbral_models.timbral_extractor(y, fs=sr, verbose=False)
-    # timbral_hardness = timbral_models.timbral_hardness(y, fs=sr)
-    # timbral_depth = timbral_models.timbral_depth(y, fs=sr)
-    # timbral_brightness = timbral_models.timbral_brightness(y, fs=sr)
-    # timbral_roughness = timbral_models.timbral_roughness(y, fs=sr)
-    # timbral_warmth = timbral_models.timbral_warmth(y, fs=sr)
-    # timbral_sharpness = timbral_models.timbral_sharpness(y, fs=sr)
-    # timbral_booming = timbral_models.timbral_booming(y, fs=sr)
-    wfm = Waveform(y, sr, 0.0)
-    spectrum = SpectrumByFFT(wfm, 4096)
+    timbral_hardness = timbral_models.timbral_hardness(y, fs=sr)
+    timbral_depth = timbral_models.timbral_depth(y, fs=sr)
+    timbral_brightness = timbral_models.timbral_brightness(y, fs=sr)
+    timbral_roughness = timbral_models.timbral_roughness(y, fs=sr)
+    timbral_warmth = timbral_models.timbral_warmth(y, fs=sr)
+    timbral_sharpness = timbral_models.timbral_sharpness(y, fs=sr)
+    timbral_booming = timbral_models.timbral_booming(y, fs=sr)
+    # wfm = Waveform(y, sr, 0.0)
+    # spectrum = SpectrumByFFT(wfm, 4096)
     timbre = {
         "index": i,
         "freq": freq,
         "harm_ratio": ratio,
         "mod_index": index,
-        # "hardness": timbral_hardness,
-        # "depth": timbral_depth,
-        # "brightness": timbral_brightness,
-        # "roughness": timbral_roughness,
-        # "warmth": timbral_warmth,
-        # "sharpness": timbral_sharpness,
-        # "boominess": timbral_booming,
-        "spectral_centroid": spectrum.spectral_centroid,
-        "spectral_crest": spectrum.spectral_crest,
-        "spectral_decrease": spectrum.spectral_decrease,
-        "spectral_energy": spectrum.spectral_energy,
-        "spectral_flatness": spectrum.spectral_flatness,
-        "spectral_kurtosis": spectrum.spectral_kurtosis,
-        "spectral_roll_off": spectrum.spectral_roll_off,
-        "spectral_skewness": spectrum.spectral_skewness,
-        "spectral_slope": spectrum.spectral_slope,
-        "spectral_spread": spectrum.spectral_spread,
-        "inharmonicity": spectrum.inharmonicity
+        "hardness": timbral_hardness,
+        "depth": timbral_depth,
+        "brightness": timbral_brightness,
+        "roughness": timbral_roughness,
+        "warmth": timbral_warmth,
+        "sharpness": timbral_sharpness,
+        "boominess": timbral_booming,
+        # "spectral_centroid": spectrum.spectral_centroid,
+        # "spectral_crest": spectrum.spectral_crest,
+        # "spectral_decrease": spectrum.spectral_decrease,
+        # "spectral_energy": spectrum.spectral_energy,
+        # "spectral_flatness": spectrum.spectral_flatness,
+        # "spectral_kurtosis": spectrum.spectral_kurtosis,
+        # "spectral_roll_off": spectrum.spectral_roll_off,
+        # "spectral_skewness": spectrum.spectral_skewness,
+        # "spectral_slope": spectrum.spectral_slope,
+        # "spectral_spread": spectrum.spectral_spread,
+        # "inharmonicity": spectrum.inharmonicity
     }
     # print(timbre)
     # df_descriptors = pd.concat(
     #     [df_descriptors, pd.DataFrame(timbre, index=[i])], axis=0)
     timbre_list.append(timbre)
+
+# %%
+# create dataframe from list using the "index" key as index
+df_perceptual = pd.DataFrame(timbre_list)
+df_perceptual.set_index("index", inplace=True)
+df_perceptual.head()
 
 # df_descriptors.head()
 # df_descriptors.to_csv("fm_synth_descriptors.csv", index=True)
