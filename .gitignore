@@ -9,6 +9,7 @@ datasets/
 *.egg-info/
 *.csv
 *.json
+*.npy
 logs/
 experiments/lsm_paper/MNIST/
 MNIST/
