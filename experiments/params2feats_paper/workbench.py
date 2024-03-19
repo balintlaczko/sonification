@@ -1,5 +1,8 @@
 # %%
 # imports
+from sonification.utils.array import array2fluid_dataset
+from sklearn.preprocessing import MinMaxScaler, RobustScaler
+from sonification.utils.dsp import frequency2midi
 import importlib
 from functools import partial
 from multiprocessing import Pool
@@ -24,6 +27,7 @@ from scipy.io import wavfile as wav
 from matplotlib import pyplot as plt
 import pandas as pd
 from frechet_audio_distance import FrechetAudioDistance
+import json
 
 # %%
 # test generate some fm synth examples
@@ -356,4 +360,246 @@ transformed = pca.transform(embs1.T)
 print(transformed.shape)
 print(transformed.mean(axis=0))
 print(transformed.std(axis=0))
+
+# %%
+# read perceptual features from json
+with open("fm_synth_perceptual_features.json", "r") as f:
+    data = json.load(f)
+df_perceptual = pd.DataFrame(data)
+df_perceptual.set_index("index", inplace=True)
+# order by index
+df_perceptual.sort_index(inplace=True)
+# save as csv
+df_perceptual.to_csv("fm_synth_perceptual_features.csv", index=True)
+
+# %%
+# read spectral features from json
+with open("fm_synth_spectral_features.json", "r") as f:
+    data = json.load(f)
+df_spectral = pd.DataFrame(data)
+df_spectral.set_index("index", inplace=True)
+# order by index
+df_spectral.sort_index(inplace=True)
+# save as csv
+df_spectral.to_csv("fm_synth_spectral_features.csv", index=True)
+
+# %%
+# TODO:
+# - save .npy files for each parameter, containing the step-to-step diff of features
+# - save .npy files for each parameter, containing the step-to-step diff of embeddings (FAD)
+
+# %%
+# create a 2D scatter plot of the PCA-d synth parameters
+
+# read dataset
+df_params = pd.read_csv("fm_synth_params.csv", index_col=0)
+# get the freq column
+freq = df_params["freq"].values
+# translate to midi
+midi = frequency2midi(freq)
+# add pitch column
+df_params["pitch"] = midi
+# extract pitch, harm_ratio, mod_index
+df_params_3d = df_params[["pitch", "harm_ratio", "mod_index"]]
+
+# scaling
+scaler = MinMaxScaler()
+# fit scaler
+scaler.fit(df_params_3d)
+# transform
+df_params_3d = scaler.transform(df_params_3d)
+
+# create PCA
+pca = PCA(n_components=2, whiten=True, random_state=42)
+# fit PCA
+pca.fit(df_params_3d)
+# transform
+df_params_2d = pca.transform(df_params_3d)
+
+# get scaled x y z for colors
+x = df_params.x.values
+y = df_params.y.values
+z = df_params.z.values
+# scale to between 0 and color_max
+color_max = 0.9
+x = (x - x.min()) / (x.max() - x.min()) * color_max
+y = (y - y.min()) / (y.max() - y.min()) * color_max
+z = (z - z.min()) / (z.max() - z.min()) * color_max
+alpha = np.repeat(0.2, len(x))
+colors = np.stack((x, y, z, alpha), axis=-1)
+
+# create scatter plot with small dots and color by x, y, z as RGB
+plt.scatter(df_params_2d[:, 0], df_params_2d[:, 1], s=1, c=colors)
+plt.xlabel("PCA1")
+plt.ylabel("PCA2")
+plt.title(
+    f"PCA of fm synth parameters, explained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+plt.show()
+
+
+# %%
+# create a 2D scatter plot of the PCA-d perceptual features
+
+# read dataset
+df_perceptual = pd.read_csv("fm_synth_perceptual_features.csv", index_col=0)
+# extract perceptual features
+df_perceptual_7d = df_perceptual[[
+    "hardness", "depth", "brightness", "roughness", "warmth", "sharpness", "boominess"]]
+
+# replace inf values to the next highest in column
+df_perceptual_7d_filtered = df_perceptual_7d.replace([np.inf, -np.inf], np.nan)
+# get list of columns
+cols = df_perceptual_7d_filtered.columns
+# iterate through columns
+for col in cols:
+    # get the max value
+    max_val = df_perceptual_7d_filtered[col].max()
+    # replace nan values with max value
+    df_perceptual_7d_filtered[col] = df_perceptual_7d_filtered[col].fillna(
+        max_val)
+
+# clip all columns to between nth and (1-n)th percentile
+n = 0.05
+for col in df_perceptual_7d_filtered.columns:
+    # get 10th and 90th percentile
+    low = df_perceptual_7d_filtered[col].quantile(n)
+    high = df_perceptual_7d_filtered[col].quantile(1-n)
+    # clip
+    df_perceptual_7d_filtered.loc[:, col] = df_perceptual_7d_filtered[col].clip(
+        low, high)
+
+# scaling
+scaler = MinMaxScaler()
+# fit scaler
+scaler.fit(df_perceptual_7d_filtered)
+# transform
+df_perceptual_7d_filtered_scaled = scaler.transform(df_perceptual_7d_filtered)
+df_perceptual_7d_filtered_scaled = pd.DataFrame(
+    df_perceptual_7d_filtered_scaled, columns=cols)
+df_perceptual_7d_filtered_scaled.head()
+
+# create PCA
+pca = PCA(n_components=2, whiten=True, random_state=42)
+# fit PCA
+pca.fit(df_perceptual_7d_filtered_scaled)
+# transform
+df_perceptual_2d = pca.transform(df_perceptual_7d_filtered_scaled)
+# create scatter plot with small dots
+plt.scatter(df_perceptual_2d[:, 0], df_perceptual_2d[:, 1], s=1, c=colors)
+plt.xlabel("PCA1")
+plt.ylabel("PCA2")
+plt.title(
+    f"PCA of fm synth perceptual features, explained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+plt.show()
+
+
+# %%
+# create a 2D scatter plot of the PCA-d spectral features
+
+# read dataset
+df_spectral = pd.read_csv("fm_synth_spectral_features.csv", index_col=0)
+
+# extract spectral features
+df_spectral_11d = df_spectral[[
+    "spectral_centroid", "spectral_crest", "spectral_decrease", "spectral_energy", "spectral_flatness", "spectral_kurtosis", "spectral_roll_off", "spectral_skewness", "spectral_slope", "spectral_spread", "inharmonicity"]]
+
+# translate spectral_roll_off, spectral_centroid, spectral_spread to midi (making a linear scale out of an exponential one)
+for col in ["spectral_roll_off", "spectral_centroid", "spectral_spread"]:
+    # get the column
+    values = df_spectral_11d[col].values
+    # translate to midi
+    midi = frequency2midi(values)
+    # replace values
+    df_spectral_11d.loc[:, col] = midi
+
+# clip all columns to between nth and (1-n)th percentile
+n = 0.05
+for col in df_spectral_11d.columns:
+    # get 10th and 90th percentile
+    low = df_spectral_11d[col].quantile(n)
+    high = df_spectral_11d[col].quantile(1-n)
+    # clip
+    df_spectral_11d.loc[:, col] = df_spectral_11d[col].clip(low, high)
+
+# scaling
+scaler = MinMaxScaler()
+# fit scaler
+scaler.fit(df_spectral_11d)
+# transform
+df_spectral_11d_scaled = scaler.transform(df_spectral_11d)
+df_spectral_11d_scaled = pd.DataFrame(
+    df_spectral_11d_scaled, columns=df_spectral_11d.columns)
+df_spectral_11d_scaled.head()
+
+# create PCA
+pca = PCA(n_components=2, whiten=True, random_state=42)
+# fit PCA
+pca.fit(df_spectral_11d_scaled)
+# transform
+df_spectral_2d = pca.transform(df_spectral_11d_scaled)
+# create scatter plot with small dots
+plt.scatter(df_spectral_2d[:, 0], df_spectral_2d[:, 1], s=1, c=colors)
+plt.xlabel("PCA1")
+plt.ylabel("PCA2")
+plt.title(
+    f"PCA of fm synth spectral features, explained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+plt.show()
+
+
+# %%
+# combine df_spectral_11d_scaled and df_perceptual_7d_filtered_scaled
+df_combined = pd.concat(
+    [df_spectral_11d_scaled, df_perceptual_7d_filtered_scaled], axis=1)
+df_combined.head()
+
+# create PCA
+pca = PCA(n_components=2, whiten=True, random_state=42)
+# fit PCA
+pca.fit(df_combined)
+# transform
+df_combined_2d = pca.transform(df_combined)
+# create scatter plot with small dots
+plt.scatter(df_combined_2d[:, 0], df_combined_2d[:, 1], s=1, c=colors)
+plt.xlabel("PCA1")
+plt.ylabel("PCA2")
+plt.title(
+    f"PCA of fm synth spectral and perceptual features, explained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+plt.show()
+
+# %%
+# save all of the pca plots and the colors array into fluid datasets
+
+# save the colors array
+colors_dict = array2fluid_dataset(colors)
+
+# save the pca plots
+pca_params = array2fluid_dataset(df_params_2d)
+pca_perceptual = array2fluid_dataset(df_perceptual_2d)
+pca_spectral = array2fluid_dataset(df_spectral_2d)
+pca_combined = array2fluid_dataset(df_combined_2d)
+
+# save them to json
+with open("pca_params.json", "w") as f:
+    json.dump(pca_params, f)
+with open("pca_perceptual.json", "w") as f:
+    json.dump(pca_perceptual, f)
+with open("pca_spectral.json", "w") as f:
+    json.dump(pca_spectral, f)
+with open("pca_combined.json", "w") as f:
+    json.dump(pca_combined, f)
+with open("colors.json", "w") as f:
+    json.dump(colors_dict, f)
+
+
+# %%
+# export fm params as fluid dataset
+df_params_fm = df_params[["freq", "harm_ratio", "mod_index"]]
+# convert to numpy array
+df_params_fm = df_params_fm.values
+# save as fluid dataset
+df_params_fm_dict = array2fluid_dataset(df_params_fm)
+# save to json
+with open("fm_params.json", "w") as f:
+    json.dump(df_params_fm_dict, f)
+
 # %%
