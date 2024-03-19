@@ -79,7 +79,7 @@ df.head()
 
 # %%
 # save to disk
-df.to_csv("fm_synth_params.csv", index=True)
+# df.to_csv("fm_synth_params.csv", index=True)
 
 # %%
 # create a Dataset that reads the csv and generates the fm synth buffer
@@ -99,14 +99,14 @@ class FmSynthDataset(Dataset):
         f_carrier = np.array([row.freq])
         harm_ratio = np.array([row.harm_ratio])
         mod_idx = np.array([row.mod_index])
-        fm_synth = fm_synth_2(self.dur * self.sr, self.sr,
+        fm_synth = fm_synth_2(int(self.dur * self.sr), self.sr,
                               f_carrier, harm_ratio, mod_idx)
         return fm_synth, row.freq, row.harm_ratio, row.mod_index
 
 
 # %%
 # create the dataset
-fm_synth_ds = FmSynthDataset("fm_synth_params.csv", sr=sr, dur=dur)
+fm_synth_ds = FmSynthDataset("fm_synth_params.csv", sr=sr, dur=0.5)
 print(len(fm_synth_ds))
 
 # %%
@@ -324,7 +324,45 @@ df_perceptual.head()
 # df_descriptors.to_csv("fm_synth_descriptors.csv", index=True)
 
 # %%
+# create the dataset
+fm_synth_ds = FmSynthDataset("fm_synth_params.csv", sr=sr, dur=0.25)
+print(len(fm_synth_ds))
+test_fm = fm_synth_ds[0][0]
+print(test_fm.shape)
+test_embs = frechet.get_embeddings([test_fm], sr)
+print(test_embs.shape)
 
+# %%
+# render all synths
+all_y = np.zeros((len(fm_synth_ds), test_fm.shape[0]))
+for i in tqdm(range(len(fm_synth_ds))):
+    y, freq, ratio, index = fm_synth_ds[i]
+    all_y[i] = y
+
+# %%
+# iterate all_y in chunks of batch size and render embeddings
+all_embs = np.zeros((len(fm_synth_ds), test_embs.shape[0], test_embs.shape[1]))
+batch_size = 64
+for i in tqdm(range(0, len(fm_synth_ds), batch_size)):
+    synths = all_y[i:i+batch_size]
+    embs = frechet.get_embeddings(synths, sr)
+    # reshape
+    embs = embs.reshape((batch_size, -1, embs.shape[-1]))
+    all_embs[i:i+batch_size] = embs
+
+# %%
+# iterate all_y one by one and render embeddings
+all_embs = np.zeros((len(fm_synth_ds), test_embs.shape[0], test_embs.shape[1]))
+for i in tqdm(range(len(fm_synth_ds))):
+    synth = all_y[i]
+    embs = frechet.get_embeddings([synth], sr)
+    all_embs[i] = embs
+
+# %%
+# save all_embs to disk
+print(all_embs.shape)
+np.save("fm_synth_encodec_embeddings.npy", all_embs)
+print("Saved fm_synth_encodec_embeddings.npy")
 
 # %%
 embs1 = frechet.get_embeddings(synths[:1], sr)
@@ -565,6 +603,33 @@ plt.ylabel("PCA2")
 plt.title(
     f"PCA of fm synth spectral and perceptual features, explained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
 plt.show()
+
+
+# %%
+# create pca plot for embeddings
+# read embeddings
+embeddings = np.load("fm_synth_encodec_embeddings.npy")
+embeddings.shape
+
+# %%
+embeddings_2d = embeddings.reshape((embeddings.shape[0], -1))
+embeddings_2d.shape
+
+# %%
+# create PCA
+pca = PCA(n_components=2, whiten=True, random_state=42)
+# fit PCA
+pca.fit(embeddings_2d)
+# transform
+embeddings_2d_pca = pca.transform(embeddings_2d)
+# create scatter plot with small dots
+plt.scatter(embeddings_2d_pca[:, 0], embeddings_2d_pca[:, 1], s=1, c=colors)
+plt.xlabel("PCA1")
+plt.ylabel("PCA2")
+plt.title(
+    f"PCA of fm synth embeddings, explained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+plt.show()
+
 
 # %%
 # save all of the pca plots and the colors array into fluid datasets
