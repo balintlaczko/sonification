@@ -174,7 +174,7 @@ frechet = FrechetAudioDistance(
     ckpt_dir="./checkpoints/clap",
     model_name="clap",
     sample_rate=48000,
-    verbose=True
+    verbose=False
 )
 
 # %%
@@ -341,17 +341,17 @@ for i in tqdm(range(len(fm_synth_ds))):
 
 # %%
 # iterate all_y in chunks of batch size and render embeddings
-all_embs = np.zeros((len(fm_synth_ds), test_embs.shape[0], test_embs.shape[1]))
-batch_size = 64
-for i in tqdm(range(0, len(fm_synth_ds), batch_size)):
-    synths = all_y[i:i+batch_size]
-    embs = frechet.get_embeddings(synths, sr)
-    # reshape
-    embs = embs.reshape((batch_size, -1, embs.shape[-1]))
-    all_embs[i:i+batch_size] = embs
+# all_embs = np.zeros((len(fm_synth_ds), test_embs.shape[0], test_embs.shape[1]))
+# batch_size = 64
+# for i in tqdm(range(0, len(fm_synth_ds), batch_size)):
+#     synths = all_y[i:i+batch_size]
+#     embs = frechet.get_embeddings(synths, sr)
+#     # reshape
+#     embs = embs.reshape((batch_size, -1, embs.shape[-1]))
+#     all_embs[i:i+batch_size] = embs
 
 # %%
-# iterate all_y one by one and render embeddings
+# iterate all_y one by one and render embeddings - ENCODEC
 all_embs = np.zeros((len(fm_synth_ds), test_embs.shape[0], test_embs.shape[1]))
 for i in tqdm(range(len(fm_synth_ds))):
     synth = all_y[i]
@@ -359,10 +359,25 @@ for i in tqdm(range(len(fm_synth_ds))):
     all_embs[i] = embs
 
 # %%
-# save all_embs to disk
+# save all_embs to disk - ENCODEC
 print(all_embs.shape)
 np.save("fm_synth_encodec_embeddings.npy", all_embs)
 print("Saved fm_synth_encodec_embeddings.npy")
+
+# %%
+# iterate all_y one by one and render embeddings - CLAP
+all_embs = np.zeros((len(fm_synth_ds), test_embs.shape[-1]))
+for i in tqdm(range(len(fm_synth_ds))):
+    synth = all_y[i]
+    embs = frechet.get_embeddings([synth], sr)
+    all_embs[i] = embs
+
+# %%
+# save all_embs to disk - CLAP
+print(all_embs.shape)
+np.save("fm_synth_clap_embeddings.npy", all_embs)
+print("Saved fm_synth_clap_embeddings.npy")
+
 
 # %%
 embs1 = frechet.get_embeddings(synths[:1], sr)
@@ -667,4 +682,10 @@ df_params_fm_dict = array2fluid_dataset(df_params_fm)
 with open("fm_params.json", "w") as f:
     json.dump(df_params_fm_dict, f)
 
+# %%
+# save the pca embeddings
+pca_embeddings = array2fluid_dataset(embeddings_2d_pca)
+# save to json
+with open("pca_embeddings.json", "w") as f:
+    json.dump(pca_embeddings, f)
 # %%
