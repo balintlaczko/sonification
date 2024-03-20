@@ -325,6 +325,7 @@ df_perceptual.head()
 
 # %%
 # create the dataset
+sr = 48000
 fm_synth_ds = FmSynthDataset("fm_synth_params.csv", sr=sr, dur=0.25)
 print(len(fm_synth_ds))
 test_fm = fm_synth_ds[0][0]
