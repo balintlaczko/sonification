@@ -2,12 +2,10 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from .layers import *
+from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, LinearDiscriminator, LinearProjector
 from lightning.pytorch import LightningModule
-from lightning.pytorch.loggers import TensorBoardLogger
 from ..utils.tensor import permute_dims
-from .loss import kld_loss, recon_loss, MMDloss, preserve_distance_loss, preserve_axiswise_distance_loss
-from piqa import SSIM
+from .loss import kld_loss, recon_loss
 import matplotlib.pyplot as plt
 import os
 import matplotlib.gridspec as gridspec
@@ -187,7 +185,6 @@ class PlVAE(LightningModule):
 
         # get the batch
         x_1, x_2 = batch
-        batch_size = x_1.shape[0]
         epoch_idx = self.trainer.current_epoch
 
         # VAE forward pass
@@ -237,7 +234,6 @@ class PlVAE(LightningModule):
 
         # get the batch
         x_1, x_2 = batch
-        batch_size = x_1.shape[0]
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
@@ -782,8 +778,8 @@ class PlFactorVAE1D(LightningModule):
         ax1 = plt.subplot(gs[1])
         ax2 = plt.subplot(gs[2])
         # Create the first subplot
-        cax0 = ax0.matshow(x_scaled, interpolation='nearest',
-                           cmap='viridis', norm=norm)
+        ax0.matshow(x_scaled, interpolation='nearest',
+                    cmap='viridis', norm=norm)
         ax0.set_title('Ground Truth')
         # Create the second subplot
         cax1 = ax1.matshow(
@@ -890,7 +886,6 @@ class PlMapper(LightningModule):
 
         # get the batch
         x, _ = batch
-        batch_size = x.shape[0]
 
         # encode with input model
         z_1 = self.in_model.encode(x)
