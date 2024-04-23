@@ -1,27 +1,19 @@
 # %%
 # imports
+from sonification.datasets import FmSynthDataset
 from torchaudio.functional import amplitude_to_DB
 from torchaudio.transforms import MelSpectrogram
 from sonification.utils.array import array2fluid_dataset
-from sklearn.preprocessing import MinMaxScaler, RobustScaler
+from sklearn.preprocessing import MinMaxScaler
 from sonification.utils.dsp import frequency2midi
 import importlib
-from functools import partial
-from multiprocessing import Pool
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from sklearn.decomposition import PCA
 import timbral_models
-from pytimbre.spectral.spectra import SpectrumByFFT, Spectrum
+from pytimbre.spectral.spectra import SpectrumByFFT
 from pytimbre.audio_files.wavefile import WaveFile
-from pytimbre.waveform import Waveform
-import soundfile as sf
-import resampy
-import torchaudio
-import torch.nn as nn
 import torch
-from sonification.utils.video import video_from_images
-from encodec import EncodecModel
 import os
 import numpy as np
 from sonification.utils.dsp import fm_synth_2, midi2frequency
@@ -247,8 +239,6 @@ wfm = WaveFile(filename)
 spectrum = SpectrumByFFT(wfm, 4096)
 print(spectrum.harmonic_energy, spectrum.noise_energy, spectrum.roughness)
 
-# %%
-spectrum.spe
 # %%
 filename = "/Users/balintl/Documents/GitHub/sonification/experiments/params2feats_paper/audio/fm_synth_sr16k_harm_ratio_50steps/group_46/fm_synth_f_99.90401989638436_r_3.7551020408163263_i_0.4444444444444444.wav"
 timbre = timbral_models.timbral_extractor(filename)
@@ -502,10 +492,6 @@ df_spectral.sort_index(inplace=True)
 # save as csv
 df_spectral.to_csv("fm_synth_spectral_features.csv", index=True)
 
-# %%
-# TODO:
-# - save .npy files for each parameter, containing the step-to-step diff of features
-# - save .npy files for each parameter, containing the step-to-step diff of embeddings (FAD)
 
 # %%
 # create a 2D scatter plot of the PCA-d synth parameters
@@ -548,11 +534,13 @@ alpha = np.repeat(0.2, len(x))
 colors = np.stack((x, y, z, alpha), axis=-1)
 
 # create scatter plot with small dots and color by x, y, z as RGB
+plt.figure(dpi=300)
 plt.scatter(df_params_2d[:, 0], df_params_2d[:, 1], s=1, c=colors)
-plt.xlabel("PCA – 1st component")
-plt.ylabel("PCA – 2nd component")
+fontsize = 18
+plt.xlabel("PCA – 1st component", fontsize=fontsize)
+plt.ylabel("PCA – 2nd component", fontsize=fontsize)
 plt.title(
-    f"PCA of FM synth parameters\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+    f"PCA of FM synth parameters\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}", fontsize=fontsize)
 plt.show()
 
 
@@ -595,7 +583,6 @@ scaler.fit(df_perceptual_7d_filtered)
 df_perceptual_7d_filtered_scaled = scaler.transform(df_perceptual_7d_filtered)
 df_perceptual_7d_filtered_scaled = pd.DataFrame(
     df_perceptual_7d_filtered_scaled, columns=cols)
-df_perceptual_7d_filtered_scaled.head()
 
 # create PCA
 pca = PCA(n_components=2, whiten=True, random_state=42)
@@ -603,12 +590,15 @@ pca = PCA(n_components=2, whiten=True, random_state=42)
 pca.fit(df_perceptual_7d_filtered_scaled)
 # transform
 df_perceptual_2d = pca.transform(df_perceptual_7d_filtered_scaled)
+# %%
 # create scatter plot with small dots
+plt.figure(dpi=300)
 plt.scatter(df_perceptual_2d[:, 0], df_perceptual_2d[:, 1], s=1, c=colors)
-plt.xlabel("PCA – 1st component")
-plt.ylabel("PCA – 2nd component")
+fontsize = 18
+plt.xlabel("PCA – 1st component", fontsize=fontsize)
+plt.ylabel("PCA – 2nd component", fontsize=fontsize)
 plt.title(
-    f"PCA of FM synth perceptual features\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+    f"PCA of FM synth perceptual features\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}", fontsize=fontsize)
 plt.show()
 
 
@@ -648,7 +638,6 @@ scaler.fit(df_spectral_11d)
 df_spectral_11d_scaled = scaler.transform(df_spectral_11d)
 df_spectral_11d_scaled = pd.DataFrame(
     df_spectral_11d_scaled, columns=df_spectral_11d.columns)
-df_spectral_11d_scaled.head()
 
 # create PCA
 pca = PCA(n_components=2, whiten=True, random_state=42)
@@ -656,12 +645,15 @@ pca = PCA(n_components=2, whiten=True, random_state=42)
 pca.fit(df_spectral_11d_scaled)
 # transform
 df_spectral_2d = pca.transform(df_spectral_11d_scaled)
+# %%
 # create scatter plot with small dots
+plt.figure(dpi=300)
 plt.scatter(df_spectral_2d[:, 0], df_spectral_2d[:, 1], s=1, c=colors)
-plt.xlabel("PCA – 1st component")
-plt.ylabel("PCA – 2nd component")
+fontsize = 18
+plt.xlabel("PCA – 1st component", fontsize=fontsize)
+plt.ylabel("PCA – 2nd component", fontsize=fontsize)
 plt.title(
-    f"PCA of FM synth spectral features\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+    f"PCA of FM synth spectral features\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}", fontsize=fontsize)
 plt.show()
 
 
@@ -698,12 +690,15 @@ pca = PCA(n_components=2, whiten=True, random_state=42)
 pca.fit(embeddings_2d)
 # transform
 embeddings_2d_pca = pca.transform(embeddings_2d)
+# %%
 # create scatter plot with small dots
+plt.figure(dpi=300)
 plt.scatter(embeddings_2d_pca[:, 0], embeddings_2d_pca[:, 1], s=1, c=colors)
-plt.xlabel("PCA – 1st component")
-plt.ylabel("PCA – 2nd component")
+fontsize = 18
+plt.xlabel("PCA – 1st component", fontsize=fontsize)
+plt.ylabel("PCA – 2nd component", fontsize=fontsize)
 plt.title(
-    f"PCA of FM synth EnCodec embeddings\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+    f"PCA of FM synth EnCodec embeddings\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}", fontsize=fontsize)
 plt.show()
 
 
@@ -718,12 +713,15 @@ pca = PCA(n_components=2, whiten=True, random_state=42)
 pca.fit(embeddings)
 # transform
 embeddings_2d_pca = pca.transform(embeddings)
+# %%
 # create scatter plot with small dots
+plt.figure(dpi=300)
 plt.scatter(embeddings_2d_pca[:, 0], embeddings_2d_pca[:, 1], s=1, c=colors)
-plt.xlabel("PCA – 1st component")
-plt.ylabel("PCA – 2nd component")
+fontsize = 18
+plt.xlabel("PCA – 1st component", fontsize=fontsize)
+plt.ylabel("PCA – 2nd component", fontsize=fontsize)
 plt.title(
-    f"PCA of FM synth CLAP embeddings\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+    f"PCA of FM synth CLAP embeddings\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}", fontsize=fontsize)
 plt.show()
 
 
@@ -738,13 +736,16 @@ pca = PCA(n_components=2, whiten=True, random_state=42)
 pca.fit(mel_spectrograms)
 # transform
 mel_spectrograms_2d_pca = pca.transform(mel_spectrograms)
+# %%
 # create scatter plot with small dots
+plt.figure(dpi=300)
 plt.scatter(mel_spectrograms_2d_pca[:, 0],
             mel_spectrograms_2d_pca[:, 1], s=1, c=colors)
-plt.xlabel("PCA – 1st component")
-plt.ylabel("PCA – 2nd component")
+fontsize = 18
+plt.xlabel("PCA – 1st component", fontsize=fontsize)
+plt.ylabel("PCA – 2nd component", fontsize=fontsize)
 plt.title(
-    f"PCA of FM synth mel spectrograms (mean)\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}")
+    f"PCA of FM synth mel spectrograms (mean)\nexplained variance ratio: {np.round(pca.explained_variance_ratio_.sum(), 2)}", fontsize=fontsize)
 plt.show()
 
 
@@ -846,3 +847,13 @@ pca_mels = array2fluid_dataset(mel_spectrograms_2d_pca)
 # save to json
 with open("pca_mels_mean_std.json", "w") as f:
     json.dump(pca_mels, f)
+
+# %%
+# save mel spectrograms as fluid dataset
+# read mel spectrograms
+mel_spectrograms = np.load("fm_synth_mel_spectrograms_mean.npy")
+# save as fluid dataset
+mel_spectrograms_dict = array2fluid_dataset(mel_spectrograms)
+# save to json
+with open("mel_spectrograms_mean.json", "w") as f:
+    json.dump(mel_spectrograms_dict, f)
