@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 from functools import reduce
-import torch.nn.functional as F
 
 
 class LinearEncoder(nn.Module):
@@ -138,7 +137,7 @@ class ConvDecoder(nn.Module):
 class ConvEncoder1D(nn.Module):
     def __init__(self, in_channels, output_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
         super(ConvEncoder1D, self).__init__()
-        self.in_channels = in_channels  # 2 for red and green
+        self.in_channels = in_channels
         self.output_size = output_size
 
         layers = []
