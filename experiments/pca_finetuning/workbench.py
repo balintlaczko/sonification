@@ -7,6 +7,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
 from sonification.models.ddsp import FMSynth
 from sonification.models.layers import ConvEncoder1D, LinearProjector
+from sonification.models.loss import MMDloss
 from librosa import resample
 # from sonification.datasets import FmSynthDataset
 from sonification.utils.dsp import transposition2duration
@@ -36,7 +37,9 @@ class FmSynthDataset(Dataset):
             self.df = pd.read_csv(csv_path)
         self.sr = sr
         self.dur = dur
-        self.synth = FMSynth(sr)
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
+        self.synth = FMSynth(sr).to(self.device)
 
     def __len__(self):
         return len(self.df)
@@ -44,7 +47,8 @@ class FmSynthDataset(Dataset):
     def __getitem__(self, idx):
         nsamps = int(self.dur * self.sr)
         row = self.df.iloc[idx]
-        row_tensor = torch.tensor(row.values, dtype=torch.float32)
+        row_tensor = torch.tensor(
+            row.values, dtype=torch.float32).to(self.device)
         row_tensor = row_tensor.unsqueeze(0) if len(
             row_tensor.shape) < 2 else row_tensor
         # find the column id for "freq", "harm_ratio", "mod_index"
@@ -72,9 +76,11 @@ class FmMel2PCADataset(Dataset):
             n_mels=200,
             mel_scaler=None,
             pca_scaler=None):
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
         self.fm_synth = FmSynthDataset(
             dataframe=fm_params_dataframe, sr=sr, dur=dur)
-        self.pca = torch.tensor(pca_array).float()
+        self.pca = torch.tensor(pca_array).float().to(self.device)
         self.sr = sr
         self.dur = dur
         self.n_mels = n_mels
@@ -87,10 +93,11 @@ class FmMel2PCADataset(Dataset):
             n_mels=self.n_mels,
             power=2,
             norm='slaney',
-            mel_scale='slaney')
+            mel_scale='slaney').to(self.device)
 
         # hold mel tensors in memory
-        self.all_mels = torch.zeros(len(self.fm_synth), 1, self.n_mels)
+        self.all_mels = torch.zeros(
+            len(self.fm_synth), 1, self.n_mels).to(self.device)
         self.load_all_mels()
 
         # scalers
@@ -106,7 +113,7 @@ class FmMel2PCADataset(Dataset):
         if self.pca_scaler is None:
             self.pca_scaler = MinMaxScaler()
         print("Fitting PCA scaler...")
-        self.pca_scaler.fit(self.pca.numpy())
+        self.pca_scaler.fit(self.pca.cpu().numpy())
         print("PCA scaler fit")
 
     def __len__(self):
@@ -118,15 +125,15 @@ class FmMel2PCADataset(Dataset):
         if isinstance(idx, int):
             mel = mel.unsqueeze(0)
         mel_scaled = self.mel_scaler.transform(
-            mel.squeeze(1).numpy())  # (B, n_mels)
+            mel.squeeze(1).cpu().numpy())  # (B, n_mels)
         if not isinstance(idx, int):
             mel_scaled = torch.tensor(
-                mel_scaled).reshape(-1, 1, self.n_mels)  # (B, 1, n_mels)
+                mel_scaled, device=self.device).reshape(-1, 1, self.n_mels)  # (B, 1, n_mels)
         pca = self.pca[idx]  # (B, 2)
         if isinstance(idx, int):
             pca = pca.unsqueeze(0)
-        pca_scaled = self.pca_scaler.transform(pca.numpy())
-        pca_scaled = torch.tensor(pca_scaled)
+        pca_scaled = self.pca_scaler.transform(pca.cpu().numpy())
+        pca_scaled = torch.tensor(pca_scaled, device=self.device)
         if isinstance(idx, int):
             pca_scaled = pca_scaled.squeeze(0)
         return mel_scaled, pca_scaled
@@ -155,7 +162,7 @@ class FmMel2PCADataset(Dataset):
         print("All mel tensors loaded to memory")
 
     def fit_mel_scaler(self):
-        all_mels = self.all_mels.squeeze(1).numpy()  # (B, n_mels)
+        all_mels = self.all_mels.squeeze(1).cpu().numpy()  # (B, n_mels)
         print("Fitting mel scaler...")
         self.mel_scaler.fit(all_mels)
         print("Mel scaler fit")
@@ -165,10 +172,14 @@ class FmMelContrastiveDataset(Dataset):
     def __init__(
             self,
             fm_params_dataframe,
+            pca_array,
             sr=48000,
             dur=1,
             n_mels=200,
-            mel_scaler=None):
+            mel_scaler=None,
+            pca_scaler=None):
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
         self.fm_synth = FmSynthDataset(
             dataframe=fm_params_dataframe, sr=sr, dur=dur)
         self.sr = sr
@@ -184,10 +195,12 @@ class FmMelContrastiveDataset(Dataset):
             n_mels=self.n_mels,
             power=2,
             norm='slaney',
-            mel_scale='slaney')
+            mel_scale='slaney').to(self.device)
+        self.pca = torch.tensor(pca_array).float().to(self.device)
 
-        # scaler
+        # scalers
         self.mel_scaler = mel_scaler
+        self.pca_scaler = pca_scaler
 
     def __len__(self):
         return len(self.fm_synth)
@@ -195,6 +208,7 @@ class FmMelContrastiveDataset(Dataset):
     def __getitem__(self, idx):
         # print(idx)
         assert self.mel_scaler is not None
+        assert self.pca_scaler is not None
         # get random numbers between -2 and 2 for transposition
         transpositions = torch.rand(self.n_transpositions) * 4 - 2
         # append 0 to the front, so the first element is the original
@@ -203,12 +217,20 @@ class FmMelContrastiveDataset(Dataset):
         for transpose in transpositions:
             mel = self.get_mel(idx, transpose)  # (B, n_mels, 1)
             mel_scaled = self.mel_scaler.transform(
-                mel.squeeze(-1).numpy())  # (B, n_mels)
+                mel.squeeze(-1).cpu().numpy())  # (B, n_mels)
             if not isinstance(idx, int):
                 mel_scaled = torch.tensor(
-                    mel_scaled).reshape(-1, 1, self.n_mels)  # (B, 1, n_mels)
+                    mel_scaled, device=self.device).reshape(-1, 1, self.n_mels)  # (B, 1, n_mels)
             output.append(mel_scaled)
-        # a list of tensors of shape (B, n_mels)
+        pca = self.pca[idx]  # (B, 2)
+        if isinstance(idx, int):
+            pca = pca.unsqueeze(0)
+        pca_scaled = self.pca_scaler.transform(pca.cpu().numpy())
+        pca_scaled = torch.tensor(pca_scaled, device=self.device)
+        if isinstance(idx, int):
+            pca_scaled = pca_scaled.squeeze(0)
+        output.append(pca_scaled)
+        # a list of tensors of shape (B, n_mels) and pca (B, 2)
         return output
 
     def get_mel(self, idx, transpose=0):
@@ -216,9 +238,12 @@ class FmMelContrastiveDataset(Dataset):
         if transpose != 0:
             target_dur = transposition2duration(transpose)
             target_sr = int(self.sr * target_dur)
-            fm_synth = resample(
-                fm_synth.numpy(), orig_sr=self.sr, target_sr=target_sr)  # (B, T')
-            fm_synth = torch.tensor(fm_synth)
+            # fm_synth = resample(
+            #     fm_synth.numpy(), orig_sr=self.sr, target_sr=target_sr)  # (B, T')
+            # fm_synth = torch.tensor(fm_synth)
+            # TODO: ugly linear interpolation instead of proper resampling since torchaudio resample is broken and librosa resample is cpu only
+            fm_synth = torch.nn.functional.interpolate(
+                fm_synth.reshape(-1, 1, fm_synth.shape[-1]), scale_factor=target_dur, mode='linear').squeeze(1)  # (B, T')
         mel = self.mel_spec(fm_synth)  # (B, n_mels, T')
         mel_avg = mel.mean(dim=-1, keepdim=True)  # (B, n_mels, 1)
         mel_avg_db = amplitude_to_DB(
@@ -246,6 +271,8 @@ class PlMelEncoder(LightningModule):
 
         # losses
         self.mse = nn.MSELoss()
+        self.mmd = MMDloss()
+
         self.contrastive_diff_loss_scaler = args.contrastive_diff_loss_scaler
 
         # learning rate
@@ -280,7 +307,7 @@ class PlMelEncoder(LightningModule):
 
     def contrastive_loss(self, batch):
         # get sample and two transformations
-        x, x_a, x_b = batch
+        x, x_a, x_b, y = batch
         # get representations for each
         s_x = self.model(x)
         s_x_a = self.model(x_a)
@@ -298,10 +325,11 @@ class PlMelEncoder(LightningModule):
 
         # the same samples should have the same representation
         loss_same = self.mse(s_x, s_x_a) + self.mse(s_x, s_x_b)
-        # different samples should have different representations
-        loss_diff = self.mse(s_x_a, s_x_b)
+        # should keep close to pca in distribution
+        loss_pca = self.mmd.compute_mmd(s_x, "custom", y)
+
         # total loss
-        loss = loss_same - (self.contrastive_diff_loss_scaler * loss_diff)
+        loss = loss_same + (self.contrastive_diff_loss_scaler * loss_pca)
 
         return loss
 
@@ -414,12 +442,12 @@ def main():
     pca_array = fluid_dataset2array(json.load(open(pca_abspath, "r")))
     # total number of samples
     n_samples = len(df_fm)
-    n_samples = 10000  # for testing
+    # n_samples = 10000  # for testing
     # generate dataset splits on indices
     indices = torch.arange(len(df_fm))
     # shuffle
-    indices = torch.randperm(len(df_fm))
-    indices = indices[:n_samples]
+    # indices = torch.randperm(len(df_fm))
+    # indices = indices[:n_samples]
     # splits = torch.utils.data.random_split(list(range(n_samples)), [0.8, 0.2])
     splits = torch.utils.data.random_split(list(indices), [0.8, 0.2])
     train_split, val_split = splits
@@ -443,9 +471,9 @@ def main():
 
     # create contrastive datasets based on the same splits
     fm_contrastive_train = FmMelContrastiveDataset(
-        df_fm_train, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler)
+        df_fm_train, pca_train, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler, pca_scaler=fm_mel_pca_train.pca_scaler)
     fm_contrastive_val = FmMelContrastiveDataset(
-        df_fm_val, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler)  # use train scaler
+        df_fm_val, pca_val, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler, pca_scaler=fm_mel_pca_train.pca_scaler)  # use train scalers
 
     # create samplers & dataloaders
     batch_size = 512
@@ -490,16 +518,17 @@ def main():
     args.conv_out_features = 128
     args.out_features = 2
     args.proj_hidden_layers_features = [64, 32]
-    args.contrastive_diff_loss_scaler = 1
+    args.contrastive_diff_loss_scaler = 0.1
     args.lr = 1e-3
-    args.lr_decay = 0.99
+    args.lr_decay = 0.999
     args.plot_interval = 1
     args.mode = "supervised"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "test_finetuning"
+    args.ckpt_name = "pca_finetuning_5"
     args.resume_ckpt_path = None
     args.logdir = "logs"
-    args.train_epochs = 21
+    supervised_epochs = 21
+    args.train_epochs = supervised_epochs
 
     # create model
     model = PlMelEncoder(args)
@@ -586,7 +615,7 @@ def main():
         save_dir=args.logdir, name=args.ckpt_name)
 
     # create trainer
-    args.train_epochs = 31
+    args.train_epochs = 101
     trainer_contrastive = Trainer(
         max_epochs=args.train_epochs,
         enable_checkpointing=True,
@@ -600,7 +629,7 @@ def main():
     # model.lr = 1e-5
     model.supervised_val_loader = supervised_val_loader
     model.contrastive_diff_loss_scaler = 0.5
-    args.resume_ckpt_path = "ckpt/test_finetuning/test_finetuning_last_epoch=20.ckpt"
+    args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
     print("Training in contrastive mode")
     trainer_contrastive.fit(
         model, contrastive_train_loader, contrastive_val_loader, ckpt_path=args.resume_ckpt_path)
