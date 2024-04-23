@@ -140,6 +140,23 @@ def frequency2midi_tensor(
     return 69 + 12 * torch.log2(frequency / base_frequency)
 
 
+def transposition2duration(
+        transposition: float
+) -> float:
+    """
+    Convert a transposition factor to a duration factor.
+
+    Args:
+        transposition (float): The transposition factor.
+
+    Returns:
+        float: The duration factor.
+    """
+    base_freq = midi2frequency(np.array(60))
+    target_freq = midi2frequency(np.array(60 + transposition))
+    return base_freq / target_freq
+
+
 class Sinetable():
     """
     A wavetable oscillator that can generate arbitrary length sine buffers or wav files, with a chosen 
