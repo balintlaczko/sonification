@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from ..utils.tensor import wrap
-from ..utils.dsp import num_hops
+# from ..utils.dsp import num_hops
 from ..utils.misc import scale_linear, midi2frequency
 from .layers import MLP, MultiScaleEncoder
 import torchaudio
@@ -366,7 +366,7 @@ class Wave2Params(nn.Module):
         )
 
         # synth params from the concatenated encoded features
-        n_hops = num_hops(buffer_length_s * sr, hop_length)
+        # n_hops = num_hops(buffer_length_s * sr, hop_length)
         self.synth_params = nn.Sequential(
             # nn.Linear(3 * mlp_out_dim * n_hops, 3),
             nn.Linear(3 * mlp_out_dim, 3),
