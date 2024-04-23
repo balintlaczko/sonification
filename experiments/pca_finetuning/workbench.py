@@ -1,6 +1,5 @@
-# %%
 # imports
-from torchsummary import summary
+# from torchsummary import summary
 from lightning.pytorch import LightningModule
 from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -11,9 +10,8 @@ from sonification.models.layers import ConvEncoder1D, LinearProjector
 from librosa import resample
 # from sonification.datasets import FmSynthDataset
 from sonification.utils.dsp import transposition2duration
-from torchaudio.functional import amplitude_to_DB, speed
-from torchaudio.functional import resample as torchaudio_resample
-from torchaudio.transforms import MelSpectrogram, Resample
+from torchaudio.functional import amplitude_to_DB
+from torchaudio.transforms import MelSpectrogram
 from sonification.utils.array import fluid_dataset2array
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
@@ -197,8 +195,8 @@ class FmMelContrastiveDataset(Dataset):
     def __getitem__(self, idx):
         # print(idx)
         assert self.mel_scaler is not None
-        # get random numbers between -12 and 12 for transposition
-        transpositions = torch.rand(self.n_transpositions) * 24 - 12
+        # get random numbers between -2 and 2 for transposition
+        transpositions = torch.rand(self.n_transpositions) * 4 - 2
         # append 0 to the front, so the first element is the original
         transpositions = torch.cat((torch.tensor([0]), transpositions))
         output = []
@@ -218,15 +216,9 @@ class FmMelContrastiveDataset(Dataset):
         if transpose != 0:
             target_dur = transposition2duration(transpose)
             target_sr = int(self.sr * target_dur)
-            # see if cuda is available
-            if torch.cuda.is_available():
-                fm_synth, _ = speed(fm_synth.cuda(), self.sr, 1 /
-                                    target_dur)  # (B, T')
-                print(fm_synth.shape)
-            else:
-                fm_synth = resample(
-                    fm_synth.numpy(), orig_sr=self.sr, target_sr=target_sr)  # (B, T')
-                fm_synth = torch.tensor(fm_synth)
+            fm_synth = resample(
+                fm_synth.numpy(), orig_sr=self.sr, target_sr=target_sr)  # (B, T')
+            fm_synth = torch.tensor(fm_synth)
         mel = self.mel_spec(fm_synth)  # (B, n_mels, T')
         mel_avg = mel.mean(dim=-1, keepdim=True)  # (B, n_mels, 1)
         mel_avg_db = amplitude_to_DB(
@@ -293,15 +285,24 @@ class PlMelEncoder(LightningModule):
         s_x = self.model(x)
         s_x_a = self.model(x_a)
         s_x_b = self.model(x_b)
-        # vector shifts for the same transformation should be the same
-        v_a = s_x_a - s_x
-        v_b = s_x_b - s_x
-        loss_for_same = torch.std(v_a) + torch.std(v_b)
-        # vector shifts for different transformations should be different
-        loss_for_diff = torch.nn.functional.l1_loss(v_a, v_b)
+
+        # # vector shifts for the same transformation should be the same
+        # v_a = s_x_a - s_x
+        # v_b = s_x_b - s_x
+        # loss_for_same = torch.std(v_a) + torch.std(v_b)
+        # # vector shifts for different transformations should be different
+        # loss_for_diff = torch.nn.functional.l1_loss(v_a, v_b)
+        # # total loss
+        # loss = loss_for_same - \
+        #     (self.contrastive_diff_loss_scaler * loss_for_diff)
+
+        # the same samples should have the same representation
+        loss_same = self.mse(s_x, s_x_a) + self.mse(s_x, s_x_b)
+        # different samples should have different representations
+        loss_diff = self.mse(s_x_a, s_x_b)
         # total loss
-        loss = loss_for_same - \
-            (self.contrastive_diff_loss_scaler * loss_for_diff)
+        loss = loss_same - (self.contrastive_diff_loss_scaler * loss_diff)
+
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -360,20 +361,22 @@ class PlMelEncoder(LightningModule):
 
         self.save_latent_space_plot()
 
-    def save_latent_space_plot(self, batch_size=64):
+    def save_latent_space_plot(self, batch_size=512):
         """Save a figure of the latent space"""
         # get the length of the training dataset
         dataset = self.trainer.val_dataloaders.dataset
-        batchsampler = torch.utils.data.BatchSampler(
-            range(len(dataset)), batch_size=batch_size, drop_last=False)
-        loader = DataLoader(dataset, batch_size=None, sampler=batchsampler)
+        # batchsampler = torch.utils.data.BatchSampler(
+        #     range(len(dataset)), batch_size=batch_size, drop_last=False)
+        # loader = DataLoader(dataset, batch_size=None, sampler=batchsampler)
+        loader = self.supervised_val_loader
         z_all = torch.zeros(
             len(dataset), self.proj_out_features).to(self.device)
         for batch_idx, data in enumerate(loader):
             if self.mode == "supervised":
                 x, _ = data
             elif self.mode == "contrastive":
-                x, _, _ = data
+                # x, _, _ = data
+                x, _ = data
             z = self.model(x.to(self.device))
             z = z.detach()
             z_all[batch_idx*batch_size: batch_idx *
@@ -400,8 +403,8 @@ class PlMelEncoder(LightningModule):
         return [optimizer], [scheduler]
 
 
-csv_abspath = r"C:\Users\Balint Laczko\Documents\GitHub\sonification\experiments\pca_finetuning\fm_synth_params.csv"
-pca_abspath = r"C:\Users\Balint Laczko\Documents\GitHub\sonification\experiments\pca_finetuning\pca_mels_mean.json"
+csv_abspath = "./experiments/pca_finetuning/fm_synth_params.csv"
+pca_abspath = "./experiments/pca_finetuning/pca_mels_mean.json"
 
 
 def main():
@@ -411,9 +414,14 @@ def main():
     pca_array = fluid_dataset2array(json.load(open(pca_abspath, "r")))
     # total number of samples
     n_samples = len(df_fm)
-    n_samples = 2000  # for testing
+    n_samples = 10000  # for testing
     # generate dataset splits on indices
-    splits = torch.utils.data.random_split(list(range(n_samples)), [0.8, 0.2])
+    indices = torch.arange(len(df_fm))
+    # shuffle
+    indices = torch.randperm(len(df_fm))
+    indices = indices[:n_samples]
+    # splits = torch.utils.data.random_split(list(range(n_samples)), [0.8, 0.2])
+    splits = torch.utils.data.random_split(list(indices), [0.8, 0.2])
     train_split, val_split = splits
 
     # create train and val datasets for fm params and pca
@@ -440,7 +448,7 @@ def main():
         df_fm_val, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler)  # use train scaler
 
     # create samplers & dataloaders
-    batch_size = 256
+    batch_size = 512
     # num_workers = 0
 
     # supervised train
@@ -482,7 +490,7 @@ def main():
     args.conv_out_features = 128
     args.out_features = 2
     args.proj_hidden_layers_features = [64, 32]
-    args.contrastive_diff_loss_scaler = 0.25
+    args.contrastive_diff_loss_scaler = 1
     args.lr = 1e-3
     args.lr_decay = 0.99
     args.plot_interval = 1
@@ -491,10 +499,10 @@ def main():
     args.ckpt_name = "test_finetuning"
     args.resume_ckpt_path = None
     args.logdir = "logs"
-    args.train_epochs = 3
+    args.train_epochs = 21
 
     # create model
-    model = PlMelEncoder(args).to("cuda")
+    model = PlMelEncoder(args)
     # show model summary via torch summary
     # summary(model, (1, 200))
 
@@ -551,6 +559,7 @@ def main():
 
     # train the model in supervised mode
     model.mode = "supervised"
+    model.supervised_val_loader = supervised_val_loader
     print("Training in supervised mode")
     trainer.fit(model, supervised_train_loader, supervised_val_loader,
                 ckpt_path=args.resume_ckpt_path)
@@ -577,7 +586,7 @@ def main():
         save_dir=args.logdir, name=args.ckpt_name)
 
     # create trainer
-    args.train_epochs = 20
+    args.train_epochs = 31
     trainer_contrastive = Trainer(
         max_epochs=args.train_epochs,
         enable_checkpointing=True,
@@ -588,8 +597,10 @@ def main():
 
     # train the model in contrastive mode
     model.mode = "contrastive"
-    model.lr = 1e-5
-    args.resume_ckpt_path = "ckpt/test_finetuning/test_finetuning_last_epoch=02.ckpt"
+    # model.lr = 1e-5
+    model.supervised_val_loader = supervised_val_loader
+    model.contrastive_diff_loss_scaler = 0.5
+    args.resume_ckpt_path = "ckpt/test_finetuning/test_finetuning_last_epoch=20.ckpt"
     print("Training in contrastive mode")
     trainer_contrastive.fit(
         model, contrastive_train_loader, contrastive_val_loader, ckpt_path=args.resume_ckpt_path)
