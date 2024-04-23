@@ -4,11 +4,15 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from .utils.matrix import square_over_bg, square_over_bg_falloff
-from .utils.dsp import midi2frequency, db2amp, fm_synth_2
-from .models.ddsp import Sinewave
+# , transposition2duration  # , fm_synth_2
+from .utils.dsp import midi2frequency, db2amp
+from .models.ddsp import Sinewave, FMSynth
 from torchaudio.transforms import MelSpectrogram
 from torchaudio.functional import amplitude_to_DB
 from sklearn.preprocessing import MinMaxScaler
+# import json
+# from tqdm import tqdm
+# from librosa import resample
 
 
 class Amanis_RG_dataset(Dataset):
@@ -240,7 +244,7 @@ class Sinewave_dataset(Dataset):
         return mel_spec_avg_db.permute(0, 2, 1)  # (B, C=1, n_mels)
 
     def fit_scaler(self):
-        if self.flag != 'train' and self.scaler != None:
+        if self.flag != 'train' and self.scaler is not None:
             print("Transforming dataset with external scaler")
             all_tensors = self.__getitem__(
                 np.arange(len(self.df)))  # (B, C=1, n_mels)
@@ -262,19 +266,33 @@ class Sinewave_dataset(Dataset):
 
 
 class FmSynthDataset(Dataset):
-    def __init__(self, csv_path, sr=48000, dur=1):
-        self.df = pd.read_csv(csv_path)
+    def __init__(self, csv_path=None, dataframe=None, sr=48000, dur=1):
+        if dataframe is not None:
+            self.df = dataframe
+        else:
+            self.df = pd.read_csv(csv_path)
         self.sr = sr
         self.dur = dur
+        self.synth = FMSynth(sr)
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
+        nsamps = int(self.dur * self.sr)
         row = self.df.iloc[idx]
-        f_carrier = np.array([row.freq])
-        harm_ratio = np.array([row.harm_ratio])
-        mod_idx = np.array([row.mod_index])
-        fm_synth = fm_synth_2(self.dur * self.sr, self.sr,
-                              f_carrier, harm_ratio, mod_idx)
-        return fm_synth, row.freq, row.harm_ratio, row.mod_index
+        row_tensor = torch.tensor(row.values, dtype=torch.float32)
+        row_tensor = row_tensor.unsqueeze(0) if len(
+            row_tensor.shape) < 2 else row_tensor
+        # find the column id for "freq", "harm_ratio", "mod_index"
+        freq_col_id = self.df.columns.get_loc("freq")
+        harm_ratio_col_id = self.df.columns.get_loc("harm_ratio")
+        mod_index_col_id = self.df.columns.get_loc("mod_index")
+        # extract the carrier frequency, harm_ratio, mod_index, repeat for nsamps
+        carr_freq = row_tensor[:, freq_col_id].unsqueeze(-1).repeat(1, nsamps)
+        harm_ratio = row_tensor[:,
+                                harm_ratio_col_id].unsqueeze(-1).repeat(1, nsamps)
+        mod_index = row_tensor[:,
+                               mod_index_col_id].unsqueeze(-1).repeat(1, nsamps)
+        fm_synth = self.synth(carr_freq, harm_ratio, mod_index)
+        return fm_synth
