@@ -198,15 +198,18 @@ class MMDloss(nn.Module):
 
         return result
 
-    def compute_mmd(self, z: Tensor, prior_distribution: str = "gaussian") -> Tensor:
+    def compute_mmd(self, z: Tensor, prior_distribution: str = "gaussian", custom_prior=None) -> Tensor:
         assert prior_distribution in [
-            "gaussian", "uniform"], "prior distribution must be either 'gaussian' or 'uniform'"
+            "gaussian", "uniform", "custom"], "prior distribution must be either 'gaussian' or 'uniform'"
         if prior_distribution == "gaussian":
             # Sample from prior (Gaussian) distribution
             prior_z = torch.randn_like(z)
-        else:
+        elif prior_distribution == "uniform":
             # Sample from prior (Uniform) distribution
             prior_z = torch.rand_like(z)
+        elif prior_distribution == "custom":
+            # Sample from custom prior distribution
+            prior_z = custom_prior
 
         prior_z__kernel = self.compute_kernel(prior_z, prior_z)
         z__kernel = self.compute_kernel(z, z)
