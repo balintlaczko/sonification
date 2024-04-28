@@ -90,8 +90,8 @@ class FmMel2PCADataset(Dataset):
         self.mel_spec = MelSpectrogram(
             sample_rate=self.sr,
             n_fft=4096,
-            f_min=80,
-            f_max=8000,
+            f_min=70,
+            f_max=4000,
             pad=1,
             n_mels=self.n_mels,
             power=2,
@@ -147,6 +147,9 @@ class FmMel2PCADataset(Dataset):
         mel_avg = mel.mean(dim=-1, keepdim=True)  # (B, n_mels, 1)
         mel_avg_db = amplitude_to_DB(
             mel_avg, multiplier=10, amin=1e-5, db_multiplier=20, top_db=80)  # (B, n_mels, 1)
+        # apply a -12 dB reduction on the upper half of the mel spectrogram
+        # TODO: use lowpass filter as an nn.Module instead
+        mel_avg_db[:, self.n_mels // 2:, :] -= 12
         return mel_avg_db
 
     def load_all_mels(self):
@@ -192,8 +195,8 @@ class FmMelContrastiveDataset(Dataset):
         self.mel_spec = MelSpectrogram(
             sample_rate=self.sr,
             n_fft=4096,
-            f_min=80,
-            f_max=8000,
+            f_min=70,
+            f_max=4000,
             pad=1,
             n_mels=self.n_mels,
             power=2,
@@ -212,8 +215,8 @@ class FmMelContrastiveDataset(Dataset):
         # print(idx)
         assert self.mel_scaler is not None
         # assert self.pca_scaler is not None
-        # get random numbers between -7 and 7 for transposition
-        transpositions = torch.rand(self.n_transpositions) * 14 - 7
+        # get random numbers between -2 and 2 for transposition
+        transpositions = torch.rand(self.n_transpositions) * 4 - 2
         # append 0 to the front, so the first element is the original
         transpositions = torch.cat((torch.tensor([0]), transpositions))
         output = []
@@ -251,6 +254,9 @@ class FmMelContrastiveDataset(Dataset):
         mel_avg = mel.mean(dim=-1, keepdim=True)  # (B, n_mels, 1)
         mel_avg_db = amplitude_to_DB(
             mel_avg, multiplier=10, amin=1e-5, db_multiplier=20, top_db=80)  # (B, n_mels, 1)
+        # apply a -12 dB reduction on the upper half of the mel spectrogram
+        # TODO: use lowpass filter as an nn.Module instead
+        mel_avg_db[:, self.n_mels // 2:, :] -= 12
         return mel_avg_db
 
 
@@ -581,18 +587,18 @@ def main():
     args.out_features = 2
     args.proj_hidden_layers_features = [256, 256, 128, 64]
     args.contrastive_diff_loss_scaler = 0.25
-    args.lr = 1e-4
+    args.lr = 1e-3
     args.lr_decay = 0.9999
     args.ema_decay = 0.999
     args.plot_interval = 1
     args.mode = "supervised"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_ema_8"
+    args.ckpt_name = "pca_finetuning_ema_9"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     supervised_epochs = 11
     args.train_epochs = supervised_epochs
-    args.comment = "augmentation back to -3 to 3"
+    args.comment = "augmentation back to -2 to 2, freq range to 70-4000, apply -12dB to upper half of melspecs, bump up lr"
 
     # create model
     model = PlMelEncoder(args)
