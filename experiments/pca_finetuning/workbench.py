@@ -23,6 +23,9 @@ import os
 from matplotlib import pyplot as plt
 import pandas as pd
 import json
+from copy import deepcopy
+from collections import OrderedDict
+from sys import stderr
 
 
 class Args:
@@ -172,7 +175,7 @@ class FmMelContrastiveDataset(Dataset):
     def __init__(
             self,
             fm_params_dataframe,
-            pca_array,
+            # pca_array,
             sr=48000,
             dur=1,
             n_mels=200,
@@ -196,11 +199,11 @@ class FmMelContrastiveDataset(Dataset):
             power=2,
             norm='slaney',
             mel_scale='slaney').to(self.device)
-        self.pca = torch.tensor(pca_array).float().to(self.device)
+        # self.pca = torch.tensor(pca_array).float().to(self.device)
 
         # scalers
         self.mel_scaler = mel_scaler
-        self.pca_scaler = pca_scaler
+        # self.pca_scaler = pca_scaler
 
     def __len__(self):
         return len(self.fm_synth)
@@ -208,7 +211,7 @@ class FmMelContrastiveDataset(Dataset):
     def __getitem__(self, idx):
         # print(idx)
         assert self.mel_scaler is not None
-        assert self.pca_scaler is not None
+        # assert self.pca_scaler is not None
         # get random numbers between -2 and 2 for transposition
         transpositions = torch.rand(self.n_transpositions) * 4 - 2
         # append 0 to the front, so the first element is the original
@@ -222,14 +225,14 @@ class FmMelContrastiveDataset(Dataset):
                 mel_scaled = torch.tensor(
                     mel_scaled, device=self.device).reshape(-1, 1, self.n_mels)  # (B, 1, n_mels)
             output.append(mel_scaled)
-        pca = self.pca[idx]  # (B, 2)
-        if isinstance(idx, int):
-            pca = pca.unsqueeze(0)
-        pca_scaled = self.pca_scaler.transform(pca.cpu().numpy())
-        pca_scaled = torch.tensor(pca_scaled, device=self.device)
-        if isinstance(idx, int):
-            pca_scaled = pca_scaled.squeeze(0)
-        output.append(pca_scaled)
+        # pca = self.pca[idx]  # (B, 2)
+        # if isinstance(idx, int):
+        #     pca = pca.unsqueeze(0)
+        # pca_scaled = self.pca_scaler.transform(pca.cpu().numpy())
+        # pca_scaled = torch.tensor(pca_scaled, device=self.device)
+        # if isinstance(idx, int):
+        #     pca_scaled = pca_scaled.squeeze(0)
+        # output.append(pca_scaled)
         # a list of tensors of shape (B, n_mels) and pca (B, 2)
         return output
 
@@ -271,13 +274,14 @@ class PlMelEncoder(LightningModule):
 
         # losses
         self.mse = nn.MSELoss()
-        self.mmd = MMDloss()
+        # self.mmd = MMDloss()
 
         self.contrastive_diff_loss_scaler = args.contrastive_diff_loss_scaler
 
         # learning rate
         self.lr = args.lr
         self.lr_decay = args.lr_decay
+        self.decay = args.ema_decay
 
         # logging
         self.plot_interval = args.plot_interval
@@ -290,11 +294,54 @@ class PlMelEncoder(LightningModule):
             in_features=self.proj_in_features, out_features=self.proj_out_features, hidden_layers_features=self.proj_hidden_layers_features)
         self.model = nn.Sequential(conv, proj)
 
+        # self.shadow = deepcopy(self.model)
+        # for param in self.shadow.parameters():
+        #     param.detach_()
+
         # mode: "supervised" or "contrastive"
         self.mode = args.mode
 
     def forward(self, x):
-        return self.model(x)
+        if self.training or self.mode == "supervised":
+            return self.model(x)
+        else:
+            return self.shadow(x)
+
+    def create_shadow_model(self):
+        self.shadow = deepcopy(self.model)
+        for param in self.shadow.parameters():
+            param.detach_()
+        self.shadow.eval()
+
+    # following this source: https://www.zijianhu.com/post/pytorch/ema/
+    @torch.no_grad()
+    def ema_update(self):
+        if not self.training:
+            print("EMA update should only be called during training",
+                  file=stderr, flush=True)
+            return
+
+        model_params = OrderedDict(self.model.named_parameters())
+        shadow_params = OrderedDict(self.shadow.named_parameters())
+
+        # check if both model contains the same set of keys
+        assert model_params.keys() == shadow_params.keys()
+
+        for name, param in model_params.items():
+            # see https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage
+            # shadow_variable -= (1 - decay) * (shadow_variable - variable)
+            shadow_params[name].sub_(
+                (1. - self.decay) * (shadow_params[name] - param))
+
+        model_buffers = OrderedDict(self.model.named_buffers())
+        shadow_buffers = OrderedDict(self.shadow.named_buffers())
+
+        # check if both model contains the same set of keys
+        assert model_buffers.keys() == shadow_buffers.keys()
+
+        for name, buffer in model_buffers.items():
+            # buffers are copied
+            shadow_buffers[name].copy_(buffer)
 
     def supervised_loss(self, batch):
         # get sample and label
@@ -307,29 +354,23 @@ class PlMelEncoder(LightningModule):
 
     def contrastive_loss(self, batch):
         # get sample and two transformations
-        x, x_a, x_b, y = batch
+        x, x_a, x_b = batch
         # get representations for each
         s_x = self.model(x)
         s_x_a = self.model(x_a)
         s_x_b = self.model(x_b)
 
-        # # vector shifts for the same transformation should be the same
-        # v_a = s_x_a - s_x
-        # v_b = s_x_b - s_x
-        # loss_for_same = torch.std(v_a) + torch.std(v_b)
-        # # vector shifts for different transformations should be different
-        # loss_for_diff = torch.nn.functional.l1_loss(v_a, v_b)
-        # # total loss
-        # loss = loss_for_same - \
-        #     (self.contrastive_diff_loss_scaler * loss_for_diff)
-
         # the same samples should have the same representation
         loss_same = self.mse(s_x, s_x_a) + self.mse(s_x, s_x_b)
-        # should keep close to pca in distribution
-        loss_pca = self.mmd.compute_mmd(s_x, "custom", y)
+        # # should keep close to pca in distribution
+        # loss_pca = self.mmd.compute_mmd(s_x, "custom", y)
+        # # prevent negative values
+        # loss_pca = torch.maximum(loss_pca, torch.tensor(0.0).to(self.device))
+        y_teacher = self.shadow(x)
+        loss_teacher = self.mse(s_x, y_teacher.detach())
 
         # total loss
-        loss = loss_same + (self.contrastive_diff_loss_scaler * loss_pca)
+        loss = loss_same + (self.contrastive_diff_loss_scaler * loss_teacher)
 
         return loss
 
@@ -355,6 +396,10 @@ class PlMelEncoder(LightningModule):
         self.manual_backward(loss)
         optimizer.step()
         scheduler.step()
+
+        # ema update
+        if self.mode == "contrastive":
+            self.ema_update()
 
         # log losses
         self.log_dict({
@@ -389,22 +434,22 @@ class PlMelEncoder(LightningModule):
 
         self.save_latent_space_plot()
 
-    def save_latent_space_plot(self, batch_size=512):
+    def save_latent_space_plot(self, batch_size=1024):
         """Save a figure of the latent space"""
         # get the length of the training dataset
         dataset = self.trainer.val_dataloaders.dataset
-        # batchsampler = torch.utils.data.BatchSampler(
-        #     range(len(dataset)), batch_size=batch_size, drop_last=False)
-        # loader = DataLoader(dataset, batch_size=None, sampler=batchsampler)
-        loader = self.supervised_val_loader
+        batchsampler = torch.utils.data.BatchSampler(
+            range(len(dataset)), batch_size=batch_size, drop_last=False)
+        loader = DataLoader(dataset, batch_size=None, sampler=batchsampler)
+        # loader = self.supervised_val_loader
         z_all = torch.zeros(
             len(dataset), self.proj_out_features).to(self.device)
         for batch_idx, data in enumerate(loader):
             if self.mode == "supervised":
                 x, _ = data
             elif self.mode == "contrastive":
-                # x, _, _ = data
-                x, _ = data
+                x, _, _ = data
+                # x, _ = data
             z = self.model(x.to(self.device))
             z = z.detach()
             z_all[batch_idx*batch_size: batch_idx *
@@ -471,12 +516,12 @@ def main():
 
     # create contrastive datasets based on the same splits
     fm_contrastive_train = FmMelContrastiveDataset(
-        df_fm_train, pca_train, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler, pca_scaler=fm_mel_pca_train.pca_scaler)
+        df_fm_train, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler)
     fm_contrastive_val = FmMelContrastiveDataset(
-        df_fm_val, pca_val, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler, pca_scaler=fm_mel_pca_train.pca_scaler)  # use train scalers
+        df_fm_val, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler)  # use train scaler
 
     # create samplers & dataloaders
-    batch_size = 512
+    batch_size = 2048
     # num_workers = 0
 
     # supervised train
@@ -513,21 +558,22 @@ def main():
 
     args = Args()
     args.conv_in_channels = 1
-    args.conv_layers_channels = [32, 64, 128]
+    args.conv_layers_channels = [64, 128, 256]
     args.conv_in_size = 200
     args.conv_out_features = 128
     args.out_features = 2
-    args.proj_hidden_layers_features = [64, 32]
-    args.contrastive_diff_loss_scaler = 0.1
+    args.proj_hidden_layers_features = [256, 256, 128, 64]
+    args.contrastive_diff_loss_scaler = 0.25
     args.lr = 1e-3
-    args.lr_decay = 0.999
+    args.lr_decay = 0.9999
+    args.ema_decay = 0.999
     args.plot_interval = 1
     args.mode = "supervised"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_5"
+    args.ckpt_name = "pca_finetuning_ema_5"
     args.resume_ckpt_path = None
     args.logdir = "logs"
-    supervised_epochs = 21
+    supervised_epochs = 11
     args.train_epochs = supervised_epochs
 
     # create model
@@ -615,7 +661,7 @@ def main():
         save_dir=args.logdir, name=args.ckpt_name)
 
     # create trainer
-    args.train_epochs = 101
+    args.train_epochs = 1000001
     trainer_contrastive = Trainer(
         max_epochs=args.train_epochs,
         enable_checkpointing=True,
@@ -626,13 +672,13 @@ def main():
 
     # train the model in contrastive mode
     model.mode = "contrastive"
-    # model.lr = 1e-5
-    model.supervised_val_loader = supervised_val_loader
-    model.contrastive_diff_loss_scaler = 0.5
     args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
+    resume_ckpt = torch.load(args.resume_ckpt_path, map_location=model.device)
+    model.load_state_dict(resume_ckpt['state_dict'])
+    model.create_shadow_model()
     print("Training in contrastive mode")
     trainer_contrastive.fit(
-        model, contrastive_train_loader, contrastive_val_loader, ckpt_path=args.resume_ckpt_path)
+        model, contrastive_train_loader, contrastive_val_loader)
 
 
 if __name__ == "__main__":
