@@ -10,6 +10,8 @@ datasets/
 *.csv
 *.json
 *.npy
+*.pkl
+*.pt
 logs/
 experiments/lsm_paper/MNIST/
 MNIST/
