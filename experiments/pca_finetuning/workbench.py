@@ -494,15 +494,17 @@ def main():
     # indices = torch.randperm(len(df_fm))
     # indices = indices[:n_samples]
     # splits = torch.utils.data.random_split(list(range(n_samples)), [0.8, 0.2])
-    splits = torch.utils.data.random_split(list(indices), [0.8, 0.2])
-    train_split, val_split = splits
+    # splits = torch.utils.data.random_split(list(indices), [0.8, 0.2])
+    # train_split, val_split = splits
     # save splits
     train_split_path = os.path.join(
         "./experiments/pca_finetuning", "train_split.pt")
     val_split_path = os.path.join(
         "./experiments/pca_finetuning", "val_split.pt")
-    torch.save(train_split, train_split_path)
-    torch.save(val_split, val_split_path)
+    # torch.save(train_split, train_split_path)
+    # torch.save(val_split, val_split_path)
+    train_split = torch.load(train_split_path)
+    val_split = torch.load(val_split_path)
 
     # create train and val datasets for fm params and pca
     df_fm_train, df_fm_val = df_fm.loc[list(
@@ -585,12 +587,12 @@ def main():
     args.plot_interval = 1
     args.mode = "supervised"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_ema_7"
+    args.ckpt_name = "pca_finetuning_ema_8"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     supervised_epochs = 11
     args.train_epochs = supervised_epochs
-    args.comment = "augmentation to -7 to 7, f_min to 80, f_max to 8000, lower lr, save splits and scalers"
+    args.comment = "augmentation back to -3 to 3"
 
     # create model
     model = PlMelEncoder(args)
