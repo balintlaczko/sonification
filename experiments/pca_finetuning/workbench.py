@@ -90,8 +90,8 @@ class FmMel2PCADataset(Dataset):
         self.mel_spec = MelSpectrogram(
             sample_rate=self.sr,
             n_fft=4096,
-            f_min=20,
-            f_max=10000,
+            f_min=80,
+            f_max=8000,
             pad=1,
             n_mels=self.n_mels,
             power=2,
@@ -192,8 +192,8 @@ class FmMelContrastiveDataset(Dataset):
         self.mel_spec = MelSpectrogram(
             sample_rate=self.sr,
             n_fft=4096,
-            f_min=20,
-            f_max=10000,
+            f_min=80,
+            f_max=8000,
             pad=1,
             n_mels=self.n_mels,
             power=2,
@@ -212,8 +212,8 @@ class FmMelContrastiveDataset(Dataset):
         # print(idx)
         assert self.mel_scaler is not None
         # assert self.pca_scaler is not None
-        # get random numbers between -2 and 2 for transposition
-        transpositions = torch.rand(self.n_transpositions) * 4 - 2
+        # get random numbers between -7 and 7 for transposition
+        transpositions = torch.rand(self.n_transpositions) * 14 - 7
         # append 0 to the front, so the first element is the original
         transpositions = torch.cat((torch.tensor([0]), transpositions))
         output = []
@@ -496,6 +496,13 @@ def main():
     # splits = torch.utils.data.random_split(list(range(n_samples)), [0.8, 0.2])
     splits = torch.utils.data.random_split(list(indices), [0.8, 0.2])
     train_split, val_split = splits
+    # save splits
+    train_split_path = os.path.join(
+        "./experiments/pca_finetuning", "train_split.pt")
+    val_split_path = os.path.join(
+        "./experiments/pca_finetuning", "val_split.pt")
+    torch.save(train_split, train_split_path)
+    torch.save(val_split, val_split_path)
 
     # create train and val datasets for fm params and pca
     df_fm_train, df_fm_val = df_fm.loc[list(
@@ -513,6 +520,14 @@ def main():
     fm_mel_pca_train.fit_scalers()
     fm_mel_pca_val.mel_scaler = fm_mel_pca_train.mel_scaler
     fm_mel_pca_val.pca_scaler = fm_mel_pca_train.pca_scaler
+
+    # save scalers
+    mel_scaler_path = os.path.join(
+        "./experiments/pca_finetuning", "mel_scaler.pkl")
+    pca_scaler_path = os.path.join(
+        "./experiments/pca_finetuning", "pca_scaler.pkl")
+    torch.save(fm_mel_pca_train.mel_scaler, mel_scaler_path)
+    torch.save(fm_mel_pca_train.pca_scaler, pca_scaler_path)
 
     # create contrastive datasets based on the same splits
     fm_contrastive_train = FmMelContrastiveDataset(
@@ -564,17 +579,18 @@ def main():
     args.out_features = 2
     args.proj_hidden_layers_features = [256, 256, 128, 64]
     args.contrastive_diff_loss_scaler = 0.25
-    args.lr = 1e-3
+    args.lr = 1e-4
     args.lr_decay = 0.9999
     args.ema_decay = 0.999
     args.plot_interval = 1
     args.mode = "supervised"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_ema_5"
+    args.ckpt_name = "pca_finetuning_ema_7"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     supervised_epochs = 11
     args.train_epochs = supervised_epochs
+    args.comment = "augmentation to -7 to 7, f_min to 80, f_max to 8000, lower lr, save splits and scalers"
 
     # create model
     model = PlMelEncoder(args)
@@ -628,7 +644,8 @@ def main():
         ckpt_name=args.ckpt_name,
         resume_ckpt_path=args.resume_ckpt_path,
         logdir=args.logdir,
-        train_epochs=args.train_epochs
+        train_epochs=args.train_epochs,
+        comment=args.comment,
     )
     trainer.logger.log_hyperparams(hyperparams)
 
