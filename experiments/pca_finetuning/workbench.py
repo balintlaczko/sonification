@@ -149,7 +149,7 @@ class FmMel2PCADataset(Dataset):
             mel_avg, multiplier=10, amin=1e-5, db_multiplier=20, top_db=80)  # (B, n_mels, 1)
         # apply a -12 dB reduction on the upper half of the mel spectrogram
         # TODO: use lowpass filter as an nn.Module instead
-        mel_avg_db[:, self.n_mels // 2:, :] -= 12
+        # mel_avg_db[:, self.n_mels // 2:, :] -= 12
         return mel_avg_db
 
     def load_all_mels(self):
@@ -178,12 +178,10 @@ class FmMelContrastiveDataset(Dataset):
     def __init__(
             self,
             fm_params_dataframe,
-            # pca_array,
             sr=48000,
             dur=1,
             n_mels=200,
-            mel_scaler=None,
-            pca_scaler=None):
+            mel_scaler=None):
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
         self.fm_synth = FmSynthDataset(
@@ -191,7 +189,11 @@ class FmMelContrastiveDataset(Dataset):
         self.sr = sr
         self.dur = dur
         self.n_mels = n_mels
-        self.n_transpositions = 2
+        self.n_transpositions = 1
+        self.apply_noise = True
+        self.noise_db_range = 6
+        self.apply_loudness = True
+        self.loudness_db_range = 6
         self.mel_spec = MelSpectrogram(
             sample_rate=self.sr,
             n_fft=4096,
@@ -202,41 +204,38 @@ class FmMelContrastiveDataset(Dataset):
             power=2,
             norm='slaney',
             mel_scale='slaney').to(self.device)
-        # self.pca = torch.tensor(pca_array).float().to(self.device)
 
         # scalers
         self.mel_scaler = mel_scaler
-        # self.pca_scaler = pca_scaler
 
     def __len__(self):
         return len(self.fm_synth)
 
     def __getitem__(self, idx):
-        # print(idx)
         assert self.mel_scaler is not None
-        # assert self.pca_scaler is not None
         # get random numbers between -2 and 2 for transposition
         transpositions = torch.rand(self.n_transpositions) * 4 - 2
         # append 0 to the front, so the first element is the original
         transpositions = torch.cat((torch.tensor([0]), transpositions))
         output = []
-        for transpose in transpositions:
+        for i, transpose in enumerate(transpositions):
             mel = self.get_mel(idx, transpose)  # (B, n_mels, 1)
+            if self.apply_loudness and i != 0:
+                loudness = torch.ones_like(
+                    mel) * self.loudness_db_range - (self.loudness_db_range / 2)
+                mel += loudness
+            if self.apply_noise and i != 0:
+                noise = torch.rand_like(
+                    mel) * self.noise_db_range - (self.noise_db_range / 2)
+                mel += noise
             mel_scaled = self.mel_scaler.transform(
                 mel.squeeze(-1).cpu().numpy())  # (B, n_mels)
             if not isinstance(idx, int):
                 mel_scaled = torch.tensor(
                     mel_scaled, device=self.device).reshape(-1, 1, self.n_mels)  # (B, 1, n_mels)
             output.append(mel_scaled)
-        # pca = self.pca[idx]  # (B, 2)
-        # if isinstance(idx, int):
-        #     pca = pca.unsqueeze(0)
-        # pca_scaled = self.pca_scaler.transform(pca.cpu().numpy())
-        # pca_scaled = torch.tensor(pca_scaled, device=self.device)
-        # if isinstance(idx, int):
-        #     pca_scaled = pca_scaled.squeeze(0)
-        # output.append(pca_scaled)
-        # a list of tensors of shape (B, n_mels) and pca (B, 2)
+
+        # a list of tensors of shape (B, n_mels)
         return output
 
     def get_mel(self, idx, transpose=0):
@@ -256,7 +255,7 @@ class FmMelContrastiveDataset(Dataset):
             mel_avg, multiplier=10, amin=1e-5, db_multiplier=20, top_db=80)  # (B, n_mels, 1)
         # apply a -12 dB reduction on the upper half of the mel spectrogram
         # TODO: use lowpass filter as an nn.Module instead
-        mel_avg_db[:, self.n_mels // 2:, :] -= 12
+        # mel_avg_db[:, self.n_mels // 2:, :] -= 12
         return mel_avg_db
 
 
@@ -280,9 +279,6 @@ class PlMelEncoder(LightningModule):
 
         # losses
         self.mse = nn.MSELoss()
-        # self.mmd = MMDloss()
-
-        self.contrastive_diff_loss_scaler = args.contrastive_diff_loss_scaler
 
         # learning rate
         self.lr = args.lr
@@ -359,24 +355,13 @@ class PlMelEncoder(LightningModule):
         return loss
 
     def contrastive_loss(self, batch):
-        # get sample and two transformations
-        x, x_a, x_b = batch
-        # get representations for each
-        s_x = self.model(x)
-        s_x_a = self.model(x_a)
-        s_x_b = self.model(x_b)
-
-        # the same samples should have the same representation
-        loss_same = self.mse(s_x, s_x_a) + self.mse(s_x, s_x_b)
-        # # should keep close to pca in distribution
-        # loss_pca = self.mmd.compute_mmd(s_x, "custom", y)
-        # # prevent negative values
-        # loss_pca = torch.maximum(loss_pca, torch.tensor(0.0).to(self.device))
+        # get sample and augmentation
+        x, x_a = batch
         y_teacher = self.shadow(x)
-        loss_teacher = self.mse(s_x, y_teacher.detach())
+        y_student = self.model(x_a)
 
-        # total loss
-        loss = loss_same + (self.contrastive_diff_loss_scaler * loss_teacher)
+        # the student's output should be close to the teacher's output
+        loss = self.mse(y_student, y_teacher)
 
         return loss
 
@@ -392,8 +377,6 @@ class PlMelEncoder(LightningModule):
         if self.mode == "supervised":
             loss = self.supervised_loss(batch)
         # in contrastive mode:
-        # 1. the SAME transformation on DIFFERENT samples should result in the same vector shift between their latent representations
-        # 2. DIFFERENT transformations on the SAME sample should NOT result in the same vector shift between their latent representations
         elif self.mode == "contrastive":
             loss = self.contrastive_loss(batch)
 
@@ -420,8 +403,6 @@ class PlMelEncoder(LightningModule):
         if self.mode == "supervised":
             loss = self.supervised_loss(batch)
         # in contrastive mode:
-        # 1. the SAME transformation on DIFFERENT samples should result in the same vector shift between their latent representations
-        # 2. DIFFERENT transformations on the SAME sample should NOT result in the same vector shift between their latent representations
         elif self.mode == "contrastive":
             loss = self.contrastive_loss(batch)
 
@@ -451,11 +432,7 @@ class PlMelEncoder(LightningModule):
         z_all = torch.zeros(
             len(dataset), self.proj_out_features).to(self.device)
         for batch_idx, data in enumerate(loader):
-            if self.mode == "supervised":
-                x, _ = data
-            elif self.mode == "contrastive":
-                x, _, _ = data
-                # x, _ = data
+            x, _ = data
             z = self.model(x.to(self.device))
             z = z.detach()
             z_all[batch_idx*batch_size: batch_idx *
@@ -518,11 +495,14 @@ def main():
     pca_train, pca_val = pca_array[list(
         train_split)], pca_array[list(val_split)]
 
+    # number of mel bands
+    n_mels = 400
+
     # create train and val datasets for mel spectrograms and pca
     fm_mel_pca_train = FmMel2PCADataset(
-        df_fm_train, pca_train, sr=48000, dur=1, n_mels=200)
+        df_fm_train, pca_train, sr=48000, dur=1, n_mels=n_mels)
     fm_mel_pca_val = FmMel2PCADataset(
-        df_fm_val, pca_val, sr=48000, dur=1, n_mels=200)
+        df_fm_val, pca_val, sr=48000, dur=1, n_mels=n_mels)
 
     # fit scalers in the train dataset, pass fit scalers to val dataset
     fm_mel_pca_train.fit_scalers()
@@ -539,9 +519,9 @@ def main():
 
     # create contrastive datasets based on the same splits
     fm_contrastive_train = FmMelContrastiveDataset(
-        df_fm_train, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler)
+        df_fm_train, sr=48000, dur=1, n_mels=n_mels, mel_scaler=fm_mel_pca_train.mel_scaler)
     fm_contrastive_val = FmMelContrastiveDataset(
-        df_fm_val, sr=48000, dur=1, mel_scaler=fm_mel_pca_train.mel_scaler)  # use train scaler
+        df_fm_val, sr=48000, dur=1, n_mels=n_mels, mel_scaler=fm_mel_pca_train.mel_scaler)  # use train scaler
 
     # create samplers & dataloaders
     batch_size = 2048
@@ -581,95 +561,93 @@ def main():
 
     args = Args()
     args.conv_in_channels = 1
-    args.conv_layers_channels = [64, 128, 256]
-    args.conv_in_size = 200
-    args.conv_out_features = 128
+    args.conv_layers_channels = [64, 128, 256, 512]
+    args.conv_in_size = n_mels
+    args.conv_out_features = 512
     args.out_features = 2
-    args.proj_hidden_layers_features = [256, 256, 128, 64]
-    args.contrastive_diff_loss_scaler = 0.25
-    args.lr = 1e-3
+    args.proj_hidden_layers_features = [1024, 512, 256, 128]
+    args.lr = 1e-4
     args.lr_decay = 0.9999
-    args.ema_decay = 0.999
+    args.ema_decay = 0.9999
     args.plot_interval = 1
     args.mode = "supervised"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_ema_9"
+    args.ckpt_name = "pca_finetuning_dino_1"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     supervised_epochs = 11
     args.train_epochs = supervised_epochs
-    args.comment = "augmentation back to -2 to 2, freq range to 70-4000, apply -12dB to upper half of melspecs, bump up lr"
+    args.comment = "use only one augmentation, add random loudness, random noise, dino-like loss, slower ema decay, lower lr"
 
     # create model
     model = PlMelEncoder(args)
     # show model summary via torch summary
     # summary(model, (1, 200))
 
+    # # checkpoint callbacks
+    # checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
+    # best_checkpoint_callback = ModelCheckpoint(
+    #     monitor="val_loss",
+    #     dirpath=checkpoint_path,
+    #     filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
+    #     save_top_k=1,
+    #     mode="min",
+    # )
+    # last_checkpoint_callback = ModelCheckpoint(
+    #     monitor="epoch",
+    #     dirpath=checkpoint_path,
+    #     filename=args.ckpt_name + "_last_{epoch:02d}",
+    #     save_top_k=1,
+    #     mode="max",
+    # )
+
+    # # logger callbacks
+    # tensorboard_logger = TensorBoardLogger(
+    #     save_dir=args.logdir, name=args.ckpt_name)
+
+    # # create trainer
+    # trainer = Trainer(
+    #     max_epochs=args.train_epochs,
+    #     enable_checkpointing=True,
+    #     callbacks=[best_checkpoint_callback, last_checkpoint_callback],
+    #     logger=tensorboard_logger,
+    #     log_every_n_steps=1,
+    # )
+
+    # # save hyperparameters
+    # hyperparams = dict(
+    #     conv_in_channels=args.conv_in_channels,
+    #     conv_layers_channels=args.conv_layers_channels,
+    #     conv_in_size=args.conv_in_size,
+    #     conv_out_features=args.conv_out_features,
+    #     out_features=args.out_features,
+    #     proj_hidden_layers_features=args.proj_hidden_layers_features,
+    #     mode=args.mode,
+    #     lr=args.lr,
+    #     lr_decay=args.lr_decay,
+    #     plot_interval=args.plot_interval,
+    #     ckpt_path=args.ckpt_path,
+    #     ckpt_name=args.ckpt_name,
+    #     resume_ckpt_path=args.resume_ckpt_path,
+    #     logdir=args.logdir,
+    #     train_epochs=args.train_epochs,
+    #     comment=args.comment,
+    # )
+    # trainer.logger.log_hyperparams(hyperparams)
+
+    # # train the model in supervised mode
+    # model.mode = "supervised"
+    # model.supervised_val_loader = supervised_val_loader
+    # print("Training in supervised mode")
+    # trainer.fit(model, supervised_train_loader, supervised_val_loader,
+    #             ckpt_path=args.resume_ckpt_path)
+
     # checkpoint callbacks
     checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
     best_checkpoint_callback = ModelCheckpoint(
         monitor="val_loss",
         dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_val_{epoch:02d}-{val_vae_loss:.4f}",
-        save_top_k=1,
-        mode="min",
-    )
-    last_checkpoint_callback = ModelCheckpoint(
-        monitor="epoch",
-        dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_last_{epoch:02d}",
-        save_top_k=1,
-        mode="max",
-    )
-
-    # logger callbacks
-    tensorboard_logger = TensorBoardLogger(
-        save_dir=args.logdir, name=args.ckpt_name)
-
-    # create trainer
-    trainer = Trainer(
-        max_epochs=args.train_epochs,
-        enable_checkpointing=True,
-        callbacks=[best_checkpoint_callback, last_checkpoint_callback],
-        logger=tensorboard_logger,
-        log_every_n_steps=1,
-    )
-
-    # save hyperparameters
-    hyperparams = dict(
-        conv_in_channels=args.conv_in_channels,
-        conv_layers_channels=args.conv_layers_channels,
-        conv_in_size=args.conv_in_size,
-        conv_out_features=args.conv_out_features,
-        out_features=args.out_features,
-        proj_hidden_layers_features=args.proj_hidden_layers_features,
-        contrastive_diff_loss_scaler=args.contrastive_diff_loss_scaler,
-        mode=args.mode,
-        lr=args.lr,
-        lr_decay=args.lr_decay,
-        plot_interval=args.plot_interval,
-        ckpt_path=args.ckpt_path,
-        ckpt_name=args.ckpt_name,
-        resume_ckpt_path=args.resume_ckpt_path,
-        logdir=args.logdir,
-        train_epochs=args.train_epochs,
-        comment=args.comment,
-    )
-    trainer.logger.log_hyperparams(hyperparams)
-
-    # train the model in supervised mode
-    model.mode = "supervised"
-    model.supervised_val_loader = supervised_val_loader
-    print("Training in supervised mode")
-    trainer.fit(model, supervised_train_loader, supervised_val_loader,
-                ckpt_path=args.resume_ckpt_path)
-
-    # checkpoint callbacks
-    checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
-    best_checkpoint_callback = ModelCheckpoint(
-        monitor="val_loss",
-        dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_val_{epoch:02d}-{val_vae_loss:.4f}",
+        filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
         save_top_k=1,
         mode="min",
     )
@@ -697,13 +675,14 @@ def main():
 
     # train the model in contrastive mode
     model.mode = "contrastive"
-    args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
-    resume_ckpt = torch.load(args.resume_ckpt_path, map_location=model.device)
-    model.load_state_dict(resume_ckpt['state_dict'])
+    # args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
+    # resume_ckpt = torch.load(args.resume_ckpt_path, map_location=model.device)
+    # model.load_state_dict(resume_ckpt['state_dict'])
     model.create_shadow_model()
     print("Training in contrastive mode")
+    resume_ckpt_path = "ckpt/pca_finetuning_dino_1/pca_finetuning_dino_1_last_epoch=76.ckpt"
     trainer_contrastive.fit(
-        model, contrastive_train_loader, contrastive_val_loader)
+        model, contrastive_train_loader, contrastive_val_loader, ckpt_path=resume_ckpt_path)
 
 
 if __name__ == "__main__":
