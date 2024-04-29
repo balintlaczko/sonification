@@ -279,6 +279,7 @@ class PlMelEncoder(LightningModule):
 
         # losses
         self.mse = nn.MSELoss()
+        self.teacher_loss_weight = args.teacher_loss_weight
 
         # learning rate
         self.lr = args.lr
@@ -357,11 +358,13 @@ class PlMelEncoder(LightningModule):
     def contrastive_loss(self, batch):
         # get sample and augmentation
         x, x_a = batch
-        y_teacher = self.shadow(x)
-        y_student = self.model(x_a)
+        y_teacher = self.shadow(x).detach()
+        y_student = self.model(x)
+        y_student_a = self.model(x_a)
 
         # the student's output should be close to the teacher's output
-        loss = self.mse(y_student, y_teacher)
+        loss = self.teacher_loss_weight * \
+            self.mse(y_student, y_teacher) + self.mse(y_student, y_student_a)
 
         return loss
 
@@ -561,86 +564,89 @@ def main():
 
     args = Args()
     args.conv_in_channels = 1
-    args.conv_layers_channels = [64, 128, 256, 512]
+    args.conv_layers_channels = [64, 128, 256]
     args.conv_in_size = n_mels
-    args.conv_out_features = 512
+    args.conv_out_features = 256
     args.out_features = 2
-    args.proj_hidden_layers_features = [1024, 512, 256, 128]
+    args.proj_hidden_layers_features = [256, 256, 128]
     args.lr = 1e-4
     args.lr_decay = 0.9999
-    args.ema_decay = 0.9999
+    args.ema_decay = 0.999
+    args.teacher_loss_weight = 0.25
     args.plot_interval = 1
     args.mode = "supervised"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_dino_1"
+    args.ckpt_name = "pca_finetuning_ema_11"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     supervised_epochs = 11
     args.train_epochs = supervised_epochs
-    args.comment = "use only one augmentation, add random loudness, random noise, dino-like loss, slower ema decay, lower lr"
+    args.comment = "even smaller model, back to my contrastive loss"
 
     # create model
     model = PlMelEncoder(args)
     # show model summary via torch summary
     # summary(model, (1, 200))
 
-    # # checkpoint callbacks
-    # checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
-    # best_checkpoint_callback = ModelCheckpoint(
-    #     monitor="val_loss",
-    #     dirpath=checkpoint_path,
-    #     filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
-    #     save_top_k=1,
-    #     mode="min",
-    # )
-    # last_checkpoint_callback = ModelCheckpoint(
-    #     monitor="epoch",
-    #     dirpath=checkpoint_path,
-    #     filename=args.ckpt_name + "_last_{epoch:02d}",
-    #     save_top_k=1,
-    #     mode="max",
-    # )
+    # checkpoint callbacks
+    checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
+    best_checkpoint_callback = ModelCheckpoint(
+        monitor="val_loss",
+        dirpath=checkpoint_path,
+        filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
+        save_top_k=1,
+        mode="min",
+    )
+    last_checkpoint_callback = ModelCheckpoint(
+        monitor="epoch",
+        dirpath=checkpoint_path,
+        filename=args.ckpt_name + "_last_{epoch:02d}",
+        save_top_k=1,
+        mode="max",
+    )
 
-    # # logger callbacks
-    # tensorboard_logger = TensorBoardLogger(
-    #     save_dir=args.logdir, name=args.ckpt_name)
+    # logger callbacks
+    tensorboard_logger = TensorBoardLogger(
+        save_dir=args.logdir, name=args.ckpt_name)
 
-    # # create trainer
-    # trainer = Trainer(
-    #     max_epochs=args.train_epochs,
-    #     enable_checkpointing=True,
-    #     callbacks=[best_checkpoint_callback, last_checkpoint_callback],
-    #     logger=tensorboard_logger,
-    #     log_every_n_steps=1,
-    # )
+    # create trainer
+    trainer = Trainer(
+        max_epochs=args.train_epochs,
+        enable_checkpointing=True,
+        callbacks=[best_checkpoint_callback, last_checkpoint_callback],
+        logger=tensorboard_logger,
+        log_every_n_steps=1,
+    )
 
-    # # save hyperparameters
-    # hyperparams = dict(
-    #     conv_in_channels=args.conv_in_channels,
-    #     conv_layers_channels=args.conv_layers_channels,
-    #     conv_in_size=args.conv_in_size,
-    #     conv_out_features=args.conv_out_features,
-    #     out_features=args.out_features,
-    #     proj_hidden_layers_features=args.proj_hidden_layers_features,
-    #     mode=args.mode,
-    #     lr=args.lr,
-    #     lr_decay=args.lr_decay,
-    #     plot_interval=args.plot_interval,
-    #     ckpt_path=args.ckpt_path,
-    #     ckpt_name=args.ckpt_name,
-    #     resume_ckpt_path=args.resume_ckpt_path,
-    #     logdir=args.logdir,
-    #     train_epochs=args.train_epochs,
-    #     comment=args.comment,
-    # )
-    # trainer.logger.log_hyperparams(hyperparams)
+    # save hyperparameters
+    hyperparams = dict(
+        conv_in_channels=args.conv_in_channels,
+        conv_layers_channels=args.conv_layers_channels,
+        conv_in_size=args.conv_in_size,
+        conv_out_features=args.conv_out_features,
+        out_features=args.out_features,
+        proj_hidden_layers_features=args.proj_hidden_layers_features,
+        mode=args.mode,
+        lr=args.lr,
+        lr_decay=args.lr_decay,
+        ema_decay=args.ema_decay,
+        teacher_loss_weight=args.teacher_loss_weight,
+        plot_interval=args.plot_interval,
+        ckpt_path=args.ckpt_path,
+        ckpt_name=args.ckpt_name,
+        resume_ckpt_path=args.resume_ckpt_path,
+        logdir=args.logdir,
+        train_epochs=args.train_epochs,
+        comment=args.comment,
+    )
+    trainer.logger.log_hyperparams(hyperparams)
 
-    # # train the model in supervised mode
-    # model.mode = "supervised"
-    # model.supervised_val_loader = supervised_val_loader
-    # print("Training in supervised mode")
-    # trainer.fit(model, supervised_train_loader, supervised_val_loader,
-    #             ckpt_path=args.resume_ckpt_path)
+    # train the model in supervised mode
+    model.mode = "supervised"
+    model.supervised_val_loader = supervised_val_loader
+    print("Training in supervised mode")
+    trainer.fit(model, supervised_train_loader, supervised_val_loader,
+                ckpt_path=args.resume_ckpt_path)
 
     # checkpoint callbacks
     checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
@@ -675,12 +681,13 @@ def main():
 
     # train the model in contrastive mode
     model.mode = "contrastive"
-    # args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
-    # resume_ckpt = torch.load(args.resume_ckpt_path, map_location=model.device)
-    # model.load_state_dict(resume_ckpt['state_dict'])
+    args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
+    resume_ckpt = torch.load(args.resume_ckpt_path, map_location=model.device)
+    model.load_state_dict(resume_ckpt['state_dict'])
     model.create_shadow_model()
     print("Training in contrastive mode")
-    resume_ckpt_path = "ckpt/pca_finetuning_dino_1/pca_finetuning_dino_1_last_epoch=76.ckpt"
+    # resume_ckpt_path = "ckpt/pca_finetuning_dino_1/pca_finetuning_dino_1_last_epoch=76.ckpt"
+    resume_ckpt_path = None
     trainer_contrastive.fit(
         model, contrastive_train_loader, contrastive_val_loader, ckpt_path=resume_ckpt_path)
 
