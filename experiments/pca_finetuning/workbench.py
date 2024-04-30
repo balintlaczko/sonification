@@ -199,8 +199,9 @@ class FmMelContrastiveDataset(Dataset):
         self.apply_loudness = True
         self.loudness_db_range = 6  # -3 to 3 dB
         self.apply_masking = True
-        self.masking_min_p = 0.1
-        self.masking_max_p = 0.3
+        self.masking_upper_half_only = True
+        self.masking_min_p = 0.3
+        self.masking_max_p = 0.6
         self.mel_spec = MelSpectrogram(
             sample_rate=self.sr,
             n_fft=4096,
@@ -220,8 +221,8 @@ class FmMelContrastiveDataset(Dataset):
 
     def __getitem__(self, idx):
         assert self.mel_scaler is not None
-        # get random numbers between -1 and 1 for transposition
-        transpositions = torch.rand(self.n_transpositions) * 2 - 1
+        # get random numbers between -2 and 2 for transposition
+        transpositions = torch.rand(self.n_transpositions) * 4 - 2
         # append 0 to the front, so the first element is the original
         transpositions = torch.cat((torch.tensor([0]), transpositions))
         if not self.apply_transpose:
@@ -253,21 +254,26 @@ class FmMelContrastiveDataset(Dataset):
             if self.apply_masking and i != 0:
                 p = torch.rand(1) * \
                     (self.masking_max_p - self.masking_min_p) + self.masking_min_p
-                mel_scaled = self.mask_mels(mel_scaled, p=p)
+                mel_scaled = self.mask_mels(
+                    mel_scaled, p=p, upper_half_only=self.masking_upper_half_only)
             mels.append(mel_scaled)
 
         # a list of tensors of shape (B, 1, n_mels)
         return mels
         # return mels, waveforms
 
-    def mask_mels(self, mels, p=0.3):
+    def mask_mels(self, mels, p=0.3, upper_half_only=True):
         b_size, _, num_mels = mels.shape
+        if upper_half_only:
+            num_mels = num_mels // 2
         masked_bins = int(num_mels * p)
         mels_indices = torch.arange(num_mels).unsqueeze(0).repeat(b_size, 1)
         for i in range(b_size):
             mels_indices[i] = mels_indices[i][torch.randperm(num_mels)]
         mels_indices = mels_indices[...,
                                     :masked_bins].unsqueeze(1).to(self.device)
+        if upper_half_only:
+            mels_indices += num_mels
         mels_masked = mels.clone()
         mels_masked.scatter_(2, mels_indices, 0)
         return mels_masked
@@ -401,7 +407,6 @@ class PlMelEncoder(LightningModule):
         # losses
         self.mse = nn.MSELoss()
         self.teacher_loss_weight = args.teacher_loss_weight
-        self.pitch_loss_weight = args.pitch_loss_weight
 
         # learning rate
         self.lr = args.lr
@@ -512,11 +517,16 @@ class PlMelEncoder(LightningModule):
         # loss = loss_aug + loss_teacher + loss_pitch
         loss = loss_aug + loss_teacher
 
-        self.log_dict({
-            "loss_aug": loss_aug,
-            "loss_teacher": loss_teacher / self.teacher_loss_weight,
-            # "loss_pitch": loss_pitch / self.pitch_loss_weight,
-        })
+        if self.training:
+            self.log_dict({
+                "loss_aug": loss_aug,
+                "loss_teacher": loss_teacher / self.teacher_loss_weight,
+            })
+        else:
+            self.log_dict({
+                "val_loss_aug": loss_aug,
+                "val_loss_teacher": loss_teacher / self.teacher_loss_weight,
+            })
 
         return loss
 
@@ -728,20 +738,19 @@ def main():
     args.conv_out_features = 256
     args.out_features = 2
     args.proj_hidden_layers_features = [256, 256, 128]
-    args.lr = 1e-4
+    args.lr = 1e-3
     args.lr_decay = 0.9999
     args.ema_decay = 0.999
     args.teacher_loss_weight = 0.25
-    args.pitch_loss_weight = 0.25
     args.plot_interval = 1
     args.mode = "supervised"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_ema_12"
+    args.ckpt_name = "pca_finetuning_ema_13"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     supervised_epochs = 11
     args.train_epochs = supervised_epochs
-    args.comment = "no pitch loss, apply loudness & noise on wf before mel, use transp between -1 and 1, apply masking on mels"
+    args.comment = "transp between -2 and 2, higher lr, mask only upper half of spectrogram with higher p"
 
     # create model
     model = PlMelEncoder(args)
@@ -792,7 +801,6 @@ def main():
         lr_decay=args.lr_decay,
         ema_decay=args.ema_decay,
         teacher_loss_weight=args.teacher_loss_weight,
-        pitch_loss_weight=args.pitch_loss_weight,
         plot_interval=args.plot_interval,
         ckpt_path=args.ckpt_path,
         ckpt_name=args.ckpt_name,
