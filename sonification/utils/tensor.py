@@ -42,6 +42,7 @@ def scale(x, in_low, in_high, out_low, out_high, exp=1):
         )
     )
 
+
 def permute_dims(x: torch.Tensor) -> torch.Tensor:
     # x is (batch, z)
     b, z_dim = x.shape
@@ -50,3 +51,29 @@ def permute_dims(x: torch.Tensor) -> torch.Tensor:
     for i in range(z_dim):
         y[:, i] = x[:, i][torch.randperm(b)]
     return y
+
+
+def db2amp(db: torch.Tensor) -> torch.Tensor:
+    return 10**(db / 20)
+
+
+def amp2db(amp: torch.Tensor) -> torch.Tensor:
+    return 20 * torch.log10(amp)
+
+
+def frequency2midi(
+        frequency: torch.Tensor,
+        base_frequency: float = 440.0,
+) -> torch.Tensor:
+    """
+    Converts a frequency in Hz to a MIDI note number.
+
+    Args:
+        frequency: Frequency in Hz. Can be a scalar or an array as a torch.tensor.
+        base_frequency: Frequency of MIDI note 69. Defaults to 440.0.
+
+    Returns:
+        np.ndarray: MIDI note number.
+    """
+
+    return 69 + 12 * torch.log2(frequency / base_frequency)
