@@ -743,14 +743,15 @@ def main():
     args.ema_decay = 0.999
     args.teacher_loss_weight = 0.25
     args.plot_interval = 1
-    args.mode = "supervised"
+    args.mode = "contrastive"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_ema_13"
+    args.ckpt_name = "pca_finetuning_only_contrastive_1"
     args.resume_ckpt_path = None
     args.logdir = "logs"
-    supervised_epochs = 11
-    args.train_epochs = supervised_epochs
-    args.comment = "transp between -2 and 2, higher lr, mask only upper half of spectrogram with higher p"
+    # supervised_epochs = 11
+    # args.train_epochs = supervised_epochs
+    args.train_epochs = 1000001
+    args.comment = "same as ema_13 but starting from scratch with contrastive training only, no supervised training"
 
     # create model
     model = PlMelEncoder(args)
@@ -811,54 +812,56 @@ def main():
     )
     trainer.logger.log_hyperparams(hyperparams)
 
-    # train the model in supervised mode
-    model.mode = "supervised"
-    model.supervised_val_loader = supervised_val_loader
-    print("Training in supervised mode")
-    trainer.fit(model, supervised_train_loader, supervised_val_loader,
-                ckpt_path=args.resume_ckpt_path)
+    # # train the model in supervised mode
+    # model.mode = "supervised"
+    # model.supervised_val_loader = supervised_val_loader
+    # print("Training in supervised mode")
+    # trainer.fit(model, supervised_train_loader, supervised_val_loader,
+    #             ckpt_path=args.resume_ckpt_path)
 
-    # checkpoint callbacks
-    checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
-    best_checkpoint_callback = ModelCheckpoint(
-        monitor="val_loss",
-        dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
-        save_top_k=1,
-        mode="min",
-    )
-    last_checkpoint_callback = ModelCheckpoint(
-        monitor="epoch",
-        dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_last_{epoch:02d}",
-        save_top_k=1,
-        mode="max",
-    )
+    # # checkpoint callbacks
+    # checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
+    # best_checkpoint_callback = ModelCheckpoint(
+    #     monitor="val_loss",
+    #     dirpath=checkpoint_path,
+    #     filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
+    #     save_top_k=1,
+    #     mode="min",
+    # )
+    # last_checkpoint_callback = ModelCheckpoint(
+    #     monitor="epoch",
+    #     dirpath=checkpoint_path,
+    #     filename=args.ckpt_name + "_last_{epoch:02d}",
+    #     save_top_k=1,
+    #     mode="max",
+    # )
 
-    # logger callbacks
-    tensorboard_logger = TensorBoardLogger(
-        save_dir=args.logdir, name=args.ckpt_name)
+    # # logger callbacks
+    # tensorboard_logger = TensorBoardLogger(
+    #     save_dir=args.logdir, name=args.ckpt_name)
 
-    # create trainer
-    args.train_epochs = 1000001
-    trainer_contrastive = Trainer(
-        max_epochs=args.train_epochs,
-        enable_checkpointing=True,
-        callbacks=[best_checkpoint_callback, last_checkpoint_callback],
-        logger=tensorboard_logger,
-        log_every_n_steps=1,
-    )
+    # # create trainer
+    # args.train_epochs = 1000001
+    # trainer_contrastive = Trainer(
+    #     max_epochs=args.train_epochs,
+    #     enable_checkpointing=True,
+    #     callbacks=[best_checkpoint_callback, last_checkpoint_callback],
+    #     logger=tensorboard_logger,
+    #     log_every_n_steps=1,
+    # )
 
     # train the model in contrastive mode
     model.mode = "contrastive"
-    args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
-    resume_ckpt = torch.load(args.resume_ckpt_path, map_location=model.device)
-    model.load_state_dict(resume_ckpt['state_dict'])
+    # args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
+    # resume_ckpt = torch.load(args.resume_ckpt_path, map_location=model.device)
+    # model.load_state_dict(resume_ckpt['state_dict'])
     model.create_shadow_model()
     print("Training in contrastive mode")
     # resume_ckpt_path = "ckpt/pca_finetuning_dino_1/pca_finetuning_dino_1_last_epoch=76.ckpt"
     resume_ckpt_path = None
-    trainer_contrastive.fit(
+    # trainer_contrastive.fit(
+    #     model, contrastive_train_loader, contrastive_val_loader, ckpt_path=resume_ckpt_path)
+    trainer.fit(
         model, contrastive_train_loader, contrastive_val_loader, ckpt_path=resume_ckpt_path)
 
 
