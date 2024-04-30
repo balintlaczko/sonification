@@ -1,5 +1,7 @@
+# %%
 # imports
 # from torchsummary import summary
+import numpy as np
 from lightning.pytorch import LightningModule
 from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -7,13 +9,11 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
 from sonification.models.ddsp import FMSynth
 from sonification.models.layers import ConvEncoder1D, LinearProjector
-from sonification.models.loss import MMDloss
-from librosa import resample
-# from sonification.datasets import FmSynthDataset
 from sonification.utils.dsp import transposition2duration
+from sonification.utils.array import fluid_dataset2array
+from sonification.utils.tensor import db2amp, amp2db, frequency2midi
 from torchaudio.functional import amplitude_to_DB
 from torchaudio.transforms import MelSpectrogram
-from sonification.utils.array import fluid_dataset2array
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 from torch.utils.data import Dataset
@@ -26,6 +26,9 @@ import json
 from copy import deepcopy
 from collections import OrderedDict
 from sys import stderr
+import torchyin
+
+# %%
 
 
 class Args:
@@ -91,7 +94,7 @@ class FmMel2PCADataset(Dataset):
             sample_rate=self.sr,
             n_fft=4096,
             f_min=70,
-            f_max=4000,
+            f_max=20000,
             pad=1,
             n_mels=self.n_mels,
             power=2,
@@ -189,16 +192,20 @@ class FmMelContrastiveDataset(Dataset):
         self.sr = sr
         self.dur = dur
         self.n_mels = n_mels
+        self.apply_transpose = True
         self.n_transpositions = 1
         self.apply_noise = True
-        self.noise_db_range = 6
+        self.noise_db_range = 2  # 0 to 2 dB noise will be added
         self.apply_loudness = True
-        self.loudness_db_range = 6
+        self.loudness_db_range = 6  # -3 to 3 dB
+        self.apply_masking = True
+        self.masking_min_p = 0.1
+        self.masking_max_p = 0.3
         self.mel_spec = MelSpectrogram(
             sample_rate=self.sr,
             n_fft=4096,
             f_min=70,
-            f_max=4000,
+            f_max=20000,
             pad=1,
             n_mels=self.n_mels,
             power=2,
@@ -213,33 +220,80 @@ class FmMelContrastiveDataset(Dataset):
 
     def __getitem__(self, idx):
         assert self.mel_scaler is not None
-        # get random numbers between -2 and 2 for transposition
-        transpositions = torch.rand(self.n_transpositions) * 4 - 2
+        # get random numbers between -1 and 1 for transposition
+        transpositions = torch.rand(self.n_transpositions) * 2 - 1
         # append 0 to the front, so the first element is the original
         transpositions = torch.cat((torch.tensor([0]), transpositions))
-        output = []
+        if not self.apply_transpose:
+            transpositions = torch.zeros_like(transpositions)
+        mels = []
+        # waveforms = None
         for i, transpose in enumerate(transpositions):
-            mel = self.get_mel(idx, transpose)  # (B, n_mels, 1)
-            if self.apply_loudness and i != 0:
-                loudness = torch.ones_like(
-                    mel) * self.loudness_db_range - (self.loudness_db_range / 2)
-                mel += loudness
-            if self.apply_noise and i != 0:
-                noise = torch.rand_like(
-                    mel) * self.noise_db_range - (self.noise_db_range / 2)
-                mel += noise
+            # mel, y = self.get_mel(idx, transpose)  # (B, n_mels, 1), (B, T)
+
+            mel = self.get_mel(
+                idx,
+                transpose,
+                change_loudness=i != 0,
+                add_noise=i != 0)  # (B, n_mels, 1)
+            # if i == 0:
+            #     waveforms = y
+            # if self.apply_loudness and i != 0:
+            #     loudness = torch.rand(mel.shape[0], 1, 1) * self.loudness_db_range - (self.loudness_db_range / 2)
+            #     mel += loudness
+            # if self.apply_noise and i != 0:
+            #     noise = torch.rand_like(
+            #         mel) * self.noise_db_range - (self.noise_db_range / 2)
+            #     mel += noise
             mel_scaled = self.mel_scaler.transform(
                 mel.squeeze(-1).cpu().numpy())  # (B, n_mels)
             if not isinstance(idx, int):
                 mel_scaled = torch.tensor(
                     mel_scaled, device=self.device).reshape(-1, 1, self.n_mels)  # (B, 1, n_mels)
-            output.append(mel_scaled)
+            if self.apply_masking and i != 0:
+                p = torch.rand(1) * \
+                    (self.masking_max_p - self.masking_min_p) + self.masking_min_p
+                mel_scaled = self.mask_mels(mel_scaled, p=p)
+            mels.append(mel_scaled)
 
-        # a list of tensors of shape (B, n_mels)
-        return output
+        # a list of tensors of shape (B, 1, n_mels)
+        return mels
+        # return mels, waveforms
 
-    def get_mel(self, idx, transpose=0):
+    def mask_mels(self, mels, p=0.3):
+        b_size, _, num_mels = mels.shape
+        masked_bins = int(num_mels * p)
+        mels_indices = torch.arange(num_mels).unsqueeze(0).repeat(b_size, 1)
+        for i in range(b_size):
+            mels_indices[i] = mels_indices[i][torch.randperm(num_mels)]
+        mels_indices = mels_indices[...,
+                                    :masked_bins].unsqueeze(1).to(self.device)
+        mels_masked = mels.clone()
+        mels_masked.scatter_(2, mels_indices, 0)
+        return mels_masked
+
+    def get_mel(self, idx, transpose=0, change_loudness=False, add_noise=False):
         fm_synth = self.fm_synth[idx]  # (B, T)
+
+        if change_loudness:
+            # one random dB value per example in batch
+            loudness = torch.rand(
+                fm_synth.shape[0], 1) * self.loudness_db_range - (self.loudness_db_range / 2)  # -3 to 3 dB
+            # scale fm_synth to dB
+            fm_synth *= db2amp(loudness).to(self.device)
+
+        if add_noise:
+            # full range noise from -1 to 1
+            noise = torch.rand_like(fm_synth) * 2 - 1
+            # one random dB value per example in batch
+            noise_loudness = torch.rand(
+                fm_synth.shape[0], 1) * self.noise_db_range  # 0 to 2 dB
+            noise_amp = db2amp(noise_loudness) - 1
+            # scale noise to dB
+            noise *= noise_amp.to(self.device)
+            # add noise
+            fm_synth += noise
+
         if transpose != 0:
             target_dur = transposition2duration(transpose)
             target_sr = int(self.sr * target_dur)
@@ -257,6 +311,73 @@ class FmMelContrastiveDataset(Dataset):
         # TODO: use lowpass filter as an nn.Module instead
         # mel_avg_db[:, self.n_mels // 2:, :] -= 12
         return mel_avg_db
+        # return mel_avg_db, fm_synth
+
+
+# # %%
+# b_size = 3
+# num_mels = 15
+# p = 0.3
+# masked_bins = int(num_mels * p)
+# fake_mels = torch.ones(b_size, 1, num_mels)
+# print(fake_mels)
+# print(fake_mels.shape)
+# fake_mels_indices = torch.arange(num_mels).unsqueeze(0).repeat(b_size, 1)
+# # print(fake_mels_indices)
+# # print(fake_mels_indices.shape)
+# # scramble the indices in every row individually
+# for i in range(b_size):
+#     fake_mels_indices[i] = fake_mels_indices[i][torch.randperm(num_mels)]
+# fake_mels_indices = fake_mels_indices[..., :masked_bins].unsqueeze(1)
+# print(fake_mels_indices)
+# print(fake_mels_indices.shape)
+# # mask the bins
+# fake_mels.scatter_(2, fake_mels_indices, 0)
+# print(fake_mels)
+# print(fake_mels.shape)
+
+# # %%
+
+
+# def mask_mels(mels, p=0.3):
+#     b_size, _, num_mels = mels.shape
+#     masked_bins = int(num_mels * p)
+#     mels_indices = torch.arange(num_mels).unsqueeze(0).repeat(b_size, 1)
+#     for i in range(b_size):
+#         mels_indices[i] = mels_indices[i][torch.randperm(num_mels)]
+#     mels_indices = mels_indices[..., :masked_bins].unsqueeze(1)
+#     mels_masked = mels.clone()
+#     mels_masked.scatter_(2, mels_indices, 0)
+#     return mels_masked
+
+
+# fake_mels = torch.ones(3, 1, 15)
+# print(fake_mels)
+# print(fake_mels.shape)
+# fake_mels_masked = mask_mels(fake_mels, p=0.5)
+# print(fake_mels_masked)
+# print(fake_mels_masked.shape)
+# print(fake_mels)
+# print(fake_mels.shape)
+
+# # %%
+
+
+# def db2amp(db: torch.Tensor) -> torch.Tensor:
+#     return 10**(db / 20)
+
+
+# def amp2db(amp: torch.Tensor) -> torch.Tensor:
+#     return 20 * torch.log10(amp)
+
+
+# random_dbs = torch.rand(3, 1) * 6 - 3
+# fake_y = torch.ones(3, 10)
+# print(db2amp(random_dbs))
+# print(fake_y * db2amp(random_dbs))
+
+
+# %%
 
 
 class PlMelEncoder(LightningModule):
@@ -280,11 +401,15 @@ class PlMelEncoder(LightningModule):
         # losses
         self.mse = nn.MSELoss()
         self.teacher_loss_weight = args.teacher_loss_weight
+        self.pitch_loss_weight = args.pitch_loss_weight
 
         # learning rate
         self.lr = args.lr
         self.lr_decay = args.lr_decay
         self.decay = args.ema_decay
+
+        # sampling rate
+        self.sr = args.sr
 
         # logging
         self.plot_interval = args.plot_interval
@@ -357,14 +482,41 @@ class PlMelEncoder(LightningModule):
 
     def contrastive_loss(self, batch):
         # get sample and augmentation
+        # mels, waveforms = batch
+        # x, x_a = mels
         x, x_a = batch
         y_teacher = self.shadow(x).detach()
         y_student = self.model(x)
         y_student_a = self.model(x_a)
 
-        # the student's output should be close to the teacher's output
-        loss = self.teacher_loss_weight * \
-            self.mse(y_student, y_teacher) + self.mse(y_student, y_student_a)
+        # embeddings should be inveriant of augmentations
+        loss_aug = self.mse(y_student, y_student_a)
+
+        # embeddings should be similar to teacher
+        loss_teacher = self.teacher_loss_weight * \
+            self.mse(y_student, y_teacher)
+
+        # # finally, the distances between the embeddings should be proportional to detected pitch distances (MIDI)
+        # pitch = torchyin.estimate(waveforms, self.sr)  # (B, T)
+        # pitch_median = torch.median(pitch, dim=-1).values  # (B,)
+        # pitch_median = torch.clamp(pitch_median, 20)  # clamp to minimum 20 hz
+        # pitch_midi = frequency2midi_tensor(pitch_median)  # (B,)
+        # pitch_dist = torch.abs(pitch_midi.unsqueeze(-1) -
+        #                        pitch_midi.unsqueeze(-2))  # (B, B)
+        # pitch_dist = pitch_dist / pitch_dist.max()  # normalize
+        # embeddings_dist = torch.cdist(y_student, y_student)
+        # embeddings_dist = embeddings_dist / embeddings_dist.max()
+        # loss_pitch = self.pitch_loss_weight * \
+        #     self.mse(embeddings_dist, pitch_dist)
+
+        # loss = loss_aug + loss_teacher + loss_pitch
+        loss = loss_aug + loss_teacher
+
+        self.log_dict({
+            "loss_aug": loss_aug,
+            "loss_teacher": loss_teacher / self.teacher_loss_weight,
+            # "loss_pitch": loss_pitch / self.pitch_loss_weight,
+        })
 
         return loss
 
@@ -435,6 +587,11 @@ class PlMelEncoder(LightningModule):
         z_all = torch.zeros(
             len(dataset), self.proj_out_features).to(self.device)
         for batch_idx, data in enumerate(loader):
+            # if self.mode == "supervised":
+            #     x, _ = data
+            # elif self.mode == "contrastive":
+            #     mels, _ = data
+            #     x, _ = mels
             x, _ = data
             z = self.model(x.to(self.device))
             z = z.detach()
@@ -462,6 +619,7 @@ class PlMelEncoder(LightningModule):
         return [optimizer], [scheduler]
 
 
+# %%
 csv_abspath = "./experiments/pca_finetuning/fm_synth_params.csv"
 pca_abspath = "./experiments/pca_finetuning/pca_mels_mean.json"
 
@@ -563,6 +721,7 @@ def main():
         fm_contrastive_val, batch_size=None, sampler=fm_contrastive_val_batchsampler)
 
     args = Args()
+    args.sr = 48000
     args.conv_in_channels = 1
     args.conv_layers_channels = [64, 128, 256]
     args.conv_in_size = n_mels
@@ -573,15 +732,16 @@ def main():
     args.lr_decay = 0.9999
     args.ema_decay = 0.999
     args.teacher_loss_weight = 0.25
+    args.pitch_loss_weight = 0.25
     args.plot_interval = 1
     args.mode = "supervised"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_ema_11"
+    args.ckpt_name = "pca_finetuning_ema_12"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     supervised_epochs = 11
     args.train_epochs = supervised_epochs
-    args.comment = "even smaller model, back to my contrastive loss"
+    args.comment = "no pitch loss, apply loudness & noise on wf before mel, use transp between -1 and 1, apply masking on mels"
 
     # create model
     model = PlMelEncoder(args)
@@ -620,6 +780,7 @@ def main():
 
     # save hyperparameters
     hyperparams = dict(
+        sr=args.sr,
         conv_in_channels=args.conv_in_channels,
         conv_layers_channels=args.conv_layers_channels,
         conv_in_size=args.conv_in_size,
@@ -631,6 +792,7 @@ def main():
         lr_decay=args.lr_decay,
         ema_decay=args.ema_decay,
         teacher_loss_weight=args.teacher_loss_weight,
+        pitch_loss_weight=args.pitch_loss_weight,
         plot_interval=args.plot_interval,
         ckpt_path=args.ckpt_path,
         ckpt_name=args.ckpt_name,
