@@ -77,3 +77,20 @@ def frequency2midi(
     """
 
     return 69 + 12 * torch.log2(frequency / base_frequency)
+
+
+def midi2frequency(
+        midi: torch.Tensor,
+        base_frequency: float = 440.0,
+) -> torch.Tensor:
+    """
+    Convert MIDI note number to frequency.
+
+    Args:
+        midi (torch.Tensor): The MIDI note number. Can be a scalar or an array.
+        base_frequency (float, optional): The base frequency (or "tuning") to use. Defaults to 440.0.
+
+    Returns:
+        torch.Tensor: The frequency in Hz.
+    """
+    return base_frequency * 2 ** ((midi - 69) / 12)
