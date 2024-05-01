@@ -17,12 +17,11 @@ class Phasor(nn.Module):
 
         self.sr = sr
 
-    def forward(self, freq: torch.Tensor):  # input shape: (batch_size, n_samples)
-        batch_size = freq.shape[0]
-        increment = freq[:, :-1] / self.sr
+    def forward(self, freq: torch.Tensor):  # input shape: (..., n_samples)
+        increment = freq[..., :-1] / self.sr
         phase = torch.cumsum(increment, dim=-1)
         phase = torch.cat(
-            [torch.zeros(batch_size, 1).to(phase.device), phase], dim=-1)
+            [torch.zeros_like(freq[..., 0]).unsqueeze(-1).to(phase.device), phase], dim=-1)
         phasor = wrap(phase, 0.0, 1.0)
         return phasor
 
