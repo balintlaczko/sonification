@@ -228,24 +228,24 @@ class FmMelContrastiveDataset(Dataset):
         if not self.apply_transpose:
             transpositions = torch.zeros_like(transpositions)
         mels = []
-        # waveforms = None
+        waveforms = None
         for i, transpose in enumerate(transpositions):
-            # mel, y = self.get_mel(idx, transpose)  # (B, n_mels, 1), (B, T)
 
-            mel = self.get_mel(
+            mel, y = self.get_mel(
                 idx,
                 transpose,
                 change_loudness=i != 0,
-                add_noise=i != 0)  # (B, n_mels, 1)
-            # if i == 0:
-            #     waveforms = y
-            # if self.apply_loudness and i != 0:
-            #     loudness = torch.rand(mel.shape[0], 1, 1) * self.loudness_db_range - (self.loudness_db_range / 2)
-            #     mel += loudness
-            # if self.apply_noise and i != 0:
-            #     noise = torch.rand_like(
-            #         mel) * self.noise_db_range - (self.noise_db_range / 2)
-            #     mel += noise
+                add_noise=i != 0)  # (B, n_mels, 1), (B, T)
+
+            # mel = self.get_mel(
+            #     idx,
+            #     transpose,
+            #     change_loudness=i != 0,
+            #     add_noise=i != 0)  # (B, n_mels, 1)
+
+            if i == 0:
+                waveforms = y
+
             mel_scaled = self.mel_scaler.transform(
                 mel.squeeze(-1).cpu().numpy())  # (B, n_mels)
             if not isinstance(idx, int):
@@ -259,8 +259,8 @@ class FmMelContrastiveDataset(Dataset):
             mels.append(mel_scaled)
 
         # a list of tensors of shape (B, 1, n_mels)
-        return mels
-        # return mels, waveforms
+        # return mels
+        return mels, waveforms
 
     def mask_mels(self, mels, p=0.3, upper_half_only=True):
         b_size, _, num_mels = mels.shape
@@ -316,8 +316,8 @@ class FmMelContrastiveDataset(Dataset):
         # apply a -12 dB reduction on the upper half of the mel spectrogram
         # TODO: use lowpass filter as an nn.Module instead
         # mel_avg_db[:, self.n_mels // 2:, :] -= 12
-        return mel_avg_db
-        # return mel_avg_db, fm_synth
+        # return mel_avg_db
+        return mel_avg_db, fm_synth
 
 
 # %%
@@ -436,6 +436,7 @@ class PlMelEncoder(LightningModule):
         self.mse = nn.MSELoss()
         self.teacher_loss_weight = args.teacher_loss_weight
         self.triplet_loss_weight = args.triplet_loss_weight
+        self.pitch_loss_weight = args.pitch_loss_weight
 
         # learning rate
         self.lr = args.lr
@@ -516,9 +517,9 @@ class PlMelEncoder(LightningModule):
 
     def contrastive_loss(self, batch):
         # get sample and augmentation
-        # mels, waveforms = batch
-        # x, x_a = mels
-        x, x_a = batch
+        mels, waveforms = batch
+        x, x_a = mels
+        # x, x_a = batch
         y_teacher = self.shadow(x).detach()
         y_student = self.model(x)
         y_student_a = self.model(x_a)
@@ -530,21 +531,21 @@ class PlMelEncoder(LightningModule):
         loss_teacher = self.teacher_loss_weight * \
             self.mse(y_student, y_teacher)
 
-        # # finally, the distances between the embeddings should be proportional to detected pitch distances (MIDI)
-        # pitch = torchyin.estimate(waveforms, self.sr)  # (B, T)
-        # pitch_median = torch.median(pitch, dim=-1).values  # (B,)
-        # pitch_median = torch.clamp(pitch_median, 20)  # clamp to minimum 20 hz
-        # pitch_midi = frequency2midi_tensor(pitch_median)  # (B,)
-        # pitch_dist = torch.abs(pitch_midi.unsqueeze(-1) -
-        #                        pitch_midi.unsqueeze(-2))  # (B, B)
-        # pitch_dist = pitch_dist / pitch_dist.max()  # normalize
-        # embeddings_dist = torch.cdist(y_student, y_student)
-        # embeddings_dist = embeddings_dist / embeddings_dist.max()
-        # loss_pitch = self.pitch_loss_weight * \
-        #     self.mse(embeddings_dist, pitch_dist)
+        # finally, the distances between the embeddings should be proportional to detected pitch distances (MIDI)
+        pitch = torchyin.estimate(waveforms, self.sr)  # (B, T)
+        pitch_median = torch.median(pitch, dim=-1).values  # (B,)
+        pitch_median = torch.clamp(pitch_median, 20)  # clamp to minimum 20 hz
+        pitch_midi = frequency2midi(pitch_median)  # (B,)
+        pitch_dist = torch.abs(pitch_midi.unsqueeze(-1) -
+                               pitch_midi.unsqueeze(-2))  # (B, B)
+        pitch_dist = pitch_dist / pitch_dist.max()  # normalize
+        embeddings_dist = torch.cdist(y_student, y_student)
+        embeddings_dist = embeddings_dist / embeddings_dist.max()
+        loss_pitch = self.pitch_loss_weight * \
+            self.mse(embeddings_dist, pitch_dist)
 
-        # loss = loss_aug + loss_teacher + loss_pitch
-        loss = loss_aug + loss_teacher
+        loss = loss_aug + loss_teacher + loss_pitch
+        # loss = loss_aug + loss_teacher
 
         triplet_loss = 0
         if self.contrastive_sinusoidal_dataset is not None and self.training:
@@ -565,12 +566,14 @@ class PlMelEncoder(LightningModule):
             self.log_dict({
                 "loss_aug": loss_aug,
                 "loss_teacher": loss_teacher / self.teacher_loss_weight,
-                "triplet_loss": triplet_loss / self.triplet_loss_weight,
+                "loss_triplet": triplet_loss / self.triplet_loss_weight,
+                "loss_pitch": loss_pitch / self.pitch_loss_weight,
             })
         else:
             self.log_dict({
                 "val_loss_aug": loss_aug,
                 "val_loss_teacher": loss_teacher / self.teacher_loss_weight,
+                "val_loss_pitch": loss_pitch / self.pitch_loss_weight,
             })
 
         return loss
@@ -642,12 +645,12 @@ class PlMelEncoder(LightningModule):
         z_all = torch.zeros(
             len(dataset), self.proj_out_features).to(self.device)
         for batch_idx, data in enumerate(loader):
-            # if self.mode == "supervised":
-            #     x, _ = data
-            # elif self.mode == "contrastive":
-            #     mels, _ = data
-            #     x, _ = mels
-            x, _ = data
+            if self.mode == "supervised":
+                x, _ = data
+            elif self.mode == "contrastive":
+                mels, _ = data
+                x, _ = mels
+            # x, _ = data
             z = self.model(x.to(self.device))
             z = z.detach()
             z_all[batch_idx*batch_size: batch_idx *
@@ -788,16 +791,17 @@ def main():
     args.ema_decay = 0.999
     args.teacher_loss_weight = 0.5
     args.triplet_loss_weight = 0.05
+    args.pitch_loss_weight = 0.1
     args.plot_interval = 1
     args.mode = "contrastive"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_ema_14"
+    args.ckpt_name = "pca_finetuning_only_contrastive_5"
     args.resume_ckpt_path = None
     args.logdir = "logs"
-    supervised_epochs = 11
-    args.train_epochs = supervised_epochs
-    # args.train_epochs = 1000001
-    args.comment = "same but bring back pca pretraining"
+    # supervised_epochs = 11
+    # args.train_epochs = supervised_epochs
+    args.train_epochs = 1000001
+    args.comment = "from scratch, but use pitch loss too"
 
     # create model
     model = PlMelEncoder(args)
@@ -858,6 +862,7 @@ def main():
         ema_decay=args.ema_decay,
         teacher_loss_weight=args.teacher_loss_weight,
         triplet_loss_weight=args.triplet_loss_weight,
+        pitch_loss_weight=args.pitch_loss_weight,
         plot_interval=args.plot_interval,
         ckpt_path=args.ckpt_path,
         ckpt_name=args.ckpt_name,
@@ -868,57 +873,57 @@ def main():
     )
     trainer.logger.log_hyperparams(hyperparams)
 
-    # train the model in supervised mode
-    model.mode = "supervised"
-    model.supervised_val_loader = supervised_val_loader
-    print("Training in supervised mode")
-    trainer.fit(model, supervised_train_loader, supervised_val_loader,
-                ckpt_path=args.resume_ckpt_path)
+    # # train the model in supervised mode
+    # model.mode = "supervised"
+    # model.supervised_val_loader = supervised_val_loader
+    # print("Training in supervised mode")
+    # trainer.fit(model, supervised_train_loader, supervised_val_loader,
+    #             ckpt_path=args.resume_ckpt_path)
 
-    # checkpoint callbacks
-    checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
-    best_checkpoint_callback = ModelCheckpoint(
-        monitor="val_loss",
-        dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
-        save_top_k=1,
-        mode="min",
-    )
-    last_checkpoint_callback = ModelCheckpoint(
-        monitor="epoch",
-        dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_last_{epoch:02d}",
-        save_top_k=1,
-        mode="max",
-    )
+    # # checkpoint callbacks
+    # checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
+    # best_checkpoint_callback = ModelCheckpoint(
+    #     monitor="val_loss",
+    #     dirpath=checkpoint_path,
+    #     filename=args.ckpt_name + "_val_{epoch:02d}-{val_loss:.4f}",
+    #     save_top_k=1,
+    #     mode="min",
+    # )
+    # last_checkpoint_callback = ModelCheckpoint(
+    #     monitor="epoch",
+    #     dirpath=checkpoint_path,
+    #     filename=args.ckpt_name + "_last_{epoch:02d}",
+    #     save_top_k=1,
+    #     mode="max",
+    # )
 
-    # logger callbacks
-    tensorboard_logger = TensorBoardLogger(
-        save_dir=args.logdir, name=args.ckpt_name)
+    # # logger callbacks
+    # tensorboard_logger = TensorBoardLogger(
+    #     save_dir=args.logdir, name=args.ckpt_name)
 
-    # create trainer
-    args.train_epochs = 1000001
-    trainer_contrastive = Trainer(
-        max_epochs=args.train_epochs,
-        enable_checkpointing=True,
-        callbacks=[best_checkpoint_callback, last_checkpoint_callback],
-        logger=tensorboard_logger,
-        log_every_n_steps=1,
-    )
+    # # create trainer
+    # args.train_epochs = 1000001
+    # trainer_contrastive = Trainer(
+    #     max_epochs=args.train_epochs,
+    #     enable_checkpointing=True,
+    #     callbacks=[best_checkpoint_callback, last_checkpoint_callback],
+    #     logger=tensorboard_logger,
+    #     log_every_n_steps=1,
+    # )
 
     # train the model in contrastive mode
     model.mode = "contrastive"
-    args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
-    resume_ckpt = torch.load(args.resume_ckpt_path, map_location=model.device)
-    model.load_state_dict(resume_ckpt['state_dict'])
+    # args.resume_ckpt_path = f"{args.ckpt_path}/{args.ckpt_name}/{args.ckpt_name}_last_epoch={str(supervised_epochs - 1).zfill(2)}.ckpt"
+    # resume_ckpt = torch.load(args.resume_ckpt_path, map_location=model.device)
+    # model.load_state_dict(resume_ckpt['state_dict'])
     model.create_shadow_model()
     print("Training in contrastive mode")
     # resume_ckpt_path = "ckpt/pca_finetuning_dino_1/pca_finetuning_dino_1_last_epoch=76.ckpt"
     resume_ckpt_path = None
-    trainer_contrastive.fit(
-        model, contrastive_train_loader, contrastive_val_loader, ckpt_path=resume_ckpt_path)
-    # trainer.fit(
+    # trainer_contrastive.fit(
     #     model, contrastive_train_loader, contrastive_val_loader, ckpt_path=resume_ckpt_path)
+    trainer.fit(
+        model, contrastive_train_loader, contrastive_val_loader, ckpt_path=resume_ckpt_path)
 
 
 if __name__ == "__main__":
