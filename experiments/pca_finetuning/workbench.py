@@ -531,21 +531,24 @@ class PlMelEncoder(LightningModule):
         loss_teacher = self.teacher_loss_weight * \
             self.mse(y_student, y_teacher)
 
-        # finally, the distances between the embeddings should be proportional to detected pitch distances (MIDI)
-        pitch = torchyin.estimate(waveforms, self.sr)  # (B, T)
-        pitch_median = torch.median(pitch, dim=-1).values  # (B,)
-        pitch_median = torch.clamp(pitch_median, 20)  # clamp to minimum 20 hz
-        pitch_midi = frequency2midi(pitch_median)  # (B,)
-        pitch_dist = torch.abs(pitch_midi.unsqueeze(-1) -
-                               pitch_midi.unsqueeze(-2))  # (B, B)
-        pitch_dist = pitch_dist / pitch_dist.max()  # normalize
-        embeddings_dist = torch.cdist(y_student, y_student)
-        embeddings_dist = embeddings_dist / embeddings_dist.max()
-        loss_pitch = self.pitch_loss_weight * \
-            self.mse(embeddings_dist, pitch_dist)
+        loss = loss_aug + loss_teacher
 
-        loss = loss_aug + loss_teacher + loss_pitch
-        # loss = loss_aug + loss_teacher
+        loss_pitch = 0
+        if self.pitch_loss_weight > 0:
+            # finally, the distances between the embeddings should be proportional to detected pitch distances (MIDI)
+            pitch = torchyin.estimate(waveforms, self.sr)  # (B, T)
+            pitch_median = torch.median(pitch, dim=-1).values  # (B,)
+            # clamp to minimum 20 hz
+            pitch_median = torch.clamp(pitch_median, 20)
+            pitch_midi = frequency2midi(pitch_median)  # (B,)
+            pitch_dist = torch.abs(pitch_midi.unsqueeze(-1) -
+                                   pitch_midi.unsqueeze(-2))  # (B, B)
+            pitch_dist = pitch_dist / pitch_dist.max()  # normalize
+            embeddings_dist = torch.cdist(y_student, y_student)
+            embeddings_dist = embeddings_dist / embeddings_dist.max()
+            loss_pitch = self.pitch_loss_weight * \
+                self.mse(embeddings_dist, pitch_dist)
+        loss += loss_pitch
 
         triplet_loss = 0
         if self.contrastive_sinusoidal_dataset is not None and self.training:
@@ -558,24 +561,35 @@ class PlMelEncoder(LightningModule):
             d_an = torch.norm(anchor - negative, dim=1)
             margin = 0.05
             triplet_loss = torch.relu(
-                d_ap - d_an + margin).sum() * self.triplet_loss_weight
-
+                d_ap - d_an + margin).mean() * self.triplet_loss_weight
         loss += triplet_loss
 
         if self.training:
-            self.log_dict({
-                "loss_aug": loss_aug,
-                "loss_teacher": loss_teacher / self.teacher_loss_weight,
-                "loss_triplet": triplet_loss / self.triplet_loss_weight,
-                "loss_pitch": loss_pitch / self.pitch_loss_weight,
-            })
+            if self.pitch_loss_weight > 0:
+                self.log_dict({
+                    "loss_aug": loss_aug,
+                    "loss_teacher": loss_teacher / self.teacher_loss_weight,
+                    "loss_triplet": triplet_loss / self.triplet_loss_weight,
+                    "loss_pitch": loss_pitch / self.pitch_loss_weight,
+                })
+            else:
+                self.log_dict({
+                    "loss_aug": loss_aug,
+                    "loss_teacher": loss_teacher / self.teacher_loss_weight,
+                    "loss_triplet": triplet_loss / self.triplet_loss_weight,
+                })
         else:
-            self.log_dict({
-                "val_loss_aug": loss_aug,
-                "val_loss_teacher": loss_teacher / self.teacher_loss_weight,
-                "val_loss_pitch": loss_pitch / self.pitch_loss_weight,
-            })
-
+            if self.pitch_loss_weight > 0:
+                self.log_dict({
+                    "val_loss_aug": loss_aug,
+                    "val_loss_teacher": loss_teacher / self.teacher_loss_weight,
+                    "val_loss_pitch": loss_pitch / self.pitch_loss_weight,
+                })
+            else:
+                self.log_dict({
+                    "val_loss_aug": loss_aug,
+                    "val_loss_teacher": loss_teacher / self.teacher_loss_weight,
+                })
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -786,22 +800,22 @@ def main():
     args.conv_out_features = 256
     args.out_features = 2
     args.proj_hidden_layers_features = [256, 256, 128]
-    args.lr = 1e-4
-    args.lr_decay = 0.9999
+    args.lr = 1e-3
+    args.lr_decay = 0.999
     args.ema_decay = 0.999
-    args.teacher_loss_weight = 0.5
-    args.triplet_loss_weight = 0.05
-    args.pitch_loss_weight = 0.1
+    args.teacher_loss_weight = 0.25
+    args.triplet_loss_weight = 0.01
+    args.pitch_loss_weight = 0.0
     args.plot_interval = 1
     args.mode = "contrastive"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_only_contrastive_5"
+    args.ckpt_name = "pca_finetuning_only_contrastive_8"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     # supervised_epochs = 11
     # args.train_epochs = supervised_epochs
     args.train_epochs = 1000001
-    args.comment = "from scratch, but use pitch loss too"
+    args.comment = "no pitch loss, less triplet loss, more lr decay"
 
     # create model
     model = PlMelEncoder(args)
