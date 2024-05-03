@@ -15,6 +15,7 @@ from sonification.utils.tensor import db2amp, amp2db, frequency2midi, midi2frequ
 from torchaudio.functional import amplitude_to_DB
 from torchaudio.transforms import MelSpectrogram
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.neighbors import KDTree
 from tqdm import tqdm
 from torch.utils.data import Dataset
 import torch
@@ -436,6 +437,7 @@ class PlMelEncoder(LightningModule):
         self.mse = nn.MSELoss()
         self.teacher_loss_weight = args.teacher_loss_weight
         self.triplet_loss_weight = args.triplet_loss_weight
+        self.mel_triplet_loss_weight = args.mel_triplet_loss_weight
         self.pitch_loss_weight = args.pitch_loss_weight
 
         # learning rate
@@ -506,6 +508,43 @@ class PlMelEncoder(LightningModule):
             # buffers are copied
             shadow_buffers[name].copy_(buffer)
 
+    def mine_triplets_based_on_mels(self, mels, embeddings, r=0.1):
+        # get the distance matrix of the embeddings
+        dist = torch.cdist(embeddings, embeddings)
+        B = embeddings.shape[0]
+        anchor_ids = []
+        positive_ids = []
+        negative_ids = []
+        for i in range(B):
+            p0_dist = dist[i]
+            mask = p0_dist < r
+            # get the indices of the embeddings that are within the radius
+            indices = torch.nonzero(mask, as_tuple=True)[0]
+            if len(indices) < 3:
+                continue
+            mels_within_radius = mels[indices]
+            mels_within_radius = mels_within_radius.squeeze(1)
+            dist_mels = torch.cdist(mels[i], mels_within_radius)
+            sort_by_dist = torch.argsort(dist_mels.squeeze(0))
+            id_of_closest, id_of_farthest = sort_by_dist[1], sort_by_dist[-1]
+            id_of_closest, id_of_farthest = indices[id_of_closest], indices[id_of_farthest]
+            anchor_ids.append(i)
+            positive_ids.append(id_of_closest.item())
+            negative_ids.append(id_of_farthest.item())
+        return torch.tensor(anchor_ids), torch.tensor(positive_ids), torch.tensor(negative_ids)
+
+    def mel_triplet_loss(self, mels, embeddings, r=0.1):
+        anchor_ids, pos_ids, neg_ids = self.mine_triplets_based_on_mels(
+            self, mels, embeddings, r)
+        if len(anchor_ids) > 0:
+            anchor, positive, negative = embeddings[anchor_ids], embeddings[pos_ids], embeddings[neg_ids]
+            d_ap = torch.norm(anchor - positive, dim=1)
+            d_an = torch.norm(anchor - negative, dim=1)
+            margin = 0.05
+            triplet_loss = torch.nn.functional.relu(
+                d_ap - d_an + margin).mean()
+            print(triplet_loss)
+
     def supervised_loss(self, batch):
         # get sample and label
         x, y = batch
@@ -564,32 +603,27 @@ class PlMelEncoder(LightningModule):
                 d_ap - d_an + margin).mean() * self.triplet_loss_weight
         loss += triplet_loss
 
+        mel_triplet_loss = 0
+        if self.mel_triplet_loss_weight > 0:
+            mel_triplet_loss = self.mel_triplet_loss(
+                mels, y_student, r=0.1) * self.mel_triplet_loss_weight
+        loss += mel_triplet_loss
+
         if self.training:
-            if self.pitch_loss_weight > 0:
-                self.log_dict({
-                    "loss_aug": loss_aug,
-                    "loss_teacher": loss_teacher / self.teacher_loss_weight,
-                    "loss_triplet": triplet_loss / self.triplet_loss_weight,
-                    "loss_pitch": loss_pitch / self.pitch_loss_weight,
-                })
-            else:
-                self.log_dict({
-                    "loss_aug": loss_aug,
-                    "loss_teacher": loss_teacher / self.teacher_loss_weight,
-                    "loss_triplet": triplet_loss / self.triplet_loss_weight,
-                })
+            self.log_dict({
+                "loss_aug": loss_aug,
+                "loss_teacher": loss_teacher / self.teacher_loss_weight,
+                "loss_triplet": triplet_loss / self.triplet_loss_weight,
+                "loss_mel_triplet": mel_triplet_loss / self.mel_triplet_loss_weight if self.mel_triplet_loss_weight > 0 else 0,
+                "loss_pitch": loss_pitch / self.pitch_loss_weight if self.pitch_loss_weight > 0 else 0,
+            })
         else:
-            if self.pitch_loss_weight > 0:
-                self.log_dict({
-                    "val_loss_aug": loss_aug,
-                    "val_loss_teacher": loss_teacher / self.teacher_loss_weight,
-                    "val_loss_pitch": loss_pitch / self.pitch_loss_weight,
-                })
-            else:
-                self.log_dict({
-                    "val_loss_aug": loss_aug,
-                    "val_loss_teacher": loss_teacher / self.teacher_loss_weight,
-                })
+            self.log_dict({
+                "val_loss_aug": loss_aug,
+                "val_loss_teacher": loss_teacher / self.teacher_loss_weight,
+                "val_loss_mel_triplet": mel_triplet_loss / self.mel_triplet_loss_weight if self.mel_triplet_loss_weight > 0 else 0,
+                "val_loss_pitch": loss_pitch / self.pitch_loss_weight if self.pitch_loss_weight > 0 else 0,
+            })
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -805,6 +839,7 @@ def main():
     args.ema_decay = 0.999
     args.teacher_loss_weight = 0.25
     args.triplet_loss_weight = 0.01
+    args.mel_triplet_loss_weight = 0.1
     args.pitch_loss_weight = 0.0
     args.plot_interval = 1
     args.mode = "contrastive"
@@ -815,7 +850,7 @@ def main():
     # supervised_epochs = 11
     # args.train_epochs = supervised_epochs
     args.train_epochs = 1000001
-    args.comment = "no pitch loss, less triplet loss, more lr decay"
+    args.comment = "new mel triplet loss with r=0.1"
 
     # create model
     model = PlMelEncoder(args)
@@ -876,6 +911,7 @@ def main():
         ema_decay=args.ema_decay,
         teacher_loss_weight=args.teacher_loss_weight,
         triplet_loss_weight=args.triplet_loss_weight,
+        mel_triplet_loss_weight=args.mel_triplet_loss_weight,
         pitch_loss_weight=args.pitch_loss_weight,
         plot_interval=args.plot_interval,
         ckpt_path=args.ckpt_path,
