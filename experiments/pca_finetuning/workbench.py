@@ -535,15 +535,15 @@ class PlMelEncoder(LightningModule):
 
     def mel_triplet_loss(self, mels, embeddings, r=0.1):
         anchor_ids, pos_ids, neg_ids = self.mine_triplets_based_on_mels(
-            self, mels, embeddings, r)
+            mels, embeddings, r)
         if len(anchor_ids) > 0:
             anchor, positive, negative = embeddings[anchor_ids], embeddings[pos_ids], embeddings[neg_ids]
             d_ap = torch.norm(anchor - positive, dim=1)
             d_an = torch.norm(anchor - negative, dim=1)
             margin = 0.05
-            triplet_loss = torch.nn.functional.relu(
+            mel_triplet_loss = torch.nn.functional.relu(
                 d_ap - d_an + margin).mean()
-            print(triplet_loss)
+            return mel_triplet_loss
 
     def supervised_loss(self, batch):
         # get sample and label
@@ -559,18 +559,21 @@ class PlMelEncoder(LightningModule):
         mels, waveforms = batch
         x, x_a = mels
         # x, x_a = batch
-        y_teacher = self.shadow(x).detach()
         y_student = self.model(x)
         y_student_a = self.model(x_a)
 
         # embeddings should be inveriant of augmentations
         loss_aug = self.mse(y_student, y_student_a)
 
-        # embeddings should be similar to teacher
-        loss_teacher = self.teacher_loss_weight * \
-            self.mse(y_student, y_teacher)
+        loss = loss_aug
 
-        loss = loss_aug + loss_teacher
+        loss_teacher = 0
+        if self.teacher_loss_weight > 0:
+            y_teacher = self.shadow(x).detach()
+            # embeddings should be similar to teacher
+            loss_teacher = self.teacher_loss_weight * \
+                self.mse(y_student, y_teacher)
+            loss += loss_teacher
 
         loss_pitch = 0
         if self.pitch_loss_weight > 0:
@@ -590,7 +593,7 @@ class PlMelEncoder(LightningModule):
         loss += loss_pitch
 
         triplet_loss = 0
-        if self.contrastive_sinusoidal_dataset is not None and self.training:
+        if self.contrastive_sinusoidal_dataset is not None and self.triplet_loss_weight > 0 and self.training:
             anchor, positive, negative = self.contrastive_sinusoidal_dataset.generate_batch(
                 x.shape[0])
             anchor = self.model(anchor)
@@ -606,21 +609,21 @@ class PlMelEncoder(LightningModule):
         mel_triplet_loss = 0
         if self.mel_triplet_loss_weight > 0:
             mel_triplet_loss = self.mel_triplet_loss(
-                mels, y_student, r=0.1) * self.mel_triplet_loss_weight
+                x, y_student, r=0.1) * self.mel_triplet_loss_weight
         loss += mel_triplet_loss
 
         if self.training:
             self.log_dict({
                 "loss_aug": loss_aug,
-                "loss_teacher": loss_teacher / self.teacher_loss_weight,
-                "loss_triplet": triplet_loss / self.triplet_loss_weight,
+                "loss_teacher": loss_teacher / self.teacher_loss_weight if self.teacher_loss_weight > 0 else 0,
+                "loss_triplet": triplet_loss / self.triplet_loss_weight if self.triplet_loss_weight > 0 else 0,
                 "loss_mel_triplet": mel_triplet_loss / self.mel_triplet_loss_weight if self.mel_triplet_loss_weight > 0 else 0,
                 "loss_pitch": loss_pitch / self.pitch_loss_weight if self.pitch_loss_weight > 0 else 0,
             })
         else:
             self.log_dict({
                 "val_loss_aug": loss_aug,
-                "val_loss_teacher": loss_teacher / self.teacher_loss_weight,
+                "val_loss_teacher": loss_teacher / self.teacher_loss_weight if self.teacher_loss_weight > 0 else 0,
                 "val_loss_mel_triplet": mel_triplet_loss / self.mel_triplet_loss_weight if self.mel_triplet_loss_weight > 0 else 0,
                 "val_loss_pitch": loss_pitch / self.pitch_loss_weight if self.pitch_loss_weight > 0 else 0,
             })
@@ -834,17 +837,17 @@ def main():
     args.conv_out_features = 256
     args.out_features = 2
     args.proj_hidden_layers_features = [256, 256, 128]
-    args.lr = 1e-3
+    args.lr = 1e-4
     args.lr_decay = 0.999
     args.ema_decay = 0.999
-    args.teacher_loss_weight = 0.25
-    args.triplet_loss_weight = 0.01
-    args.mel_triplet_loss_weight = 0.1
+    args.teacher_loss_weight = 0.0
+    args.triplet_loss_weight = 0.0
+    args.mel_triplet_loss_weight = 1
     args.pitch_loss_weight = 0.0
     args.plot_interval = 1
     args.mode = "contrastive"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_only_contrastive_8"
+    args.ckpt_name = "pca_finetuning_only_contrastive_9"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     # supervised_epochs = 11
