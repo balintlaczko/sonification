@@ -193,7 +193,7 @@ class FmMelContrastiveDataset(Dataset):
         self.sr = sr
         self.dur = dur
         self.n_mels = n_mels
-        self.apply_transpose = True
+        self.apply_transpose = False
         self.n_transpositions = 1
         self.apply_noise = True
         self.noise_db_range = 2  # 0 to 2 dB noise will be added
@@ -438,6 +438,7 @@ class PlMelEncoder(LightningModule):
         self.teacher_loss_weight = args.teacher_loss_weight
         self.triplet_loss_weight = args.triplet_loss_weight
         self.mel_triplet_loss_weight = args.mel_triplet_loss_weight
+        self.mel_triplet_miner_radius = args.mel_triplet_miner_radius
         self.pitch_loss_weight = args.pitch_loss_weight
 
         # learning rate
@@ -609,7 +610,7 @@ class PlMelEncoder(LightningModule):
         mel_triplet_loss = 0
         if self.mel_triplet_loss_weight > 0:
             mel_triplet_loss = self.mel_triplet_loss(
-                x, y_student, r=0.1) * self.mel_triplet_loss_weight
+                x, y_student, r=self.mel_triplet_miner_radius) * self.mel_triplet_loss_weight
         loss += mel_triplet_loss
 
         if self.training:
@@ -794,7 +795,7 @@ def main():
         df_fm_val, sr=48000, dur=1, n_mels=n_mels, mel_scaler=fm_mel_pca_train.mel_scaler)  # use train scaler
 
     # create samplers & dataloaders
-    batch_size = 512
+    batch_size = 4096
     # num_workers = 0
 
     # supervised train
@@ -836,24 +837,25 @@ def main():
     args.conv_in_size = n_mels
     args.conv_out_features = 256
     args.out_features = 2
-    args.proj_hidden_layers_features = [256, 256, 128]
-    args.lr = 1e-4
+    args.proj_hidden_layers_features = [256, 256, 256]
+    args.lr = 1e-5
     args.lr_decay = 0.999
-    args.ema_decay = 0.999
+    args.ema_decay = 0
     args.teacher_loss_weight = 0.0
     args.triplet_loss_weight = 0.0
-    args.mel_triplet_loss_weight = 1
+    args.mel_triplet_loss_weight = 2
+    args.mel_triplet_miner_radius = 0.1
     args.pitch_loss_weight = 0.0
     args.plot_interval = 1
     args.mode = "contrastive"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_only_contrastive_9"
+    args.ckpt_name = "pca_finetuning_only_contrastive_10"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     # supervised_epochs = 11
     # args.train_epochs = supervised_epochs
     args.train_epochs = 1000001
-    args.comment = "new mel triplet loss with r=0.1"
+    args.comment = "only mel triplet loss, no transposition, slightly bigger model, lower lr, higher batch size"
 
     # create model
     model = PlMelEncoder(args)
@@ -915,6 +917,7 @@ def main():
         teacher_loss_weight=args.teacher_loss_weight,
         triplet_loss_weight=args.triplet_loss_weight,
         mel_triplet_loss_weight=args.mel_triplet_loss_weight,
+        mel_triplet_miner_radius=args.mel_triplet_miner_radius,
         pitch_loss_weight=args.pitch_loss_weight,
         plot_interval=args.plot_interval,
         ckpt_path=args.ckpt_path,
