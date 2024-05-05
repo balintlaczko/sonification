@@ -843,19 +843,19 @@ def main():
     args.ema_decay = 0
     args.teacher_loss_weight = 0.0
     args.triplet_loss_weight = 0.0
-    args.mel_triplet_loss_weight = 2
-    args.mel_triplet_miner_radius = 0.1
+    args.mel_triplet_loss_weight = 4
+    args.mel_triplet_miner_radius = 0.2
     args.pitch_loss_weight = 0.0
     args.plot_interval = 1
     args.mode = "contrastive"
     args.ckpt_path = "ckpt"
-    args.ckpt_name = "pca_finetuning_only_contrastive_10"
+    args.ckpt_name = "pca_finetuning_only_contrastive_11"
     args.resume_ckpt_path = None
     args.logdir = "logs"
     # supervised_epochs = 11
     # args.train_epochs = supervised_epochs
     args.train_epochs = 1000001
-    args.comment = "only mel triplet loss, no transposition, slightly bigger model, lower lr, higher batch size"
+    args.comment = "same but double themel_triplet_miner_radius to 0.2, double the mel_triplet_loss_weight to 4"
 
     # create model
     model = PlMelEncoder(args)
