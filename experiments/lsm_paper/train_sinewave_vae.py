@@ -33,6 +33,8 @@ def main():
                         default=1, help='image color channels')
     parser.add_argument('--latent_size', type=int,
                         default=2, help='latent size')
+    parser.add_argument('--kernel_size', type=int, 
+                        default=3, help='kernel size')
     parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 128, 256, 512, 1024],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
@@ -54,7 +56,7 @@ def main():
     parser.add_argument('--lr_decay_d', type=float, default=0.9999)
     parser.add_argument('--recon_weight', type=float,
                         default=1, help='recon weight')
-    parser.add_argument('--target_recon_loss', type=float, default=1e-3,
+    parser.add_argument('--target_recon_loss', type=float, default=0.009,
                         help='target recon loss to keep in case of dynamic kld')
     parser.add_argument('--dynamic_kld', type=int, default=1,
                         help='non-zero will use dynamic kld')
@@ -78,17 +80,17 @@ def main():
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str,
-                        default='./ckpt/sinewave_fvae-opt', help='checkpoint path')
+                        default='./ckpt/sinewave_fvae-mae', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='opt-v41', help='checkpoint name')
+                        default='mae-v1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
-        '--logdir', type=str, default='./logs/sinewave_fvae-opt', help='log directory')
+        '--logdir', type=str, default='./logs/sinewave_fvae-mae', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=10)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='3x kld, tc to 6, recon target to 0.0007',
+    parser.add_argument('--comment', type=str, default='old params, but with mae',
                         help='add a comment if needed')
 
     args = parser.parse_args()
@@ -142,6 +144,7 @@ def main():
         in_channels=args.in_channels,
         img_size=args.img_size,
         latent_size=args.latent_size,
+        kernel_size=args.kernel_size,
         layers_channels=args.layers_channels,
         d_hidden_size=args.d_hidden_size,
         d_num_layers=args.d_num_layers,

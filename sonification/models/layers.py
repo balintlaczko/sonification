@@ -135,16 +135,17 @@ class ConvDecoder(nn.Module):
 
 
 class ConvEncoder1D(nn.Module):
-    def __init__(self, in_channels, output_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
+    def __init__(self, in_channels, output_size, kernel_size=3, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
         super(ConvEncoder1D, self).__init__()
         self.in_channels = in_channels
         self.output_size = output_size
 
         layers = []
         in_channel = self.in_channels
+        padding = kernel_size // 2
         for out_channel in layers_channels:
             layers.extend([
-                nn.Conv1d(in_channel, out_channel, 3, stride=2, padding=1),
+                nn.Conv1d(in_channel, out_channel, kernel_size=kernel_size, stride=2, padding=padding),
                 nn.BatchNorm1d(out_channel),
                 nn.LeakyReLU(0.2)
             ])
@@ -168,7 +169,7 @@ class ConvEncoder1D(nn.Module):
 
 
 class ConvDecoder1D(nn.Module):
-    def __init__(self, latent_size, out_channels, layers_channels=[512, 256, 128, 64, 32, 16], output_size=512):
+    def __init__(self, latent_size, out_channels, kernel_size=3, layers_channels=[512, 256, 128, 64, 32, 16], output_size=512):
         super(ConvDecoder1D, self).__init__()
         self.latent_size = latent_size
         self.out_channels = out_channels
@@ -187,10 +188,11 @@ class ConvDecoder1D(nn.Module):
         ]
 
         in_channel = layers_channels[0]
+        padding = kernel_size // 2
         for out_channel in layers_channels[1:]:
             layers.extend([
                 nn.ConvTranspose1d(in_channel, out_channel,
-                                   3, stride=2, padding=1, output_padding=1),
+                                   kernel_size=kernel_size, stride=2, padding=padding, output_padding=1),
                 nn.BatchNorm1d(out_channel),
                 nn.LeakyReLU(0.2),
             ])
@@ -198,7 +200,7 @@ class ConvDecoder1D(nn.Module):
 
         layers.extend([
             nn.ConvTranspose1d(
-                layers_channels[-1], out_channels, 3, stride=2, padding=1, output_padding=1),
+                layers_channels[-1], out_channels, kernel_size=kernel_size, stride=2, padding=padding, output_padding=1),
             nn.BatchNorm1d(out_channels),
             nn.Sigmoid(),
         ])
