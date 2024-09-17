@@ -33,7 +33,7 @@ def main():
                         default=1, help='image color channels')
     parser.add_argument('--latent_size', type=int,
                         default=2, help='latent size')
-    parser.add_argument('--kernel_size', type=int, 
+    parser.add_argument('--kernel_size', type=int,
                         default=3, help='kernel size')
     parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 128, 256, 512, 1024],
                         help='channels for the layers')
@@ -56,13 +56,13 @@ def main():
     parser.add_argument('--lr_decay_d', type=float, default=0.9999)
     parser.add_argument('--recon_weight', type=float,
                         default=1, help='recon weight')
-    parser.add_argument('--target_recon_loss', type=float, default=0.009,
+    parser.add_argument('--target_recon_loss', type=float, default=0.01,
                         help='target recon loss to keep in case of dynamic kld')
     parser.add_argument('--dynamic_kld', type=int, default=1,
                         help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float,
                         default=0.01, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.001,
+    parser.add_argument('--kld_weight_min', type=float, default=0.002,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -80,17 +80,17 @@ def main():
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str,
-                        default='./ckpt/sinewave_fvae-mae', help='checkpoint path')
+                        default='./ckpt/sinewave_fvae-mae-v2', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
                         default='mae-v1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
-                        default=None,)
+                        default="C:/Users/Balint Laczko/Documents/GitHub/sonification/ckpt/sinewave_fvae-mae-v2/mae-v1/mae-v1_last_epoch=11692.ckpt",)
     parser.add_argument(
         '--logdir', type=str, default='./logs/sinewave_fvae-mae', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=10)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='old params, but with mae',
+    parser.add_argument('--comment', type=str, default='2x kld target recon 0.01',
                         help='add a comment if needed')
 
     args = parser.parse_args()
