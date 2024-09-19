@@ -6,7 +6,7 @@ import random
 import numpy as np
 from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import WandbLogger#, TensorBoardLogger
 from sonification.models.models import PlFactorVAE1D
 from sonification.datasets import Sinewave_dataset
 
@@ -128,14 +128,18 @@ def main():
     )
 
     # logger callbacks
-    tensorboard_logger = TensorBoardLogger(
-        save_dir=args.logdir, name=args.ckpt_name)
+    # tensorboard_logger = TensorBoardLogger(
+    #     save_dir=args.logdir, name=args.ckpt_name)
+    wandb_logger = WandbLogger(
+        name=args.ckpt_name,
+        project="sinewave_fvae",
+        save_dir=args.logdir,)
 
     trainer = Trainer(
         max_epochs=args.train_epochs,
         enable_checkpointing=True,
         callbacks=[best_checkpoint_callback, last_checkpoint_callback],
-        logger=tensorboard_logger,
+        logger=wandb_logger,
         log_every_n_steps=1,
     )
 
