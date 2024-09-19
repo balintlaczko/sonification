@@ -62,7 +62,7 @@ def main():
                         help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float,
                         default=0.01, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.002,
+    parser.add_argument('--kld_weight_min', type=float, default=0.006,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -80,17 +80,17 @@ def main():
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str,
-                        default='./ckpt/sinewave_fvae-mae-v2', help='checkpoint path')
+                        default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
                         default='mae-v1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
-                        default="C:/Users/Balint Laczko/Documents/GitHub/sonification/ckpt/sinewave_fvae-mae-v2/mae-v1/mae-v1_last_epoch=11692.ckpt",)
+                        default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/sinewave_fvae-mae', help='log directory')
     parser.add_argument('--plot_interval', type=int, default=10)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='2x kld target recon 0.01',
+    parser.add_argument('--comment', type=str, default='6x kld target recon 0.01',
                         help='add a comment if needed')
 
     args = parser.parse_args()
