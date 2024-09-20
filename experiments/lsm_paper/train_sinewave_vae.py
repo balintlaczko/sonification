@@ -96,7 +96,7 @@ def main():
                         default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/sinewave_fvae-mae', help='log directory')
-    parser.add_argument('--plot_interval', type=int, default=10)
+    parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
     parser.add_argument('--comment', type=str, default='10x kld, bigger model, dropout, delayed tc loss',
