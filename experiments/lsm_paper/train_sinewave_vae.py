@@ -35,46 +35,53 @@ def main():
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int,
                         default=3, help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 128, 256, 512, 1024],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 512, 512, 1024],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=512, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
                         default=5, help='mlp number of layers')
+    # dropout
+    parser.add_argument('--vae_dropout', type=float, default=0.2,)
+    parser.add_argument('--d_dropout', type=float, default=0.2,)
 
     # training
     parser.add_argument('--train_epochs', type=int,
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=8000, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=5e-3,
+    parser.add_argument('--lr_vae', type=float, default=5e-4,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
                         default=0.9999)
-    parser.add_argument('--lr_d', type=float, default=5e-3,
+    parser.add_argument('--lr_d', type=float, default=5e-4,
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.9999)
+
+    # recon loss
     parser.add_argument('--recon_weight', type=float,
                         default=1, help='recon weight')
     parser.add_argument('--target_recon_loss', type=float, default=0.01,
                         help='target recon loss to keep in case of dynamic kld')
+    
+    # kld loss
     parser.add_argument('--dynamic_kld', type=int, default=1,
                         help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float,
                         default=0.01, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.006,
+    parser.add_argument('--kld_weight_min', type=float, default=0.01,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=1,
                         help='the number of epochs to warmup the kld weight')
+    
+    # total correlation loss term
     parser.add_argument('--tc_weight', type=float,
-                        default=6, help='tc weight')
+                        default=1, help='tc weight')
     parser.add_argument('--tc_start', type=int,
-                        default=0, help='tc start epoch')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
-    parser.add_argument('--vae_dropout', type=float, default=0.2,)
-    parser.add_argument('--d_dropout', type=float, default=0.2,)
+                        default=10000, help='tc start epoch')
+    parser.add_argument('--tc_warmup_epochs', type=int, default=10000,)
 
     # GPU
     parser.add_argument('--num_devices', type=int, nargs='*', default=[0],
@@ -84,7 +91,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v1', help='checkpoint name')
+                        default='mae-v3', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -92,7 +99,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=10)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='6x kld target recon 0.01',
+    parser.add_argument('--comment', type=str, default='10x kld, bigger model, dropout, delayed tc loss',
                         help='add a comment if needed')
 
     args = parser.parse_args()
