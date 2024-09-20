@@ -84,14 +84,14 @@ class ConvVAE(nn.Module):
 
 
 class ConvVAE1D(nn.Module):
-    def __init__(self, in_channels, latent_size, kernel_size=3, layers_channels=[16, 32, 64, 128, 256], input_size=64):
+    def __init__(self, in_channels, latent_size, kernel_size=3, layers_channels=[16, 32, 64, 128, 256], input_size=64, dropout=0.0):
         super(ConvVAE1D, self).__init__()
         self.encoder = ConvEncoder1D(
-            in_channels, latent_size, kernel_size, layers_channels, input_size)
+            in_channels, latent_size, kernel_size, layers_channels, input_size, dropout)
         self.mu = nn.Linear(latent_size, latent_size)
         self.logvar = nn.Linear(latent_size, latent_size)
         self.decoder = ConvDecoder1D(
-            latent_size, in_channels, kernel_size, layers_channels, input_size)
+            latent_size, in_channels, kernel_size, layers_channels, input_size, dropout)
 
     def encode(self, x):
         x = self.encoder(x)
@@ -567,6 +567,8 @@ class PlFactorVAE1D(LightningModule):
         self.layers_channels = args.layers_channels
         self.d_hidden_size = args.d_hidden_size
         self.d_num_layers = args.d_num_layers
+        self.vae_dropout = args.vae_dropout
+        self.d_dropout = args.d_dropout
 
         # losses
         # self.recon_loss = nn.MSELoss()
@@ -595,9 +597,9 @@ class PlFactorVAE1D(LightningModule):
 
         # models
         self.VAE = ConvVAE1D(self.in_channels, self.latent_size, self.kernel_size,
-                             self.layers_channels, self.input_size)
+                             self.layers_channels, self.input_size, self.vae_dropout)
         self.D = LinearDiscriminator(
-            self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+            self.latent_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
 
         # train dataset scaler
         self.train_scaler = args.train_scaler

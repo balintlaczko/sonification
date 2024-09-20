@@ -135,7 +135,7 @@ class ConvDecoder(nn.Module):
 
 
 class ConvEncoder1D(nn.Module):
-    def __init__(self, in_channels, output_size, kernel_size=3, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
+    def __init__(self, in_channels, output_size, kernel_size=3, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512, dropout=0.2):
         super(ConvEncoder1D, self).__init__()
         self.in_channels = in_channels
         self.output_size = output_size
@@ -147,7 +147,8 @@ class ConvEncoder1D(nn.Module):
             layers.extend([
                 nn.Conv1d(in_channel, out_channel, kernel_size=kernel_size, stride=2, padding=padding),
                 nn.BatchNorm1d(out_channel),
-                nn.LeakyReLU(0.2)
+                nn.LeakyReLU(0.2),
+                nn.Dropout(dropout),
             ])
             in_channel = out_channel
 
@@ -160,6 +161,7 @@ class ConvEncoder1D(nn.Module):
                 layers_channels[-1] * feature_map_size, self.output_size),
             nn.BatchNorm1d(self.output_size),
             nn.LeakyReLU(0.2),
+            nn.Dropout(dropout),
         ])
 
         self.layers = nn.Sequential(*layers)
@@ -169,7 +171,7 @@ class ConvEncoder1D(nn.Module):
 
 
 class ConvDecoder1D(nn.Module):
-    def __init__(self, latent_size, out_channels, kernel_size=3, layers_channels=[512, 256, 128, 64, 32, 16], output_size=512):
+    def __init__(self, latent_size, out_channels, kernel_size=3, layers_channels=[512, 256, 128, 64, 32, 16], output_size=512, dropout=0.2):
         super(ConvDecoder1D, self).__init__()
         self.latent_size = latent_size
         self.out_channels = out_channels
@@ -183,6 +185,7 @@ class ConvDecoder1D(nn.Module):
             nn.BatchNorm1d(layers_channels[0] *
                            feature_map_size),
             nn.LeakyReLU(0.2),
+            nn.Dropout(dropout),
             nn.Unflatten(
                 1, (layers_channels[0], feature_map_size)),
         ]
@@ -195,6 +198,7 @@ class ConvDecoder1D(nn.Module):
                                    kernel_size=kernel_size, stride=2, padding=padding, output_padding=1),
                 nn.BatchNorm1d(out_channel),
                 nn.LeakyReLU(0.2),
+                nn.Dropout(dropout),
             ])
             in_channel = out_channel
 
@@ -334,7 +338,7 @@ class MLP(nn.Module):
 
 
 class LinearDiscriminator(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, dropout):
         super(LinearDiscriminator, self).__init__()
 
         layers = []
@@ -342,6 +346,7 @@ class LinearDiscriminator(nn.Module):
             layers.extend([
                 nn.Linear(input_dim, hidden_dim),
                 nn.LeakyReLU(0.2, inplace=True),
+                nn.Dropout(dropout),
             ])
             input_dim = hidden_dim
         layers.extend([

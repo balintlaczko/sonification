@@ -73,6 +73,8 @@ def main():
     parser.add_argument('--tc_start', type=int,
                         default=0, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
+    parser.add_argument('--vae_dropout', type=float, default=0.2,)
+    parser.add_argument('--d_dropout', type=float, default=0.2,)
 
     # GPU
     parser.add_argument('--num_devices', type=int, nargs='*', default=[0],
@@ -167,6 +169,8 @@ def main():
         tc_weight=args.tc_weight,
         tc_start=args.tc_start,
         tc_warmup_epochs=args.tc_warmup_epochs,
+        vae_dropout=args.vae_dropout,
+        d_dropout=args.d_dropout,
         comment=args.comment
     )
 
