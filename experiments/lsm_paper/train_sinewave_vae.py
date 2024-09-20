@@ -35,7 +35,7 @@ def main():
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int,
                         default=3, help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[1024, 1024, 1024, 1024, 1024],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[32, 32, 32, 32, 32],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=512, help='mlp hidden size')
@@ -69,7 +69,7 @@ def main():
                         help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float,
                         default=1, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.1,
+    parser.add_argument('--kld_weight_min', type=float, default=0.06,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -78,10 +78,10 @@ def main():
     
     # total correlation loss term
     parser.add_argument('--tc_weight', type=float,
-                        default=1, help='tc weight')
+                        default=0.5, help='tc weight')
     parser.add_argument('--tc_start', type=int,
-                        default=10000, help='tc start epoch')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=10000,)
+                        default=1, help='tc start epoch')
+    parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
 
     # GPU
     parser.add_argument('--num_devices', type=int, nargs='*', default=[0],
@@ -91,7 +91,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v4', help='checkpoint name')
+                        default='mae-v6', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -99,7 +99,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='MUCH larger model, kld=0.1, slower lr',
+    parser.add_argument('--comment', type=str, default='layer 32-32-32-32-32, tc0.5, kld0.06',
                         help='add a comment if needed')
 
     args = parser.parse_args()
