@@ -42,8 +42,8 @@ def main():
     parser.add_argument('--d_num_layers', type=int,
                         default=5, help='mlp number of layers')
     # dropout
-    parser.add_argument('--vae_dropout', type=float, default=0.1,)
-    parser.add_argument('--d_dropout', type=float, default=0.1,)
+    parser.add_argument('--vae_dropout', type=float, default=0.05,)
+    parser.add_argument('--d_dropout', type=float, default=0.05,)
 
     # training
     parser.add_argument('--train_epochs', type=int,
@@ -91,7 +91,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v12', help='checkpoint name')
+                        default='mse-v12', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
