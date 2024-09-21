@@ -34,7 +34,7 @@ def main():
     parser.add_argument('--latent_size', type=int,
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int,
-                        default=3, help='kernel size')
+                        default=5, help='kernel size')
     parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 128, 256, 512, 1024],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
@@ -60,8 +60,8 @@ def main():
 
     # recon loss
     parser.add_argument('--recon_weight', type=float,
-                        default=1, help='recon weight')
-    parser.add_argument('--target_recon_loss', type=float, default=0.01,
+                        default=6, help='recon weight')
+    parser.add_argument('--target_recon_loss', type=float, default=0.001,
                         help='target recon loss to keep in case of dynamic kld')
     
     # kld loss
@@ -91,12 +91,12 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mse-v12', help='checkpoint name')
+                        default='mse-v13', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/sinewave_fvae-mae', help='log directory')
-    parser.add_argument('--plot_interval', type=int, default=200)
+    parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
     parser.add_argument('--comment', type=str, default='',
