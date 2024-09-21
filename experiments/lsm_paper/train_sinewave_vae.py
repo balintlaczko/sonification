@@ -35,22 +35,22 @@ def main():
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int,
                         default=3, help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[128, 128, 128, 128, 128],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 256, 256, 256],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=512, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
                         default=5, help='mlp number of layers')
     # dropout
-    parser.add_argument('--vae_dropout', type=float, default=0.3,)
-    parser.add_argument('--d_dropout', type=float, default=0.3,)
+    parser.add_argument('--vae_dropout', type=float, default=0.4,)
+    parser.add_argument('--d_dropout', type=float, default=0.4,)
 
     # training
     parser.add_argument('--train_epochs', type=int,
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=8000, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=1e-3,
+    parser.add_argument('--lr_vae', type=float, default=1e-2,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
                         default=0.999999)
@@ -61,7 +61,7 @@ def main():
     # recon loss
     parser.add_argument('--recon_weight', type=float,
                         default=1, help='recon weight')
-    parser.add_argument('--target_recon_loss', type=float, default=0.1,
+    parser.add_argument('--target_recon_loss', type=float, default=0.01,
                         help='target recon loss to keep in case of dynamic kld')
     
     # kld loss
@@ -78,7 +78,7 @@ def main():
     
     # total correlation loss term
     parser.add_argument('--tc_weight', type=float,
-                        default=0.5, help='tc weight')
+                        default=1, help='tc weight')
     parser.add_argument('--tc_start', type=int,
                         default=1, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
@@ -91,7 +91,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v7', help='checkpoint name')
+                        default='mae-v8', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
