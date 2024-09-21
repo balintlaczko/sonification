@@ -35,15 +35,15 @@ def main():
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int,
                         default=3, help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 256, 256, 256],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 128, 256, 512, 1024],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=512, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
                         default=5, help='mlp number of layers')
     # dropout
-    parser.add_argument('--vae_dropout', type=float, default=0.4,)
-    parser.add_argument('--d_dropout', type=float, default=0.4,)
+    parser.add_argument('--vae_dropout', type=float, default=0.3,)
+    parser.add_argument('--d_dropout', type=float, default=0.3,)
 
     # training
     parser.add_argument('--train_epochs', type=int,
@@ -91,7 +91,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v8', help='checkpoint name')
+                        default='mae-v9', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
