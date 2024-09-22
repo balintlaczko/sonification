@@ -69,8 +69,10 @@ def main():
                         help='non-zero will use dynamic kld')
     parser.add_argument('--cycling_kld', type=int, default=1, 
                         help='apply cyclical annealing for kld beta')
-    parser.add_argument('--cycling_kld_period', type=int, default=100,
+    parser.add_argument('--cycling_kld_period', type=int, default=10000,
                         help='cycling kld period')
+    parser.add_argument('--cycling_kld_ramp_up_phase', type=float, default=1.0,
+                        help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
                         default=0.1, help='kld weight at the end of the warmup')
     parser.add_argument('--kld_weight_min', type=float, default=0.005,
@@ -95,7 +97,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v17', help='checkpoint name')
+                        default='mse-v18', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -175,6 +177,7 @@ def main():
         dynamic_kld=args.dynamic_kld,
         cycling_kld=args.cycling_kld,
         cycling_kld_period=args.cycling_kld_period,
+        cycling_kld_ramp_up_phase=args.cycling_kld_ramp_up_phase,
         kld_weight_max=args.kld_weight_max,
         kld_weight_min=args.kld_weight_min,
         kld_start_epoch=args.kld_start_epoch,

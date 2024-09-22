@@ -150,7 +150,7 @@ def str2sec(time_string):
     return elems[0]*3600 + elems[1]*60 + elems[2]
 
 
-def kl_scheduler(epoch, cycle_period):
+def kl_scheduler(epoch, cycle_period, ramp_up_phase=0.5):
     """
     A cyclical scheduler for the KL divergence weight.
     In the first half of the cycle, the weight increases linearly from 0 to 1.
@@ -165,4 +165,4 @@ def kl_scheduler(epoch, cycle_period):
     """
     epoch_mod = epoch % cycle_period
     epoch_mod_norm = epoch_mod / cycle_period
-    return np.clip(epoch_mod_norm * 2, 0, 1)
+    return np.clip(epoch_mod_norm * 1/ramp_up_phase, 0, 1)

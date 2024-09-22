@@ -573,8 +573,8 @@ class PlFactorVAE1D(LightningModule):
 
         # losses
         # recon loss
-        # self.recon_loss = nn.MSELoss()
-        self.recon_loss = nn.L1Loss()
+        self.recon_loss = nn.MSELoss()
+        # self.recon_loss = nn.L1Loss()
         self.recon_weight = args.recon_weight
 
         # kld loss
@@ -587,6 +587,7 @@ class PlFactorVAE1D(LightningModule):
         self.kld_warmup_epochs = args.kld_warmup_epochs
         self.cycling_kld = args.cycling_kld
         self.cycling_kld_period = args.cycling_kld_period
+        self.cycling_kld_ramp_up_phase = args.cycling_kld_ramp_up_phase
 
         # tc loss
         self.tc_weight = args.tc_weight
@@ -649,7 +650,7 @@ class PlFactorVAE1D(LightningModule):
         if self.args.dynamic_kld > 0:
             kld_scale = self.kld_weight_dynamic
         elif self.cycling_kld > 0:
-            kld_scale = kl_scheduler(epoch=epoch_idx, cycle_period=self.cycling_kld_period)
+            kld_scale = kl_scheduler(epoch=epoch_idx, cycle_period=self.cycling_kld_period, ramp_up_phase=self.cycling_kld_ramp_up_phase)
         else:
             kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
                 min(1.0, (epoch_idx - self.kld_start_epoch) /
