@@ -651,6 +651,8 @@ class PlFactorVAE1D(LightningModule):
             kld_scale = self.kld_weight_dynamic
         elif self.cycling_kld > 0:
             kld_scale = kl_scheduler(epoch=epoch_idx, cycle_period=self.cycling_kld_period, ramp_up_phase=self.cycling_kld_ramp_up_phase)
+            # calculate beta-norm according to beta-vae paper
+            kld_scale = kld_scale * self.latent_size / self.input_size
         else:
             kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
                 min(1.0, (epoch_idx - self.kld_start_epoch) /
