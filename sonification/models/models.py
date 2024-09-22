@@ -649,7 +649,7 @@ class PlFactorVAE1D(LightningModule):
         if self.args.dynamic_kld > 0:
             kld_scale = self.kld_weight_dynamic
         elif self.cycling_kld > 0:
-            kld_scale = kl_scheduler(epoch=epoch_idx, period=self.cycling_kld_period)
+            kld_scale = kl_scheduler(epoch=epoch_idx, cycle_period=self.cycling_kld_period)
         else:
             kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
                 min(1.0, (epoch_idx - self.kld_start_epoch) /
