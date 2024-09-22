@@ -571,8 +571,8 @@ class PlFactorVAE1D(LightningModule):
         self.d_dropout = args.d_dropout
 
         # losses
-        self.recon_loss = nn.MSELoss()
-        # self.recon_loss = nn.L1Loss()
+        # self.recon_loss = nn.MSELoss()
+        self.recon_loss = nn.L1Loss()
         self.kld = kld_loss
         self.recon_weight = args.recon_weight
         self.last_recon_loss = float("inf")  # initialize to infinity

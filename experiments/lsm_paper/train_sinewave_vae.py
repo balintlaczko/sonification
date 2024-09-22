@@ -34,7 +34,7 @@ def main():
     parser.add_argument('--latent_size', type=int,
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int,
-                        default=5, help='kernel size')
+                        default=3, help='kernel size')
     parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 128, 256, 512, 1024],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
@@ -91,7 +91,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mse-v13', help='checkpoint name')
+                        default='mae-v14', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
