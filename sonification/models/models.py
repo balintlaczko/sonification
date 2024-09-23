@@ -6,7 +6,7 @@ from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, Conv
 from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims
 from ..utils.misc import kl_scheduler
-from .loss import kld_loss
+from .loss import kld_loss, kld_loss_uniform
 import matplotlib.pyplot as plt
 import os
 import matplotlib.gridspec as gridspec
@@ -578,7 +578,7 @@ class PlFactorVAE1D(LightningModule):
         self.recon_weight = args.recon_weight
 
         # kld loss
-        self.kld = kld_loss
+        self.kld = kld_loss if args.use_uniform_as_target == 0 else kld_loss_uniform
         self.last_recon_loss = float("inf")  # initialize to infinity
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
@@ -651,12 +651,12 @@ class PlFactorVAE1D(LightningModule):
             kld_scale = self.kld_weight_dynamic
         elif self.cycling_kld > 0:
             kld_scale = kl_scheduler(epoch=epoch_idx, cycle_period=self.cycling_kld_period, ramp_up_phase=self.cycling_kld_ramp_up_phase)
-            # calculate beta-norm according to beta-vae paper
-            kld_scale = kld_scale * self.latent_size / self.input_size
         else:
             kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
                 min(1.0, (epoch_idx - self.kld_start_epoch) /
                     self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
+        # calculate beta-norm according to beta-vae paper
+        kld_scale = kld_scale * self.latent_size / self.input_size
         kld_loss = self.kld(mean, logvar)
         scaled_kld_loss = kld_loss * kld_scale
 

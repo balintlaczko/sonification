@@ -24,6 +24,30 @@ def kld_loss(mu: Tensor, logvar: Tensor) -> Tensor:
     kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1)
     return kld.mean()
 
+# by chatgpt
+def kld_loss_uniform(mu: Tensor, logvar: Tensor, a: float=-4, b: float=4) -> Tensor:
+    """
+    Compute the Kullback-Leibler divergence loss between a Gaussian distribution 
+    with mean `mu` and log-variance `logvar`, and a uniform distribution over [a, b].
+    
+    :param mu: (Tensor) Mean of the latent Gaussian
+    :param logvar: (Tensor) Log-variance of the latent Gaussian
+    :param a: (float) Lower bound of the uniform distribution
+    :param b: (float) Upper bound of the uniform distribution
+    :return: (Tensor) KLD loss
+    """
+    # Convert logvar to variance
+    var = logvar.exp()
+    
+    # Uniform distribution log-probability over [a, b]
+    uniform_log_prob = -torch.log(torch.tensor(b - a))
+
+    # Gaussian log-probability term for KL divergence
+    # D_KL(P || U) = 0.5 * (log(var) + (mu^2 + var) - 1) - log_prob(U)
+    kld = 0.5 * (logvar + (mu.pow(2) + var) - 1) - uniform_log_prob
+
+    return kld.mean()
+
 
 def gap_loss(latent_vectors):
     # normalize the latent vectors between 0 and 1

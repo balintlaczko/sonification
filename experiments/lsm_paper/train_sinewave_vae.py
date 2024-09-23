@@ -65,18 +65,20 @@ def main():
                         help='target recon loss to keep in case of dynamic kld')
     
     # kld loss
-    parser.add_argument('--dynamic_kld', type=int, default=0,
+    parser.add_argument('--dynamic_kld', type=int, default=1,
                         help='non-zero will use dynamic kld')
-    parser.add_argument('--cycling_kld', type=int, default=1, 
+    parser.add_argument('--cycling_kld', type=int, default=0, 
                         help='apply cyclical annealing for kld beta')
     parser.add_argument('--cycling_kld_period', type=int, default=10000,
                         help='cycling kld period')
     parser.add_argument('--cycling_kld_ramp_up_phase', type=float, default=1.0,
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
-                        default=0.1, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.005,
+                        default=1, help='kld weight at the end of the warmup')
+    parser.add_argument('--kld_weight_min', type=float, default=0.01,
                         help='kld weight at the start of the warmup')
+    parser.add_argument('--use_uniform_as_target', type=int, default=1,
+                        help='use a uniform distribution as target')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=1,
@@ -97,7 +99,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mse-v18', help='checkpoint name')
+                        default='mse-v19', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -105,7 +107,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='cycling kld first try, small model',
+    parser.add_argument('--comment', type=str, default='dynamic kld, try uniform as target',
                         help='add a comment if needed')
 
     args = parser.parse_args()
@@ -180,6 +182,7 @@ def main():
         cycling_kld_ramp_up_phase=args.cycling_kld_ramp_up_phase,
         kld_weight_max=args.kld_weight_max,
         kld_weight_min=args.kld_weight_min,
+        use_uniform_as_target=args.use_uniform_as_target,
         kld_start_epoch=args.kld_start_epoch,
         kld_warmup_epochs=args.kld_warmup_epochs,
         tc_weight=args.tc_weight,
