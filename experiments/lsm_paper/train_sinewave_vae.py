@@ -65,13 +65,13 @@ def main():
                         help='target recon loss to keep in case of dynamic kld')
     
     # kld loss
-    parser.add_argument('--dynamic_kld', type=int, default=1,
+    parser.add_argument('--dynamic_kld', type=int, default=0,
                         help='non-zero will use dynamic kld')
-    parser.add_argument('--cycling_kld', type=int, default=0, 
+    parser.add_argument('--cycling_kld', type=int, default=1, 
                         help='apply cyclical annealing for kld beta')
     parser.add_argument('--cycling_kld_period', type=int, default=10000,
                         help='cycling kld period')
-    parser.add_argument('--cycling_kld_ramp_up_phase', type=float, default=1.0,
+    parser.add_argument('--cycling_kld_ramp_up_phase', type=float, default=0.5,
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
                         default=1, help='kld weight at the end of the warmup')
@@ -104,7 +104,7 @@ def main():
                         default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/sinewave_fvae-mae', help='log directory')
-    parser.add_argument('--plot_interval', type=int, default=100)
+    parser.add_argument('--plot_interval', type=int, default=200)
 
     # quick comment
     parser.add_argument('--comment', type=str, default='dynamic kld, try uniform as target',
