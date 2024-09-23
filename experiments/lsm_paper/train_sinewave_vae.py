@@ -33,9 +33,9 @@ def main():
                         default=1, help='image color channels')
     parser.add_argument('--latent_size', type=int,
                         default=2, help='latent size')
-    parser.add_argument('--kernel_size', type=int, nargs='*', default=[9, 7, 5, 3, 3], 
+    parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3], 
                         help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[16, 32, 64, 128, 256],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 256, 256, 256],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=256, help='mlp hidden size')
