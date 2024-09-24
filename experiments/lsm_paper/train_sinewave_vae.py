@@ -35,46 +35,46 @@ def main():
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3], 
                         help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 256, 256, 256],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 64, 64, 64, 64],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
-                        default=256, help='mlp hidden size')
+                        default=64, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
                         default=5, help='mlp number of layers')
     # dropout
-    parser.add_argument('--vae_dropout', type=float, default=0.1,)
-    parser.add_argument('--d_dropout', type=float, default=0.1,)
+    parser.add_argument('--vae_dropout', type=float, default=0.0,)
+    parser.add_argument('--d_dropout', type=float, default=0.0,)
 
     # training
     parser.add_argument('--train_epochs', type=int,
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=8000, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=0.01,
+    parser.add_argument('--lr_vae', type=float, default=0.1,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
-                        default=0.999999)
-    parser.add_argument('--lr_d', type=float, default=0.001,
+                        default=0.999935) # this will reduce lr by a factor of 1000 in around 100k epochs
+    parser.add_argument('--lr_d', type=float, default=0.01,
                         help='learning rate for the discriminator')
-    parser.add_argument('--lr_decay_d', type=float, default=0.999999)
+    parser.add_argument('--lr_decay_d', type=float, default=0.999935)
 
     # recon loss
     parser.add_argument('--recon_weight', type=float,
-                        default=1, help='recon weight')
-    parser.add_argument('--target_recon_loss', type=float, default=0.009,
+                        default=10, help='recon weight')
+    parser.add_argument('--target_recon_loss', type=float, default=0.008,
                         help='target recon loss to keep in case of dynamic kld')
     
     # kld loss
-    parser.add_argument('--dynamic_kld', type=int, default=0,
+    parser.add_argument('--dynamic_kld', type=int, default=1,
                         help='non-zero will use dynamic kld')
-    parser.add_argument('--cycling_kld', type=int, default=1, 
+    parser.add_argument('--cycling_kld', type=int, default=0, 
                         help='apply cyclical annealing for kld beta')
     parser.add_argument('--cycling_kld_period', type=int, default=10000,
                         help='cycling kld period')
     parser.add_argument('--cycling_kld_ramp_up_phase', type=float, default=0.5,
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
-                        default=0.5, help='kld weight at the end of the warmup')
+                        default=10, help='kld weight at the end of the warmup')
     parser.add_argument('--kld_weight_min', type=float, default=0.01,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
@@ -84,7 +84,7 @@ def main():
     
     # total correlation loss term
     parser.add_argument('--tc_weight', type=float,
-                        default=6, help='tc weight')
+                        default=1, help='tc weight')
     parser.add_argument('--tc_start', type=int,
                         default=0, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
@@ -97,15 +97,15 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mse-v20', help='checkpoint name')
+                        default='mae-v22-small', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/sinewave_fvae-mae', help='log directory')
-    parser.add_argument('--plot_interval', type=int, default=200)
+    parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='tc6, cyclic kld, kld-max 0.5',
+    parser.add_argument('--comment', type=str, default='',
                         help='add a comment if needed')
 
     args = parser.parse_args()

@@ -151,7 +151,7 @@ class ConvEncoder1D(nn.Module):
                 nn.Conv1d(in_channel, out_channel, kernel_size=k_size, stride=2, padding=padding),
                 nn.BatchNorm1d(out_channel),
                 nn.LeakyReLU(0.2),
-                nn.Dropout(dropout),
+                # nn.Dropout(dropout),
             ])
             in_channel = out_channel
 
@@ -164,7 +164,7 @@ class ConvEncoder1D(nn.Module):
                 layers_channels[-1] * feature_map_size, self.output_size),
             nn.BatchNorm1d(self.output_size),
             nn.LeakyReLU(0.2),
-            nn.Dropout(dropout),
+            # nn.Dropout(dropout),
         ])
 
         self.layers = nn.Sequential(*layers)
@@ -188,7 +188,7 @@ class ConvDecoder1D(nn.Module):
             nn.BatchNorm1d(layers_channels[0] *
                            feature_map_size),
             nn.LeakyReLU(0.2),
-            nn.Dropout(dropout),
+            # nn.Dropout(dropout),
             nn.Unflatten(
                 1, (layers_channels[0], feature_map_size)),
         ]
@@ -206,7 +206,7 @@ class ConvDecoder1D(nn.Module):
                                    kernel_size=k_size, stride=2, padding=padding, output_padding=1),
                 nn.BatchNorm1d(out_channel),
                 nn.LeakyReLU(0.2),
-                nn.Dropout(dropout),
+                # nn.Dropout(dropout),
             ])
             in_channel = out_channel
 
