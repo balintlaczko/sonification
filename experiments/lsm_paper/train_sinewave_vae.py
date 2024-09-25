@@ -67,6 +67,8 @@ def main():
     # kld loss
     parser.add_argument('--dynamic_kld', type=int, default=1,
                         help='non-zero will use dynamic kld')
+    parser.add_argument('--dynamic_kld_increment', type=float, default=0.000001,
+                        help="in dynamic kld mode, increment the kld this much after every epoch when recon loss is below target")
     parser.add_argument('--cycling_kld', type=int, default=0, 
                         help='apply cyclical annealing for kld beta')
     parser.add_argument('--cycling_kld_period', type=int, default=10000,
@@ -175,6 +177,7 @@ def main():
         recon_weight=args.recon_weight,
         target_recon_loss=args.target_recon_loss,
         dynamic_kld=args.dynamic_kld,
+        dynamic_kld_increment=args.dynamic_kld_increment,
         cycling_kld=args.cycling_kld,
         cycling_kld_period=args.cycling_kld_period,
         cycling_kld_ramp_up_phase=args.cycling_kld_ramp_up_phase,

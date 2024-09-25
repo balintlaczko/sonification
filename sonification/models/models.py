@@ -583,6 +583,7 @@ class PlFactorVAE1D(LightningModule):
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
         self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        self.dynamic_kld_increment = args.dynamic_kld_increment
         self.kld_start_epoch = args.kld_start_epoch
         self.kld_warmup_epochs = args.kld_warmup_epochs
         self.cycling_kld = args.cycling_kld
@@ -761,7 +762,7 @@ class PlFactorVAE1D(LightningModule):
 
         if self.args.dynamic_kld > 0:
             if self.last_recon_loss < self.args.target_recon_loss:
-                self.kld_weight_dynamic += 0.000001
+                self.kld_weight_dynamic += self.dynamic_kld_increment
 
         if epoch % self.plot_interval != 0 and epoch != 0:
             return
