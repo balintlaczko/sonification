@@ -77,7 +77,7 @@ def main():
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
                         default=10, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.05,
+    parser.add_argument('--kld_weight_min', type=float, default=0.5,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
