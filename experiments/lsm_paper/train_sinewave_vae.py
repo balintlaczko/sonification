@@ -86,7 +86,7 @@ def main():
     
     # total correlation loss term
     parser.add_argument('--tc_weight', type=float,
-                        default=0.5, help='tc weight')
+                        default=0.1, help='tc weight')
     parser.add_argument('--tc_start', type=int,
                         default=0, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
@@ -99,7 +99,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v22.5', help='checkpoint name')
+                        default='mae-v23', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -107,7 +107,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='',
+    parser.add_argument('--comment', type=str, default='tc against uniform random samples',
                         help='add a comment if needed')
 
     args = parser.parse_args()

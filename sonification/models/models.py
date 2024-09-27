@@ -679,10 +679,15 @@ class PlFactorVAE1D(LightningModule):
                             gradient_clip_algorithm="norm")
 
         # Discriminator forward pass
-        mean_2, logvar_2 = self.VAE.encode(x_2)
-        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
-        z_2_perm = permute_dims(z_2)
-        d_z_2_perm = self.D(z_2_perm.detach())
+        # mean_2, logvar_2 = self.VAE.encode(x_2)
+        # z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        # z_2_perm = permute_dims(z_2)
+        # d_z_2_perm = self.D(z_2_perm.detach())
+
+        # alternative (assuming that batch size == dataset size!)
+        # compare to uniform random distribution
+        d_z_2_perm = self.D(torch.rand_like(z) * 4 - 2)
+
         d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
                            F.cross_entropy(d_z_2_perm, ones))
 
@@ -739,10 +744,15 @@ class PlFactorVAE1D(LightningModule):
         vae_loss = vae_recon_loss + kld_loss + vae_tc_loss
 
         # Discriminator forward pass
-        mean_2, logvar_2 = self.VAE.encode(x_2)
-        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
-        z_2_perm = permute_dims(z_2)
-        d_z_2_perm = self.D(z_2_perm.detach())
+        # mean_2, logvar_2 = self.VAE.encode(x_2)
+        # z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        # z_2_perm = permute_dims(z_2)
+        # d_z_2_perm = self.D(z_2_perm.detach())
+
+        # alternative (assuming that batch size == dataset size!)
+        # compare to uniform random distribution
+        d_z_2_perm = self.D(torch.rand_like(z) * 4 - 2)
+        
         d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
                            F.cross_entropy(d_z_2_perm, ones))
 
