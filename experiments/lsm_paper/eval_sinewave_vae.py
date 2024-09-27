@@ -80,7 +80,7 @@ sinewave_ds_val = Sinewave_dataset(
 # %%
 # load model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-ckpt_path = '../../ckpt/sinewave_fvae-opt/opt-v41/opt-v41_last_epoch=50001.ckpt'
+ckpt_path = '../../ckpt/sinewave_fvae-mae-v3/mae-v22.4/mae-v22.4_last_epoch=400040.ckpt'
 ckpt = torch.load(ckpt_path, map_location=device)
 args.train_scaler = sinewave_ds_train.scaler
 model = PlFactorVAE1D(args).to(device)
@@ -258,6 +258,6 @@ plt.subplots_adjust(wspace=0.1, hspace=0.1)
 plt.tight_layout()
 # remove white background
 fig.patch.set_visible(False)
-plt.savefig("traverse_latent_space_sinewave_big_2.png")
+plt.savefig("traverse_latent_space_sinewave_mae-v22.4.png")
 plt.show()
 # %%
