@@ -35,7 +35,7 @@ def main():
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3], 
                         help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 64, 64, 128, 128],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 64, 128, 128, 128],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=128, help='mlp hidden size')
@@ -50,18 +50,18 @@ def main():
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=8000, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=0.1,
+    parser.add_argument('--lr_vae', type=float, default=0.05,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
                         default=0.999955) # this will reduce lr by a factor of 1000 in around 100k epochs
-    parser.add_argument('--lr_d', type=float, default=0.1,
+    parser.add_argument('--lr_d', type=float, default=0.005,
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.999955)
 
     # recon loss
     parser.add_argument('--recon_weight', type=float,
                         default=10, help='recon weight')
-    parser.add_argument('--target_recon_loss', type=float, default=0.008,
+    parser.add_argument('--target_recon_loss', type=float, default=0.01,
                         help='target recon loss to keep in case of dynamic kld')
     
     # kld loss
@@ -77,7 +77,7 @@ def main():
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
                         default=10, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.5,
+    parser.add_argument('--kld_weight_min', type=float, default=1,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -86,7 +86,7 @@ def main():
     
     # total correlation loss term
     parser.add_argument('--tc_weight', type=float,
-                        default=0.1, help='tc weight')
+                        default=2.5, help='tc weight')
     parser.add_argument('--tc_start', type=int,
                         default=0, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
@@ -99,7 +99,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v23', help='checkpoint name')
+                        default='mae-v23.5', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -107,7 +107,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='tc against uniform random samples',
+    parser.add_argument('--comment', type=str, default='',
                         help='add a comment if needed')
 
     args = parser.parse_args()
