@@ -6,7 +6,7 @@ import random
 import numpy as np
 from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
 from sonification.models.models import PlFactorVAE, PlFactorVAE1D, PlMapper
 from sonification.datasets import White_Square_dataset, Sinewave_dataset
 
@@ -24,12 +24,12 @@ def main():
                         default=2, help='input size')
     parser.add_argument('--out_features', type=int,
                         default=2, help='output size')
-    parser.add_argument('--hidden_layers_features', type=int, nargs='*', default=[64, 128, 256, 512, 256, 128, 64],
+    parser.add_argument('--hidden_layers_features', type=int, nargs='*', default=[64, 128, 256, 128, 64],
                         help='the size of the hidden layers')
 
     # training
     parser.add_argument('--train_epochs', type=int,
-                        default=50001, help='number of training epochs')
+                        default=10000000, help='number of training epochs')
     # batch size is determined by the image dataset size, since it's small
     # parser.add_argument('--batch_size', type=int,
     #                     default=144, help='batch size')
@@ -49,13 +49,13 @@ def main():
 
     # audio model
     parser.add_argument('--audio_model_ckpt_path', type=str,  # v27 is the previous best
-                        default='./ckpt/sinewave_fvae-opt/opt-v41/opt-v41_last_epoch=50001.ckpt', help='sound model checkpoint path')
+                        default='./ckpt/sinewave_fvae-mae-v3/mae-v23.6/mae-v23.6_last_epoch=217007.ckpt', help='sound model checkpoint path')
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/mapper', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mapper-64x2-v5', help='checkpoint name')
+                        default='mapper-64x2-maesine-v1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument('--logdir', type=str,
@@ -63,7 +63,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=10)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='double cycle consistency weight, shorter ramp',
+    parser.add_argument('--comment', type=str, default='test new sinewave mae model',
                         help='add a comment if needed')
 
     mapper_args = parser.parse_args()
@@ -121,30 +121,36 @@ def main():
         # model
         in_channels=1,
         latent_size=2,
-        layers_channels=[64, 128, 256, 512, 1024],
-        d_hidden_size=512,
+        kernel_size=[3, 3, 3, 3, 3],
+        layers_channels=[64, 64, 128, 128, 128],
+        d_hidden_size=128,
         d_num_layers=5,
+        vae_dropout=0.0,
+        d_dropout=0.0,
         # training
-        recon_weight=1,
-        target_recon_loss=1e-3,
+        recon_weight=10,
+        target_recon_loss=0.01,
         dynamic_kld=1,
-        kld_weight_max=0.01,
-        kld_weight_min=0.001,
+        dynamic_kld_increment=0.000005,
+        cycling_kld=0,
+        cycling_kld_period=10000,
+        cycling_kld_ramp_up_phase=0.5,
+        kld_weight_max=10,
+        kld_weight_min=1,
         kld_start_epoch=0,
         kld_warmup_epochs=1,
-        tc_weight=6,
+        tc_weight=1,
         tc_start=0,
         tc_warmup_epochs=1,
-        l1_weight=0.0,
-        lr_d=1e-2,
-        lr_decay_d=0.9999,
-        lr_decay_vae=0.9999,
-        lr_vae=1e-2,
+        lr_d=0.005,
+        lr_decay_d=0.999955,
+        lr_decay_vae=0.999955,
+        lr_vae=0.05,
         # checkpoint & logging
-        ckpt_path='./ckpt/sinewave_fvae-opt',
-        ckpt_name='opt-v41',
-        logdir='./logs/sinewave_fvae-opt',
-        plot_interval=1,
+        ckpt_path='./ckpt/sinewave_fvae-mae-v3',
+        ckpt_name='mae-v23.6',
+        logdir='./logs/sinewave_fvae-mae-v3',
+        plot_interval=1000,
     )
 
     # create train and val datasets and loaders
@@ -217,14 +223,19 @@ def main():
     )
 
     # logger callbacks
-    tensorboard_logger = TensorBoardLogger(
-        save_dir=mapper_args.logdir, name=mapper_args.ckpt_name)
+    # tensorboard_logger = TensorBoardLogger(
+    #     save_dir=mapper_args.logdir, name=mapper_args.ckpt_name)
+    wandb_logger = WandbLogger(
+        name=mapper_args.ckpt_name,
+        project="mapper",
+        save_dir=mapper_args.logdir,
+    )
 
     trainer = Trainer(
         max_epochs=mapper_args.train_epochs,
         enable_checkpointing=True,
         callbacks=[best_checkpoint_callback, last_checkpoint_callback],
-        logger=tensorboard_logger,
+        logger=wandb_logger,
         log_every_n_steps=1,
     )
 

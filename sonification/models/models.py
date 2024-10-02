@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, LinearDiscriminator, LinearProjector
+from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout
 from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims
 from ..utils.misc import kl_scheduler
@@ -608,7 +608,7 @@ class PlFactorVAE1D(LightningModule):
         # models
         self.VAE = ConvVAE1D(self.in_channels, self.latent_size, self.kernel_size,
                              self.layers_channels, self.input_size, self.vae_dropout)
-        self.D = LinearDiscriminator(
+        self.D = LinearDiscriminator_w_dropout(
             self.latent_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
 
         # train dataset scaler
