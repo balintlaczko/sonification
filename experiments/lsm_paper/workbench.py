@@ -374,3 +374,10 @@ trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loa
             ckpt_path=args.resume_ckpt_path)
 
 # %%
+import torch
+import matplotlib.pyplot as plt
+# plot a uniform random distribution
+z = torch.randn(1000, 2) * 4 - 2
+plt.scatter(z[:, 0], z[:, 1])
+plt.show()
+# %%
