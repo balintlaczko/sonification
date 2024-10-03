@@ -79,7 +79,7 @@ def main():
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
                         default=10, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=1,
+    parser.add_argument('--kld_weight_min', type=float, default=0.1,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -94,7 +94,7 @@ def main():
     parser.add_argument('--auto_dtc_scale', type=int, default=1,
                         help='non-zero will scale the dynamic tc scale by the proportion of the recon loss to the target recon loss with EMA smoothing')
     parser.add_argument('--tc_weight', type=float,
-                        default=1, help='tc weight')
+                        default=0.1, help='tc weight')
     parser.add_argument('--tc_start', type=int,
                         default=0, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
@@ -110,7 +110,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v24', help='checkpoint name')
+                        default='mae-v24.1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -118,7 +118,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='back to paper-style tc loss, better val loss scaling, new auto kld/tc scale scheme',
+    parser.add_argument('--comment', type=str, default='w better limits',
                         help='add a comment if needed')
 
     args = parser.parse_args()
