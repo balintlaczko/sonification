@@ -717,7 +717,7 @@ class PlFactorVAE1D(LightningModule):
         d_scheduler.step()
 
         # log the losses
-        self.last_recon_loss = vae_recon_loss.cpu().numpy()
+        self.last_recon_loss = vae_recon_loss.item()
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_recon_loss": vae_recon_loss,
