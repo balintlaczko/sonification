@@ -404,7 +404,7 @@ class LinearCritique(nn.Module):
             ])
             input_dim = hidden_dim
         self.critique = nn.Sequential(*layers)
-        self.discrimintor = nn.Sequential(
+        self.discriminator = nn.Sequential(
             nn.Linear(hidden_dim, output_dim),
             nn.Sigmoid(),
         )
