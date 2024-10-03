@@ -60,7 +60,7 @@ def main():
 
     # recon loss
     parser.add_argument('--recon_weight', type=float,
-                        default=10, help='recon weight')
+                        default=1, help='recon weight')
     parser.add_argument('--target_recon_loss', type=float, default=0.01,
                         help='target recon loss to keep in case of dynamic kld')
     
@@ -69,6 +69,8 @@ def main():
                         help='non-zero will use dynamic kld')
     parser.add_argument('--dynamic_kld_increment', type=float, default=0.000005,
                         help="in dynamic kld mode, increment the kld this much after every epoch when recon loss is below target")
+    parser.add_argument('--auto_dkld_scale', type=int, default=1,
+                        help='non-zero will scale the dynamic kld scale by the proportion of the recon loss to the target recon loss with EMA smoothing')
     parser.add_argument('--cycling_kld', type=int, default=0, 
                         help='apply cyclical annealing for kld beta')
     parser.add_argument('--cycling_kld_period', type=int, default=10000,
@@ -85,11 +87,20 @@ def main():
                         help='the number of epochs to warmup the kld weight')
     
     # total correlation loss term
+    parser.add_argument('--dynamic_tc', type=int, default=1,
+                        help='non-zero will use dynamic tc')
+    parser.add_argument('--dynamic_tc_increment', type=float, default=0.000005,
+                        help="in dynamic tc mode, increment the tc this much after every epoch when recon loss is below target")
+    parser.add_argument('--auto_dtc_scale', type=int, default=1,
+                        help='non-zero will scale the dynamic tc scale by the proportion of the recon loss to the target recon loss with EMA smoothing')
     parser.add_argument('--tc_weight', type=float,
                         default=1, help='tc weight')
     parser.add_argument('--tc_start', type=int,
                         default=0, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
+
+    parser.add_argument('--ema_alpha', type=float, default=0.99,
+                        help='alpha for the EMA smoothing of the dynamic kld and tc')
 
     # GPU
     parser.add_argument('--num_devices', type=int, nargs='*', default=[0],
@@ -99,7 +110,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v23.6', help='checkpoint name')
+                        default='mae-v24', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -107,7 +118,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='like 23.5 but even lower tc weight',
+    parser.add_argument('--comment', type=str, default='back to paper-style tc loss, better val loss scaling, new auto kld/tc scale scheme',
                         help='add a comment if needed')
 
     args = parser.parse_args()

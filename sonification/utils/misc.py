@@ -166,3 +166,8 @@ def kl_scheduler(epoch, cycle_period, ramp_up_phase=0.5):
     epoch_mod = epoch % cycle_period
     epoch_mod_norm = epoch_mod / cycle_period
     return np.clip(epoch_mod_norm * 1/ramp_up_phase, 0, 1)
+
+
+# exponential moving average
+def ema(last_val, new_val, alpha=0.99):
+    return alpha*last_val + (1-alpha)*new_val

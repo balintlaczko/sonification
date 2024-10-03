@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout
 from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims
-from ..utils.misc import kl_scheduler
+from ..utils.misc import kl_scheduler, ema
 from .loss import kld_loss
 import matplotlib.pyplot as plt
 import os
@@ -584,6 +584,7 @@ class PlFactorVAE1D(LightningModule):
         self.kld_weight_min = args.kld_weight_min
         self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
         self.dynamic_kld_increment = args.dynamic_kld_increment
+        self.auto_dkld_scale = args.auto_dkld_scale
         self.kld_start_epoch = args.kld_start_epoch
         self.kld_warmup_epochs = args.kld_warmup_epochs
         self.cycling_kld = args.cycling_kld
@@ -594,6 +595,11 @@ class PlFactorVAE1D(LightningModule):
         self.tc_weight = args.tc_weight
         self.tc_start = args.tc_start
         self.tc_warmup_epochs = args.tc_warmup_epochs
+        self.tc_weight_dynamic = args.tc_weight # initialize to tc_weight
+        self.dynamic_tc_increment = args.dynamic_tc_increment
+        self.auto_dtc_scale = args.auto_dtc_scale
+
+        self.ema_alpha = args.ema_alpha
 
         # learning rates
         self.lr_vae = args.lr_vae
@@ -659,15 +665,20 @@ class PlFactorVAE1D(LightningModule):
         # calculate beta-norm according to beta-vae paper
         kld_scale = kld_scale * self.latent_size / self.input_size
         kld_loss = self.kld(mean, logvar)
-        scaled_kld_loss = kld_loss * kld_scale
+        self.kld_scale = kld_scale
+        scaled_kld_loss = kld_loss * self.kld_scale
 
         # VAE TC loss
         d_z = self.D(z)
-        vae_tc_scale = self.tc_weight * \
-            min(1.0, (epoch_idx - self.tc_start) /
-                self.tc_warmup_epochs) if epoch_idx > self.tc_start else 0
+        if self.args.dynamic_tc > 0:
+            vae_tc_scale = self.tc_weight_dynamic
+        else:
+            vae_tc_scale = self.tc_weight * \
+                min(1.0, (epoch_idx - self.tc_start) /
+                    self.tc_warmup_epochs) if epoch_idx > self.tc_start else 0
         vae_tc_loss = F.cross_entropy(d_z, ones)
-        scaled_vae_tc_loss = vae_tc_loss * vae_tc_scale
+        self.tc_scale = vae_tc_scale
+        scaled_vae_tc_loss = vae_tc_loss * self.tc_scale
 
         # VAE loss
         vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
@@ -679,14 +690,14 @@ class PlFactorVAE1D(LightningModule):
                             gradient_clip_algorithm="norm")
 
         # Discriminator forward pass
-        # mean_2, logvar_2 = self.VAE.encode(x_2)
-        # z_2 = self.VAE.reparameterize(mean_2, logvar_2)
-        # z_2_perm = permute_dims(z_2)
-        # d_z_2_perm = self.D(z_2_perm.detach())
+        mean_2, logvar_2 = self.VAE.encode(x_2)
+        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        z_2_perm = permute_dims(z_2)
+        d_z_2_perm = self.D(z_2_perm.detach())
 
         # alternative (assuming that batch size == dataset size!)
         # compare to uniform random distribution
-        d_z_2_perm = self.D(torch.rand_like(z) * 4 - 2)
+        # d_z_2_perm = self.D(torch.rand_like(z) * 4 - 2)
 
         d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
                            F.cross_entropy(d_z_2_perm, ones))
@@ -711,9 +722,9 @@ class PlFactorVAE1D(LightningModule):
             "vae_kld_loss": kld_loss,
             "vae_tc_loss": vae_tc_loss,
             "d_tc_loss": d_tc_loss,
+            "kld_scale": self.kld_scale,
+            "tc_scale": self.tc_scale,
         })
-        if self.args.dynamic_kld > 0 or self.args.cycling_kld > 0:
-            self.log_dict({"kld_scale": kld_scale})
 
     def validation_step(self, batch, batch_idx):
         self.VAE.eval()
@@ -741,17 +752,17 @@ class PlFactorVAE1D(LightningModule):
         vae_tc_loss = F.cross_entropy(d_z, ones)
 
         # VAE loss
-        vae_loss = vae_recon_loss + kld_loss + vae_tc_loss
+        vae_loss = vae_recon_loss * self.recon_weight + kld_loss * self.kld_scale + vae_tc_loss * self.tc_scale
 
         # Discriminator forward pass
-        # mean_2, logvar_2 = self.VAE.encode(x_2)
-        # z_2 = self.VAE.reparameterize(mean_2, logvar_2)
-        # z_2_perm = permute_dims(z_2)
-        # d_z_2_perm = self.D(z_2_perm.detach())
+        mean_2, logvar_2 = self.VAE.encode(x_2)
+        z_2 = self.VAE.reparameterize(mean_2, logvar_2)
+        z_2_perm = permute_dims(z_2)
+        d_z_2_perm = self.D(z_2_perm.detach())
 
         # alternative (assuming that batch size == dataset size!)
         # compare to uniform random distribution
-        d_z_2_perm = self.D(torch.rand_like(z) * 4 - 2)
+        # d_z_2_perm = self.D(torch.rand_like(z) * 4 - 2)
         
         d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
                            F.cross_entropy(d_z_2_perm, ones))
@@ -770,9 +781,25 @@ class PlFactorVAE1D(LightningModule):
         # get the epoch number from trainer
         epoch = self.trainer.current_epoch
 
+        # adjust dynamic kld increment or auto kld scale
         if self.args.dynamic_kld > 0:
-            if self.last_recon_loss < self.args.target_recon_loss:
+            if self.auto_dkld_scale > 0: # in auto scale mode we scale in both directions
+                last_val = self.kld_weight_dynamic
+                new_val = self.kld_weight_dynamic * (1 + self.args.target_recon_loss - self.last_recon_loss)
+                self.kld_weight_dynamic = ema(last_val, new_val, alpha=self.ema_alpha)
+            # in manual mode we increment the kld weight when the recon loss is below the target
+            elif self.last_recon_loss < self.args.target_recon_loss:
                 self.kld_weight_dynamic += self.dynamic_kld_increment
+
+        # adjust dynamic tc increment or auto tc scale
+        if self.args.dynamic_tc > 0:
+            if self.auto_dtc_scale > 0:
+                last_val = self.tc_weight_dynamic
+                new_val = self.tc_weight_dynamic * (1 + self.args.target_recon_loss - self.last_recon_loss)
+                self.tc_weight_dynamic = ema(last_val, new_val, alpha=self.ema_alpha)
+            # in manual mode we increment the tc weight when the recon loss is below the target
+            elif self.last_recon_loss < self.args.target_recon_loss:
+                self.tc_weight_dynamic += self.dynamic_tc_increment
 
         if epoch % self.plot_interval != 0 and epoch != 0:
             return

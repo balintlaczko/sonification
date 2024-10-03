@@ -150,7 +150,7 @@ plt.subplots_adjust(wspace=0.1, hspace=0.1)
 plt.tight_layout()
 # remove white background
 fig.patch.set_visible(False)
-plt.savefig("traverse_latent_space_sinewave_big.png")
+plt.savefig("traverse_latent_space_sinewave_test.png")
 plt.show()
 
 # %%
