@@ -741,40 +741,48 @@ class PlFactorVAE1D(LightningModule):
 
         # get the batch
         x_1, x_2 = batch
-        batch_size = x_1.shape[0]
+        # batch_size = x_1.shape[0]
 
         # create a batch of ones and zeros for the discriminator
-        ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
-        zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
+        # ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
+        # zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
-
-        # VAE reconstruction loss
-        vae_recon_loss = self.recon_loss(x_recon, x_1)
-
-        # VAE KLD loss
-        kld_loss = self.kld(mean, logvar)
-
-        # VAE TC loss
-        d_z = self.D(z)
-        vae_tc_loss = F.cross_entropy(d_z, ones)
-
-        # VAE loss
-        vae_loss = vae_recon_loss * self.recon_weight + kld_loss * self.kld_scale + vae_tc_loss * self.tc_scale
-
-        # Discriminator forward pass
         mean_2, logvar_2 = self.VAE.encode(x_2)
         z_2 = self.VAE.reparameterize(mean_2, logvar_2)
         z_2_perm = permute_dims(z_2)
-        d_z_2_perm = self.D(z_2_perm.detach())
 
-        # alternative (assuming that batch size == dataset size!)
-        # compare to uniform random distribution
-        # d_z_2_perm = self.D(torch.rand_like(z) * 4 - 2)
-        
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
-                           F.cross_entropy(d_z_2_perm, ones))
+        # Discriminator forward pass
+        z_critique, z_judgement = self.D(z.detach())
+        z_2_perm_critique, z_2_perm_judgement = self.D(z_2_perm.detach())
+
+        # Compute discriminator loss
+        original_z_loss = self.d_criterion(z_judgement, torch.ones_like(z_judgement)) # label 1 = the original z
+        shuffled_z_loss = self.d_criterion(z_2_perm_judgement, torch.zeros_like(z_2_perm_judgement)) # label 0 = the shuffled z
+        d_tc_loss = original_z_loss + shuffled_z_loss
+
+
+        # d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
+        #                    F.cross_entropy(d_z_2_perm, ones))
+
+
+        # VAE reconstruction loss
+        vae_recon_loss = self.recon_loss(x_recon, x_1)
+        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
+
+        # VAE KLD loss
+        kld_loss = self.kld(mean, logvar)
+        scaled_kld_loss = kld_loss * self.kld_scale
+
+        # VAE TC loss
+        # Feature matching loss (L2 loss between real and fake features)
+        vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
+        # vae_tc_loss = F.cross_entropy(d_z, ones)
+        scaled_vae_tc_loss = vae_tc_loss * self.tc_scale
+
+        # VAE loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
 
         # log the losses
         self.log_dict({
