@@ -590,7 +590,7 @@ class PlFactorVAE1D(LightningModule):
         self.cycling_kld = args.cycling_kld
         self.cycling_kld_period = args.cycling_kld_period
         self.cycling_kld_ramp_up_phase = args.cycling_kld_ramp_up_phase
-        self.kld_scale = 0 # just init for sanity check
+        self.kld_scale = args.kld_weight_min # just init for sanity check
 
         # tc loss
         self.tc_weight = args.tc_weight
@@ -599,7 +599,7 @@ class PlFactorVAE1D(LightningModule):
         self.tc_weight_dynamic = args.tc_weight # initialize to tc_weight
         self.dynamic_tc_increment = args.dynamic_tc_increment
         self.auto_dtc_scale = args.auto_dtc_scale
-        self.tc_scale = 0 # just init for sanity check
+        self.tc_scale = args.tc_weight # just init for sanity check
 
         self.ema_alpha = args.ema_alpha
 
