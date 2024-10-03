@@ -672,10 +672,6 @@ class PlFactorVAE1D(LightningModule):
         d_optimizer.zero_grad()
         self.manual_backward(d_tc_loss, retain_graph=True)
 
-        # Optimizer & Scheduler step
-        d_optimizer.step()
-        d_scheduler.step()
-
 
         # VAE reconstruction loss
         vae_recon_loss = self.recon_loss(x_recon, x_1)
@@ -718,7 +714,11 @@ class PlFactorVAE1D(LightningModule):
         # self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
         #                     gradient_clip_algorithm="norm")
 
-        # Optimizer & Scheduler step
+        # Discriminator Optimizer & Scheduler step
+        d_optimizer.step()
+        d_scheduler.step()
+
+        # VAE Optimizer & Scheduler step
         vae_optimizer.step()
         vae_scheduler.step()
 
