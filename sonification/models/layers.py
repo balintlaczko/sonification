@@ -390,6 +390,28 @@ class LinearDiscriminator_w_dropout(nn.Module):
 
     def forward(self, x):
         return self.discriminator(x)
+    
+
+class LinearCritique(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+        super(LinearCritique, self).__init__()
+
+        layers = []
+        for i in range(num_layers-1):
+            layers.extend([
+                nn.Linear(input_dim, hidden_dim),
+                nn.LeakyReLU(0.2, inplace=True),
+            ])
+            input_dim = hidden_dim
+        self.critique = nn.Sequential(*layers)
+        self.discrimintor = nn.Sequential(
+            nn.Linear(hidden_dim, output_dim),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        x = self.critique(x)
+        return x, self.discriminator(x)
 
 
 class LinearProjector(nn.Module):

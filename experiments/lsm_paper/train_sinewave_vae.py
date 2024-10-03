@@ -38,7 +38,7 @@ def main():
     parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 64, 128, 128, 128],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
-                        default=128, help='mlp hidden size')
+                        default=256, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
                         default=5, help='mlp number of layers')
     # dropout
@@ -54,7 +54,7 @@ def main():
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
                         default=0.999955) # this will reduce lr by a factor of 1000 in around 100k epochs
-    parser.add_argument('--lr_d', type=float, default=0.005,
+    parser.add_argument('--lr_d', type=float, default=0.05,
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.999955)
 
@@ -110,7 +110,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v24.1', help='checkpoint name')
+                        default='mae-v25', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -118,7 +118,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='w better limits',
+    parser.add_argument('--comment', type=str, default='new formulation of adversarial loss',
                         help='add a comment if needed')
 
     args = parser.parse_args()
