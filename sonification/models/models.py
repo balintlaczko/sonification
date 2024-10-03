@@ -788,7 +788,7 @@ class PlFactorVAE1D(LightningModule):
             if self.auto_dkld_scale > 0: # in auto scale mode we scale in both directions
                 last_val = self.kld_weight_dynamic
                 new_val = self.kld_weight_dynamic * (1 + self.args.target_recon_loss - self.last_recon_loss)
-                self.kld_weight_dynamic = ema(last_val, new_val, alpha=self.ema_alpha)
+                self.kld_weight_dynamic = np.clip(ema(last_val, new_val, alpha=self.ema_alpha), 0.01, 100)
             # in manual mode we increment the kld weight when the recon loss is below the target
             elif self.last_recon_loss < self.args.target_recon_loss:
                 self.kld_weight_dynamic += self.dynamic_kld_increment
@@ -798,7 +798,7 @@ class PlFactorVAE1D(LightningModule):
             if self.auto_dtc_scale > 0:
                 last_val = self.tc_weight_dynamic
                 new_val = self.tc_weight_dynamic * (1 + self.args.target_recon_loss - self.last_recon_loss)
-                self.tc_weight_dynamic = ema(last_val, new_val, alpha=self.ema_alpha)
+                self.tc_weight_dynamic = np.clip(ema(last_val, new_val, alpha=self.ema_alpha), 0.01, 100)
             # in manual mode we increment the tc weight when the recon loss is below the target
             elif self.last_recon_loss < self.args.target_recon_loss:
                 self.tc_weight_dynamic += self.dynamic_tc_increment
