@@ -38,33 +38,37 @@ args = Args(
     in_channels=1,
     latent_size=2,
     kernel_size=[3, 3, 3, 3, 3],
-    layers_channels=[64, 64, 128, 128, 128],
-    d_hidden_size=128,
+    layers_channels=[64, 128, 256, 512, 1024],
+    d_hidden_size=512,
     d_num_layers=5,
     vae_dropout=0.0,
     d_dropout=0.0,
     # training
-    recon_weight=10,
+    recon_weight=1,
     target_recon_loss=0.01,
-    dynamic_kld=1,
+    dynamic_kld=0,
     dynamic_kld_increment=0.000005,
     cycling_kld=0,
     cycling_kld_period=10000,
     cycling_kld_ramp_up_phase=0.5,
-    kld_weight_max=10,
-    kld_weight_min=1,
-    kld_start_epoch=0,
-    kld_warmup_epochs=1,
-    tc_weight=1,
-    tc_start=0,
-    tc_warmup_epochs=1,
-    lr_d=0.005,
-    lr_decay_d=0.999955,
-    lr_decay_vae=0.999955,
-    lr_vae=0.05,
+    kld_weight_max=0.25,
+    kld_weight_min=0.025,
+    kld_start_epoch=10000,
+    kld_warmup_epochs=100000,
+    auto_dkld_scale=0,
+    tc_weight=2,
+    tc_start=10000,
+    tc_warmup_epochs=100000,
+    dynamic_tc_increment=0.000005,
+    auto_dtc_scale=0,
+    lr_d=0.00125,
+    lr_decay_d=0.999988,
+    lr_decay_vae=0.999988,
+    lr_vae=0.0025,
+    ema_alpha=0.999,
     # checkpoint & logging
     ckpt_path='./ckpt/sinewave_fvae-mae-v3',
-    ckpt_name='mae-v23.6',
+    ckpt_name='mae-v25.7',
     logdir='./logs/sinewave_fvae-mae-v3',
     plot_interval=1000,
 )
@@ -79,9 +83,14 @@ sinewave_ds_val = Sinewave_dataset(
 # %%
 # load model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-ckpt_path = '../../ckpt/sinewave_fvae-mae-v3/mae-v23.6/mae-v23.6_last_epoch=217007.ckpt'
+ckpt_path = '../../ckpt/sinewave_fvae-mae-v3/mae-v25.7/mae-v25.7_last_epoch=139930.ckpt'
 ckpt = torch.load(ckpt_path, map_location=device)
 args.train_scaler = sinewave_ds_train.scaler
+
+# get keys from the checkpoint
+ckpt["state_dict"].keys()
+
+# %%
 model = PlFactorVAE1D(args).to(device)
 model.load_state_dict(ckpt['state_dict'])
 model.eval()
@@ -257,6 +266,6 @@ plt.subplots_adjust(wspace=0.1, hspace=0.1)
 plt.tight_layout()
 # remove white background
 fig.patch.set_visible(False)
-plt.savefig("traverse_latent_space_sinewave_mae-v23.6.png")
+plt.savefig("traverse_latent_space_sinewave_mae-v25.7.png")
 plt.show()
 # %%

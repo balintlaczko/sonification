@@ -35,10 +35,10 @@ def main():
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3], 
                         help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 64, 128, 128, 128],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 128, 256, 512, 1024],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
-                        default=256, help='mlp hidden size')
+                        default=512, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
                         default=5, help='mlp number of layers')
     # dropout
@@ -49,14 +49,14 @@ def main():
     parser.add_argument('--train_epochs', type=int,
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
-                        default=8000, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=0.05,
+                        default=2000, help='batch size')
+    parser.add_argument('--lr_vae', type=float, default=0.0025,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
-                        default=0.999955) # this will reduce lr by a factor of 1000 in around 100k epochs
-    parser.add_argument('--lr_d', type=float, default=0.05,
+                        default=0.999988) # this will reduce lr by a factor of 1000 in around 100k epochs
+    parser.add_argument('--lr_d', type=float, default=0.00125,
                         help='learning rate for the discriminator')
-    parser.add_argument('--lr_decay_d', type=float, default=0.999955)
+    parser.add_argument('--lr_decay_d', type=float, default=0.999988)
 
     # recon loss
     parser.add_argument('--recon_weight', type=float,
@@ -65,11 +65,11 @@ def main():
                         help='target recon loss to keep in case of dynamic kld')
     
     # kld loss
-    parser.add_argument('--dynamic_kld', type=int, default=1,
+    parser.add_argument('--dynamic_kld', type=int, default=0,
                         help='non-zero will use dynamic kld')
     parser.add_argument('--dynamic_kld_increment', type=float, default=0.000005,
                         help="in dynamic kld mode, increment the kld this much after every epoch when recon loss is below target")
-    parser.add_argument('--auto_dkld_scale', type=int, default=1,
+    parser.add_argument('--auto_dkld_scale', type=int, default=0,
                         help='non-zero will scale the dynamic kld scale by the proportion of the recon loss to the target recon loss with EMA smoothing')
     parser.add_argument('--cycling_kld', type=int, default=0, 
                         help='apply cyclical annealing for kld beta')
@@ -78,26 +78,26 @@ def main():
     parser.add_argument('--cycling_kld_ramp_up_phase', type=float, default=0.5,
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
-                        default=10, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.1,
+                        default=0.25, help='kld weight at the end of the warmup')
+    parser.add_argument('--kld_weight_min', type=float, default=0.025,
                         help='kld weight at the start of the warmup')
-    parser.add_argument('--kld_start_epoch', type=int, default=0,
+    parser.add_argument('--kld_start_epoch', type=int, default=5000,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
-    parser.add_argument('--kld_warmup_epochs', type=int, default=1,
+    parser.add_argument('--kld_warmup_epochs', type=int, default=50000,
                         help='the number of epochs to warmup the kld weight')
     
     # total correlation loss term
-    parser.add_argument('--dynamic_tc', type=int, default=1,
+    parser.add_argument('--dynamic_tc', type=int, default=0,
                         help='non-zero will use dynamic tc')
     parser.add_argument('--dynamic_tc_increment', type=float, default=0.000005,
                         help="in dynamic tc mode, increment the tc this much after every epoch when recon loss is below target")
-    parser.add_argument('--auto_dtc_scale', type=int, default=1,
+    parser.add_argument('--auto_dtc_scale', type=int, default=0,
                         help='non-zero will scale the dynamic tc scale by the proportion of the recon loss to the target recon loss with EMA smoothing')
     parser.add_argument('--tc_weight', type=float,
-                        default=0.1, help='tc weight')
+                        default=3, help='tc weight')
     parser.add_argument('--tc_start', type=int,
-                        default=0, help='tc start epoch')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
+                        default=5000, help='tc start epoch')
+    parser.add_argument('--tc_warmup_epochs', type=int, default=50000,)
 
     parser.add_argument('--ema_alpha', type=float, default=0.99,
                         help='alpha for the EMA smoothing of the dynamic kld and tc')
@@ -110,7 +110,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v25', help='checkpoint name')
+                        default='mae-v25.8', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -118,7 +118,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='new formulation of adversarial loss',
+    parser.add_argument('--comment', type=str, default='higher tc, faster warmup',
                         help='add a comment if needed')
 
     args = parser.parse_args()

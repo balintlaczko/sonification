@@ -558,7 +558,7 @@ class PlFactorVAE1D(LightningModule):
         super(PlFactorVAE1D, self).__init__()
         # Important: This property activates manual optimization.
         self.automatic_optimization = False
-        # self.save_hyperparameters()
+        self.save_hyperparameters() # this will save args in the checkpoint
 
         # data params
         self.in_channels = args.in_channels
