@@ -33,9 +33,9 @@ def main():
                         default=1, help='image color channels')
     parser.add_argument('--latent_size', type=int,
                         default=2, help='latent size')
-    parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3], 
+    parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3, 3], 
                         help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 128, 256, 512, 1024],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 256, 256, 256, 256],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=512, help='mlp hidden size')
@@ -49,7 +49,7 @@ def main():
     parser.add_argument('--train_epochs', type=int,
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
-                        default=2000, help='batch size')
+                        default=8000, help='batch size')
     parser.add_argument('--lr_vae', type=float, default=0.0025,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
@@ -78,8 +78,8 @@ def main():
     parser.add_argument('--cycling_kld_ramp_up_phase', type=float, default=0.5,
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
-                        default=0.25, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.025,
+                        default=0.5, help='kld weight at the end of the warmup')
+    parser.add_argument('--kld_weight_min', type=float, default=0.05,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=5000,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -94,7 +94,7 @@ def main():
     parser.add_argument('--auto_dtc_scale', type=int, default=0,
                         help='non-zero will scale the dynamic tc scale by the proportion of the recon loss to the target recon loss with EMA smoothing')
     parser.add_argument('--tc_weight', type=float,
-                        default=3, help='tc weight')
+                        default=4, help='tc weight')
     parser.add_argument('--tc_start', type=int,
                         default=5000, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=50000,)
@@ -110,7 +110,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v25.8', help='checkpoint name')
+                        default='mae-v26', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -118,7 +118,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='higher tc, faster warmup',
+    parser.add_argument('--comment', type=str, default='6 layers, even width, tc4, double kld',
                         help='add a comment if needed')
 
     args = parser.parse_args()
