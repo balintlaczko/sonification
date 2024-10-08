@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, LinearDiscriminator, LinearCritique, LinearProjector, LinearDiscriminator_w_dropout
+from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, LinearDiscriminator, LinearCritique, LinearCritique_w_dropout, LinearProjector, LinearDiscriminator_w_dropout
 from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims
 from ..utils.misc import kl_scheduler, ema
@@ -633,11 +633,11 @@ class PlFactorVAE1D(LightningModule):
         self.VAE = ConvVAE1D(self.in_channels, self.latent_size, self.kernel_size,
                              self.layers_channels, self.input_size, self.vae_dropout)
         
-        self.D = LinearCritique(
-            self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+        self.D = LinearCritique_w_dropout(
+            self.latent_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
         
-        self.D2 = LinearCritique(
-            self.input_size, self.d_hidden_size, 2, self.d_num_layers)
+        self.D2 = LinearCritique_w_dropout(
+            self.input_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
 
         # train dataset scaler
         self.train_scaler = args.train_scaler
@@ -741,7 +741,11 @@ class PlFactorVAE1D(LightningModule):
         # VAE adversarial reconstruction loss
         vae_dec_loss_scale = self.dec_loss_weight * min(1.0, (epoch_idx - self.dec_loss_start_epoch) / self.dec_loss_warmup_epochs) if epoch_idx > self.dec_loss_start_epoch else 0
         # Feature matching loss (L2 loss between real and fake features)
-        vae_dec_loss = torch.mean((x_1_critique.mean(0) - x_recon_critique.mean(0)) ** 2)
+        # vae_dec_loss = torch.mean((x_1_critique.mean(0) - x_recon_critique.mean(0)) ** 2)
+        diff = x_1_critique - x_recon_critique
+        diff = (diff ** 2).mean()
+        diff = diff / (x_1_critique ** 2).mean()
+        vae_dec_loss = diff
         self.dec_loss_scale = vae_dec_loss_scale
         scaled_vae_dec_loss = vae_dec_loss * self.dec_loss_scale
 
@@ -838,7 +842,11 @@ class PlFactorVAE1D(LightningModule):
 
         # VAE adversarial reconstruction loss
         # Feature matching loss (L2 loss between real and fake features)
-        vae_dec_loss = torch.mean((x_1_critique.mean(0) - x_recon_critique.mean(0)) ** 2)
+        # vae_dec_loss = torch.mean((x_1_critique.mean(0) - x_recon_critique.mean(0)) ** 2)
+        diff = x_1_critique - x_recon_critique
+        diff = (diff ** 2).mean()
+        diff = diff / (x_1_critique ** 2).mean()
+        vae_dec_loss = diff
         scaled_vae_dec_loss = vae_dec_loss * self.dec_loss_scale
 
         # VAE loss
