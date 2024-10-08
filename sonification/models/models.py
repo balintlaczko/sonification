@@ -603,7 +603,7 @@ class PlFactorVAE1D(LightningModule):
 
         # tc loss
         self.tc_weight = args.tc_weight
-        self.tc_start = args.tc_start
+        self.tc_start_epoch = args.tc_start_epoch
         self.tc_warmup_epochs = args.tc_warmup_epochs
         self.tc_weight_dynamic = args.tc_weight # initialize to tc_weight
         self.dynamic_tc_increment = args.dynamic_tc_increment
@@ -730,8 +730,8 @@ class PlFactorVAE1D(LightningModule):
             vae_tc_scale = self.tc_weight_dynamic
         else:
             vae_tc_scale = self.tc_weight * \
-                min(1.0, (epoch_idx - self.tc_start) /
-                    self.tc_warmup_epochs) if epoch_idx > self.tc_start else 0
+                min(1.0, (epoch_idx - self.tc_start_epoch) /
+                    self.tc_warmup_epochs) if epoch_idx > self.tc_start_epoch else 0
         # Feature matching loss (L2 loss between real and fake features)
         vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
         # vae_tc_loss = F.cross_entropy(d_z, ones)
@@ -779,6 +779,7 @@ class PlFactorVAE1D(LightningModule):
             "kld_scale": self.kld_scale,
             "tc_scale": self.tc_scale,
             "dec_loss_scale": self.dec_loss_scale,
+            "d2_loss": d2_loss,
         })
 
     def validation_step(self, batch, batch_idx):
@@ -958,9 +959,9 @@ class PlFactorVAE1D(LightningModule):
         vae_optimizer = torch.optim.AdamW(
             self.VAE.parameters(), lr=self.lr_vae, betas=(0.9, 0.999))
         d_optimizer = torch.optim.AdamW(
-            self.D.parameters(), lr=self.lr_d, betas=(0.5, 0.9))
+            self.D.parameters(), lr=self.lr_d, betas=(0.5, 0.999))
         d2_optimizer = torch.optim.AdamW(
-            self.D2.parameters(), lr=self.lr_d, betas=(0.5, 0.9))
+            self.D2.parameters(), lr=self.lr_d, betas=(0.5, 0.999))
         vae_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             vae_optimizer, gamma=self.lr_decay_vae)
         d_scheduler = torch.optim.lr_scheduler.ExponentialLR(
