@@ -205,7 +205,7 @@ def main():
         kld_start_epoch=args.kld_start_epoch,
         kld_warmup_epochs=args.kld_warmup_epochs,
         tc_weight=args.tc_weight,
-        tc_start=args.tc_start,
+        tc_start_epoch=args.tc_start_epoch,
         tc_warmup_epochs=args.tc_warmup_epochs,
         vae_dropout=args.vae_dropout,
         d_dropout=args.d_dropout,
