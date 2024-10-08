@@ -99,6 +99,14 @@ def main():
                         default=5000, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=50000,)
 
+    # adversarial reconstruction loss
+    parser.add_argument('--dec_loss_weight', type=float, default=1.0,
+                        help='weight for the decoder loss')
+    parser.add_argument('--dec_loss_start_epoch', type=int, default=55000,
+                        help='start epoch for the decoder loss')
+    parser.add_argument('--dec_loss_warmup_epochs', type=int, default=10000,
+                        help='number of epochs to warmup the decoder loss weight')
+
     parser.add_argument('--ema_alpha', type=float, default=0.99,
                         help='alpha for the EMA smoothing of the dynamic kld and tc')
 
