@@ -35,10 +35,10 @@ def main():
                         default=2, help='latent size')
     parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3, 3], 
                         help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 256, 256, 256, 256],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[512, 512, 512, 512, 512, 512],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
-                        default=256, help='mlp hidden size')
+                        default=512, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
                         default=5, help='mlp number of layers')
     # dropout
@@ -83,9 +83,9 @@ def main():
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
-    parser.add_argument('--kld_warmup_epochs', type=int, default=5000,
+    parser.add_argument('--kld_warmup_epochs', type=int, default=1,
                         help='the number of epochs to warmup the kld weight')
-    parser.add_argument('--kld_decay', type=float, default=0.9999,
+    parser.add_argument('--kld_decay', type=float, default=0.99999,
                         help='kld decay factor that will be applied to the kld weight after the warmup')
     
     # total correlation loss term
@@ -99,14 +99,14 @@ def main():
                         default=6, help='tc weight')
     parser.add_argument('--tc_start_epoch', type=int,
                         default=0, help='tc start epoch')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=5000,)
+    parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
 
     # adversarial reconstruction loss
     parser.add_argument('--dec_loss_weight', type=float, default=10,
                         help='weight for the decoder loss')
-    parser.add_argument('--dec_loss_start_epoch', type=int, default=5000,
+    parser.add_argument('--dec_loss_start_epoch', type=int, default=0,
                         help='start epoch for the decoder loss')
-    parser.add_argument('--dec_loss_warmup_epochs', type=int, default=5000,
+    parser.add_argument('--dec_loss_warmup_epochs', type=int, default=1,
                         help='number of epochs to warmup the decoder loss weight')
 
     parser.add_argument('--ema_alpha', type=float, default=0.99,
@@ -120,7 +120,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v29', help='checkpoint name')
+                        default='mae-v30-bigdata', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -128,7 +128,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='smaller discriminators, label smoothing, kld decay',
+    parser.add_argument('--comment', type=str, default='big model/data, no warm-up, kl decay',
                         help='add a comment if needed')
 
     args = parser.parse_args()
