@@ -49,7 +49,7 @@ def main():
     parser.add_argument('--train_epochs', type=int,
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
-                        default=800, help='batch size')
+                        default=2000, help='batch size')
     parser.add_argument('--lr_vae', type=float, default=0.0025,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
@@ -85,7 +85,7 @@ def main():
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=1,
                         help='the number of epochs to warmup the kld weight')
-    parser.add_argument('--kld_decay', type=float, default=0.99999,
+    parser.add_argument('--kld_decay', type=float, default=0.9999,
                         help='kld decay factor that will be applied to the kld weight after the warmup')
     
     # total correlation loss term
@@ -125,7 +125,7 @@ def main():
                         default=None,)
     parser.add_argument(
         '--logdir', type=str, default='./logs/sinewave_fvae-mae', help='log directory')
-    parser.add_argument('--plot_interval', type=int, default=1000)
+    parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
     parser.add_argument('--comment', type=str, default='big model/data, no warm-up, kl decay',
