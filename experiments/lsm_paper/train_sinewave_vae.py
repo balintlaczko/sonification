@@ -38,7 +38,7 @@ def main():
     parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 256, 256, 256, 256],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
-                        default=512, help='mlp hidden size')
+                        default=256, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
                         default=5, help='mlp number of layers')
     # dropout
@@ -85,6 +85,8 @@ def main():
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=5000,
                         help='the number of epochs to warmup the kld weight')
+    parser.add_argument('--kld_decay', type=float, default=0.9999,
+                        help='kld decay factor that will be applied to the kld weight after the warmup')
     
     # total correlation loss term
     parser.add_argument('--dynamic_tc', type=int, default=0,
@@ -118,7 +120,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v28', help='checkpoint name')
+                        default='mae-v29', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -126,7 +128,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1000)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='even stronger adversarial loss, even faster warmups, even smaller batches, larger discriminators, rave-style feature matching loss, dropout',
+    parser.add_argument('--comment', type=str, default='smaller discriminators, label smoothing, kld decay',
                         help='add a comment if needed')
 
     args = parser.parse_args()
@@ -204,6 +206,7 @@ def main():
         kld_weight_min=args.kld_weight_min,
         kld_start_epoch=args.kld_start_epoch,
         kld_warmup_epochs=args.kld_warmup_epochs,
+        kld_decay=args.kld_decay,
         tc_weight=args.tc_weight,
         tc_start_epoch=args.tc_start_epoch,
         tc_warmup_epochs=args.tc_warmup_epochs,

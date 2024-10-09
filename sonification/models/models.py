@@ -600,6 +600,7 @@ class PlFactorVAE1D(LightningModule):
         self.cycling_kld_period = args.cycling_kld_period
         self.cycling_kld_ramp_up_phase = args.cycling_kld_ramp_up_phase
         self.kld_scale = args.kld_weight_min # just init for sanity check
+        self.kld_decay = args.kld_decay
 
         # tc loss
         self.tc_weight = args.tc_weight
@@ -697,7 +698,7 @@ class PlFactorVAE1D(LightningModule):
         x_recon_critique, x_recon_judgement = self.D2(x_recon.detach())
 
         # Compute discriminator 2 loss
-        original_x_loss = self.d_criterion(x_1_judgement, torch.ones_like(x_1_judgement)) # label 1 = the original x
+        original_x_loss = self.d_criterion(x_1_judgement, torch.ones_like(x_1_judgement) * 0.9) # label 1 = the original x, with label smoothing
         recon_x_loss = self.d_criterion(x_recon_judgement, torch.zeros_like(x_recon_judgement)) # label 0 = the reconstructed x
         d2_loss = original_x_loss + recon_x_loss
 
@@ -721,6 +722,9 @@ class PlFactorVAE1D(LightningModule):
                     self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
         # calculate beta-norm according to beta-vae paper
         kld_scale = kld_scale * self.latent_size / self.input_size
+        # use kld decay after kld warmup
+        if epoch_idx > self.kld_start_epoch + self.kld_warmup_epochs:
+            kld_scale = kld_scale * (self.kld_decay ** (epoch_idx - self.kld_start_epoch - self.kld_warmup_epochs))
         kld_loss = self.kld(mean, logvar)
         self.kld_scale = kld_scale
         scaled_kld_loss = kld_loss * self.kld_scale
@@ -822,7 +826,7 @@ class PlFactorVAE1D(LightningModule):
         x_recon_critique, x_recon_judgement = self.D2(x_recon.detach())
 
         # Compute discriminator 2 loss
-        original_x_loss = self.d_criterion(x_1_judgement, torch.ones_like(x_1_judgement)) # label 1 = the original x
+        original_x_loss = self.d_criterion(x_1_judgement, torch.ones_like(x_1_judgement) * 0.9) # label 1 = the original x, with label smoothing
         recon_x_loss = self.d_criterion(x_recon_judgement, torch.zeros_like(x_recon_judgement)) # label 0 = the reconstructed x
         d2_loss = original_x_loss + recon_x_loss
 
