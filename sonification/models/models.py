@@ -694,9 +694,9 @@ class PlFactorVAE1D(LightningModule):
         x_1, x_2 = batch
         # batch_size = x_1.shape[0]
 
-        # add small amount of noise to the input
-        x_1 = x_1 + torch.randn_like(x_1) * 0.01
-        x_2 = x_2 + torch.randn_like(x_2) * 0.01
+        # # add small amount of noise to the input
+        # x_1 = x_1 + torch.randn_like(x_1) * 0.01
+        # x_2 = x_2 + torch.randn_like(x_2) * 0.01
 
         # create a batch of ones and zeros for the discriminator
         # ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
@@ -831,9 +831,9 @@ class PlFactorVAE1D(LightningModule):
         x_1, x_2 = batch
         # batch_size = x_1.shape[0]
 
-        # add small amount of noise to the input
-        x_1 = x_1 + torch.randn_like(x_1) * 0.01
-        x_2 = x_2 + torch.randn_like(x_2) * 0.01
+        # # add small amount of noise to the input
+        # x_1 = x_1 + torch.randn_like(x_1) * 0.01
+        # x_2 = x_2 + torch.randn_like(x_2) * 0.01
 
         # create a batch of ones and zeros for the discriminator
         # ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
