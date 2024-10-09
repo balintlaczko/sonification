@@ -33,12 +33,12 @@ def main():
                         default=1, help='image color channels')
     parser.add_argument('--latent_size', type=int,
                         default=2, help='latent size')
-    # parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3, 3], 
-    #                     help='kernel size')
-    parser.add_argument('--vae_channels', type=int, default=64,)
-    parser.add_argument('--vae_num_layers', type=int, default=50,)
-    # parser.add_argument('--layers_channels', type=int, nargs='*', default=[512, 512, 512, 512, 512, 512, 512, 512, 512, 512],
-    #                     help='channels for the layers')
+    # parser.add_argument('--vae_channels', type=int, default=64,)
+    # parser.add_argument('--vae_num_layers', type=int, default=50,)
+    parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3, 3], 
+                        help='kernel size')
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[512, 512, 512, 512, 512, 512],
+                        help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=512, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
@@ -122,7 +122,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v31.2', help='checkpoint name')
+                        default='mae-v32', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -130,7 +130,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='resnet style model, 10 layers, big data, faster kl decay',
+    parser.add_argument('--comment', type=str, default='back to normal model, but wider mu/logvar',
                         help='add a comment if needed')
 
     args = parser.parse_args()
@@ -188,10 +188,10 @@ def main():
         in_channels=args.in_channels,
         img_size=args.img_size,
         latent_size=args.latent_size,
-        # kernel_size=args.kernel_size,
-        # layers_channels=args.layers_channels,
-        vae_channels=args.vae_channels,
-        vae_num_layers=args.vae_num_layers,
+        kernel_size=args.kernel_size,
+        layers_channels=args.layers_channels,
+        # vae_channels=args.vae_channels,
+        # vae_num_layers=args.vae_num_layers,
         d_hidden_size=args.d_hidden_size,
         d_num_layers=args.d_num_layers,
         batch_size=args.batch_size,
