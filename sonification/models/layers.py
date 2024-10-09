@@ -170,6 +170,33 @@ class ConvEncoder1D(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
+    
+
+class ConvEncoder1DRes(nn.Module):
+    def __init__(self, in_channels, output_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
+        super(ConvEncoder1DRes, self).__init__()
+        self.in_channels = in_channels
+        self.output_size = output_size
+
+        layers = []
+        in_channel = self.in_channels
+        for idx, hidden_channel in enumerate(layers_channels):
+            layers.extend([
+                ResBlock1D(in_channel, hidden_channel),
+            ])
+
+        layers.extend([
+            nn.Flatten(),
+            nn.Linear(
+                input_size, self.output_size),
+            nn.BatchNorm1d(self.output_size),
+            nn.LeakyReLU(0.2),
+        ])
+
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.layers(x)
 
 
 class ConvDecoder1D(nn.Module):
@@ -221,6 +248,39 @@ class ConvDecoder1D(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
+    
+
+class ConvDecoder1DRes(nn.Module):
+    def __init__(self, latent_size, out_channels, layers_channels=[512, 256, 128, 64, 32, 16], output_size=512):
+        super(ConvDecoder1DRes, self).__init__()
+        self.latent_size = latent_size
+        self.out_channels = out_channels
+
+        layers = [
+            nn.Linear(
+                latent_size, output_size),
+            nn.BatchNorm1d(output_size),
+            nn.LeakyReLU(0.2),
+            nn.Unflatten(
+                1, (1, output_size)),
+        ]
+
+        for idx, hidden_channel in enumerate(layers_channels):
+            layers.extend([
+                ResBlock1DTr(out_channels, hidden_channel),
+            ])
+
+        layers.extend([
+            nn.ConvTranspose1d(
+                out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm1d(out_channels),
+            nn.Sigmoid(),
+        ])
+
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.layers(x)
 
 
 class ResBlock(nn.Module):
@@ -242,6 +302,50 @@ class ResBlock(nn.Module):
         out += input  # skip connection
 
         return out
+    
+
+class ResBlock1D(nn.Module):
+    def __init__(self, in_channel, channel):
+        super(ResBlock1D, self).__init__()
+
+        # this is the residual block
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channel, channel, 3, padding=1),
+            nn.BatchNorm1d(channel),
+            nn.ReLU(),
+            nn.Conv1d(channel, in_channel, 1),
+            nn.BatchNorm1d(in_channel),
+            nn.ReLU(),
+        )
+
+    def forward(self, input):
+        out = self.conv(input)
+        out = out + input  # skip connection
+
+        return out
+    
+
+class ResBlock1DTr(nn.Module):
+    def __init__(self, in_channel, channel):
+        super(ResBlock1DTr, self).__init__()
+
+        # this is the residual block
+        self.conv = nn.Sequential(
+            nn.ConvTranspose1d(in_channel, channel, 3, padding=1),
+            nn.BatchNorm1d(channel),
+            nn.ReLU(),
+            nn.ConvTranspose1d(channel, in_channel, 1),
+            nn.BatchNorm1d(in_channel),
+            nn.ReLU(),
+        )
+
+    def forward(self, input):
+        out = self.conv(input)
+        out = out + input  # skip connection
+
+        return out
+    
+
 
 
 class MultiScaleEncoder(nn.Module):

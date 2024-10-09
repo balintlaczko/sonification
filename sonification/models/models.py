@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, LinearDiscriminator, LinearCritique, LinearCritique_w_dropout, LinearProjector, LinearDiscriminator_w_dropout
+from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearCritique, LinearCritique_w_dropout, LinearProjector, LinearDiscriminator_w_dropout
 from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims
 from ..utils.misc import kl_scheduler, ema
@@ -93,6 +93,31 @@ class ConvVAE1D(nn.Module):
         self.logvar = nn.Linear(latent_size, latent_size)
         self.decoder = ConvDecoder1D(
             latent_size, in_channels, kernel_size, layers_channels, input_size, dropout)
+
+    def encode(self, x):
+        x = self.encoder(x)
+        return self.mu(x), self.logvar(x)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return eps.mul(std).add_(mu)
+
+    def forward(self, x):
+        mean, logvar = self.encode(x)
+        z = self.reparameterize(mean, logvar)
+        recon = self.decoder(z)
+        return recon, mean, logvar, z
+    
+class ConvVAE1DRes(nn.Module):
+    def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256], input_size=64):
+        super(ConvVAE1DRes, self).__init__()
+        self.encoder = ConvEncoder1DRes(
+            in_channels, latent_size, layers_channels, input_size)
+        self.mu = nn.Linear(latent_size, latent_size)
+        self.logvar = nn.Linear(latent_size, latent_size)
+        self.decoder = ConvDecoder1DRes(
+            latent_size, in_channels, layers_channels, input_size)
 
     def encode(self, x):
         x = self.encoder(x)
@@ -631,8 +656,10 @@ class PlFactorVAE1D(LightningModule):
         self.args = args
 
         # models
-        self.VAE = ConvVAE1D(self.in_channels, self.latent_size, self.kernel_size,
-                             self.layers_channels, self.input_size, self.vae_dropout)
+        # self.VAE = ConvVAE1D(self.in_channels, self.latent_size, self.kernel_size,
+        #                      self.layers_channels, self.input_size, self.vae_dropout)
+        self.VAE = ConvVAE1DRes(self.in_channels, self.latent_size,
+                             self.layers_channels, self.input_size)
         
         self.D = LinearCritique_w_dropout(
             self.latent_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
