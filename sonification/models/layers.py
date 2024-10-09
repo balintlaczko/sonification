@@ -187,10 +187,10 @@ class ConvEncoder1DRes(nn.Module):
 
         layers.extend([
             nn.Flatten(),
-            nn.Linear(
-                input_size, self.output_size),
-            nn.BatchNorm1d(self.output_size),
-            nn.LeakyReLU(0.2),
+            # nn.Linear(
+            #     input_size, self.output_size),
+            # nn.BatchNorm1d(self.output_size),
+            # nn.LeakyReLU(0.2),
         ])
 
         self.layers = nn.Sequential(*layers)

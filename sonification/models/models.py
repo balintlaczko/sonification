@@ -113,9 +113,9 @@ class ConvVAE1DRes(nn.Module):
     def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256], input_size=64):
         super(ConvVAE1DRes, self).__init__()
         self.encoder = ConvEncoder1DRes(
-            in_channels, latent_size, layers_channels, input_size)
-        self.mu = nn.Linear(latent_size, latent_size)
-        self.logvar = nn.Linear(latent_size, latent_size)
+            in_channels, in_channels, layers_channels, input_size)
+        self.mu = nn.Linear(in_channels, latent_size)
+        self.logvar = nn.Linear(in_channels, latent_size)
         self.decoder = ConvDecoder1DRes(
             latent_size, in_channels, layers_channels, input_size)
 
