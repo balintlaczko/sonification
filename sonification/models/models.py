@@ -591,8 +591,9 @@ class PlFactorVAE1D(LightningModule):
 
         # vae params
         self.latent_size = args.latent_size
-        self.kernel_size = args.kernel_size
-        self.layers_channels = args.layers_channels
+        # self.kernel_size = args.kernel_size
+        # self.layers_channels = args.layers_channels
+        self.layers_channels = [args.vae_channels] * args.vae_num_layers
         self.vae_dropout = args.vae_dropout
 
         # d params (for tc loss)
