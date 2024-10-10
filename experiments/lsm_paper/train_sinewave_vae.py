@@ -37,12 +37,12 @@ def main():
     # parser.add_argument('--vae_num_layers', type=int, default=50,)
     parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3, 3], 
                         help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[512, 512, 512, 512, 512, 512],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[1024, 1024, 1024, 1024, 1024, 1024],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=512, help='mlp hidden size')
     parser.add_argument('--d_num_layers', type=int,
-                        default=5, help='mlp number of layers')
+                        default=6, help='mlp number of layers')
     # dropout
     parser.add_argument('--vae_dropout', type=float, default=0.0,)
     parser.add_argument('--d_dropout', type=float, default=0.1,)
@@ -67,11 +67,11 @@ def main():
                         help='target recon loss to keep in case of dynamic kld')
     
     # kld loss
-    parser.add_argument('--dynamic_kld', type=int, default=0,
+    parser.add_argument('--dynamic_kld', type=int, default=1,
                         help='non-zero will use dynamic kld')
     parser.add_argument('--dynamic_kld_increment', type=float, default=0.000005,
                         help="in dynamic kld mode, increment the kld this much after every epoch when recon loss is below target")
-    parser.add_argument('--auto_dkld_scale', type=int, default=0,
+    parser.add_argument('--auto_dkld_scale', type=int, default=1,
                         help='non-zero will scale the dynamic kld scale by the proportion of the recon loss to the target recon loss with EMA smoothing')
     parser.add_argument('--cycling_kld', type=int, default=0, 
                         help='apply cyclical annealing for kld beta')
@@ -80,14 +80,14 @@ def main():
     parser.add_argument('--cycling_kld_ramp_up_phase', type=float, default=0.5,
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
-                        default=0.5, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.05,
+                        default=1, help='kld weight at the end of the warmup')
+    parser.add_argument('--kld_weight_min', type=float, default=0.1,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=1,
                         help='the number of epochs to warmup the kld weight')
-    parser.add_argument('--kld_decay', type=float, default=0.999,
+    parser.add_argument('--kld_decay', type=float, default=1,
                         help='kld decay factor that will be applied to the kld weight after the warmup')
     
     # total correlation loss term
@@ -122,7 +122,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v32', help='checkpoint name')
+                        default='mae-v32.1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -130,7 +130,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='back to normal model, but wider mu/logvar',
+    parser.add_argument('--comment', type=str, default='bigger model, with dynamic kld',
                         help='add a comment if needed')
 
     args = parser.parse_args()
