@@ -759,8 +759,8 @@ class PlFactorVAE1D(LightningModule):
         if epoch_idx > self.kld_start_epoch + self.kld_warmup_epochs:
             kld_scale = kld_scale * (self.kld_decay ** (epoch_idx - self.kld_start_epoch - self.kld_warmup_epochs))
         kld_loss = self.kld(mean, logvar)
-        kld_loss = self.mmd_loss.compute_mmd(z, prior_distribution='gaussian')
-        kld_loss = torch.max(kld_loss, torch.tensor(0.0).to(self.device))
+        # kld_loss = self.mmd_loss.compute_mmd(z, prior_distribution='gaussian')
+        # kld_loss = torch.max(kld_loss, torch.tensor(0.0).to(self.device))
         self.kld_scale = kld_scale
         scaled_kld_loss = kld_loss * self.kld_scale
 
@@ -881,9 +881,9 @@ class PlFactorVAE1D(LightningModule):
         scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
 
         # VAE KLD loss
-        # kld_loss = self.kld(mean, logvar)
-        kld_loss = self.mmd_loss.compute_mmd(z, prior_distribution='gaussian')
-        kld_loss = torch.max(kld_loss, torch.tensor(0.0).to(self.device))
+        kld_loss = self.kld(mean, logvar)
+        # kld_loss = self.mmd_loss.compute_mmd(z, prior_distribution='gaussian')
+        # kld_loss = torch.max(kld_loss, torch.tensor(0.0).to(self.device))
         scaled_kld_loss = kld_loss * self.kld_scale
 
         # VAE TC loss
