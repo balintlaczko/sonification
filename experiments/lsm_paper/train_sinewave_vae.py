@@ -51,7 +51,7 @@ def main():
     parser.add_argument('--train_epochs', type=int,
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
-                        default=8000, help='batch size')
+                        default=1000, help='batch size')
     parser.add_argument('--lr_vae', type=float, default=0.003,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
@@ -122,7 +122,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v33', help='checkpoint name')
+                        default='mae-v33.1', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -130,7 +130,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='bit bigger model, mmd for all comparisons',
+    parser.add_argument('--comment', type=str, default='clip mmd values to 0, use uniform prior for kld',
                         help='add a comment if needed')
 
     args = parser.parse_args()
