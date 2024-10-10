@@ -52,11 +52,11 @@ def main():
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=1000, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=0.003,
+    parser.add_argument('--lr_vae', type=float, default=0.002,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
                         default=0.999988) # this will reduce lr by a factor of 1000 in around 100k epochs
-    parser.add_argument('--lr_d', type=float, default=0.0015,
+    parser.add_argument('--lr_d', type=float, default=0.001,
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.999988)
 
@@ -80,7 +80,7 @@ def main():
     parser.add_argument('--cycling_kld_ramp_up_phase', type=float, default=0.5,
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
-                        default=1, help='kld weight at the end of the warmup')
+                        default=10, help='kld weight at the end of the warmup')
     parser.add_argument('--kld_weight_min', type=float, default=1,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
@@ -122,7 +122,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v33.1', help='checkpoint name')
+                        default='mae-v33.3', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -130,7 +130,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='clip mmd values to 0, use uniform prior for kld',
+    parser.add_argument('--comment', type=str, default='gaussian prior for kld',
                         help='add a comment if needed')
 
     args = parser.parse_args()
