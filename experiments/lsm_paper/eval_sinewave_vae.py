@@ -19,76 +19,17 @@ import matplotlib.colors as colors
 
 
 # %%
-# create args
-
-
-class Args:
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-
-args = Args(
-    # root path
-    root_path='',
-    # dataset
-    csv_path='sinewave.csv',
-    img_size=64,
-    # model
-    in_channels=1,
-    latent_size=2,
-    kernel_size=[3, 3, 3, 3, 3],
-    layers_channels=[64, 128, 256, 512, 1024],
-    d_hidden_size=512,
-    d_num_layers=5,
-    vae_dropout=0.0,
-    d_dropout=0.0,
-    # training
-    recon_weight=1,
-    target_recon_loss=0.01,
-    dynamic_kld=0,
-    dynamic_kld_increment=0.000005,
-    cycling_kld=0,
-    cycling_kld_period=10000,
-    cycling_kld_ramp_up_phase=0.5,
-    kld_weight_max=0.25,
-    kld_weight_min=0.025,
-    kld_start_epoch=10000,
-    kld_warmup_epochs=100000,
-    auto_dkld_scale=0,
-    tc_weight=2,
-    tc_start=10000,
-    tc_warmup_epochs=100000,
-    dynamic_tc_increment=0.000005,
-    auto_dtc_scale=0,
-    lr_d=0.00125,
-    lr_decay_d=0.999988,
-    lr_decay_vae=0.999988,
-    lr_vae=0.0025,
-    ema_alpha=0.999,
-    # checkpoint & logging
-    ckpt_path='./ckpt/sinewave_fvae-mae-v3',
-    ckpt_name='mae-v25.7',
-    logdir='./logs/sinewave_fvae-mae-v3',
-    plot_interval=1000,
-)
+# load model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+ckpt_path = '../../ckpt/sinewave_fvae-mae-v3/mae-v33.7/mae-v33.7_last_epoch=26350.ckpt'
+ckpt = torch.load(ckpt_path, map_location=device)
+args = ckpt["hyper_parameters"]["args"]
 
 # %%
 # create train and val datasets and loaders
-sinewave_ds_train = Sinewave_dataset(
-    root_path=args.root_path, csv_path=args.csv_path, flag="train")
-sinewave_ds_val = Sinewave_dataset(
-    root_path=args.root_path, csv_path=args.csv_path, flag="val", scaler=sinewave_ds_train.scaler)
-
-# %%
-# load model
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-ckpt_path = '../../ckpt/sinewave_fvae-mae-v3/mae-v25.7/mae-v25.7_last_epoch=139930.ckpt'
-ckpt = torch.load(ckpt_path, map_location=device)
+sinewave_ds_train = Sinewave_dataset(csv_path=args.csv_path, flag="train")
+sinewave_ds_val = Sinewave_dataset(csv_path=args.csv_path, flag="val", scaler=sinewave_ds_train.scaler)
 args.train_scaler = sinewave_ds_train.scaler
-
-# get keys from the checkpoint
-ckpt["state_dict"].keys()
 
 # %%
 model = PlFactorVAE1D(args).to(device)
@@ -162,31 +103,133 @@ fig.patch.set_visible(False)
 plt.savefig("traverse_latent_space_sinewave_test.png")
 plt.show()
 
+
+# %%
+# set percentiles
+percentile_low = 25
+percentile_high = 75
+
+# get the percentiles
+df = sinewave_ds_val.df
+# get all unique pitch values sorter from low to high
+pitch_values = np.sort(df['pitch'].unique())
+print(pitch_values)
+# get the percentiles for the pitch values
+n_pitches = len(pitch_values)
+pitch_low = pitch_values[int(n_pitches * percentile_low / 100)]
+pitch_high = pitch_values[int(n_pitches * percentile_high / 100)]
+# get all unique loudness values sorter from low to high
+loudness_values = np.sort(df['loudness'].unique())
+print(loudness_values)
+# get the percentiles for the loudness values
+n_loudnesses = len(loudness_values)
+loudness_low = loudness_values[int(n_loudnesses * percentile_low / 100)]
+loudness_high = loudness_values[int(n_loudnesses * percentile_high / 100)]
+pitch_low, pitch_high, loudness_low, loudness_high
+
 # %%
 df = sinewave_ds_val.df
 # get the sample with the lowest pitch and lowest loudness
-df_lowest_pitch = df[df['pitch'] == df['pitch'].min()]
-df_lowest_pitch_lowest_loudness = df_lowest_pitch[df_lowest_pitch['loudness']
-                                                  == df_lowest_pitch['loudness'].min()]
+# df_lowest_pitch = df[df['pitch'] == df['pitch'].min()]
+# df_lowest_pitch_lowest_loudness = df_lowest_pitch[df_lowest_pitch['loudness'] == df_lowest_pitch['loudness'].min()]
+df_lowest_pitch = df[df['pitch'] == pitch_low]
+# get the closest loudness to the lowest loudness
+df_lowest_pitch_lowest_loudness = df_lowest_pitch.iloc[(df_lowest_pitch['loudness'] - loudness_low).abs().argsort()[:1]]
 df_lowest_pitch_lowest_loudness
+
+# %%
+# visualize the point in latent space
+fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+ax.scatter(z_all[:, 0], z_all[:, 1])
+idx = df_lowest_pitch_lowest_loudness.index[0]
+# get the row number of the sample
+idx = np.where(df.index == idx)[0][0]
+ax.scatter(z_all[idx, 0], z_all[idx, 1], c='r', s=100)
+ax.set_title(f"Lowest pitch, lowest loudness")
+plt.show()
+
 # %%
 # now highest pitch lowest loudness
-df_highest_pitch = df[df['pitch'] == df['pitch'].max()]
-df_highest_pitch_lowest_loudness = df_highest_pitch[df_highest_pitch['loudness']
-                                                    == df_highest_pitch['loudness'].min()]
+# df_highest_pitch = df[df['pitch'] == df['pitch'].max()]
+# df_highest_pitch_lowest_loudness = df_highest_pitch[df_highest_pitch['loudness']
+#                                                     == df_highest_pitch['loudness'].min()]
+df_highest_pitch = df[df['pitch'] == pitch_high]
+# get the closest loudness to the lowest loudness
+df_highest_pitch_lowest_loudness = df_highest_pitch.iloc[(df_highest_pitch['loudness'] - loudness_low).abs().argsort()[:1]]
 df_highest_pitch_lowest_loudness
+
+# %%
+# visualize the point in latent space
+fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+ax.scatter(z_all[:, 0], z_all[:, 1])
+idx = df_highest_pitch_lowest_loudness.index[0]
+# get the row number of the sample
+idx = np.where(df.index == idx)[0][0]
+ax.scatter(z_all[idx, 0], z_all[idx, 1], c='r', s=100)
+ax.set_title(f"Highest pitch, lowest loudness")
+plt.show()
+
 # %%
 # now lowest pitch highest loudness
-df_lowest_pitch = df[df['pitch'] == df['pitch'].min()]
-df_lowest_pitch_highest_loudness = df_lowest_pitch[df_lowest_pitch['loudness']
-                                                   == df_lowest_pitch['loudness'].max()]
+# df_lowest_pitch = df[df['pitch'] == df['pitch'].min()]
+# df_lowest_pitch_highest_loudness = df_lowest_pitch[df_lowest_pitch['loudness']
+#                                                    == df_lowest_pitch['loudness'].max()]
+df_lowest_pitch = df[df['pitch'] == pitch_low]
+# get the closest loudness to the highest loudness
+df_lowest_pitch_highest_loudness = df_lowest_pitch.iloc[(df_lowest_pitch['loudness'] - loudness_high).abs().argsort()[:1]]
 df_lowest_pitch_highest_loudness
+
+# %%
+# visualize the point in latent space
+fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+ax.scatter(z_all[:, 0], z_all[:, 1])
+idx = df_lowest_pitch_highest_loudness.index[0]
+# get the row number of the sample
+idx = np.where(df.index == idx)[0][0]
+ax.scatter(z_all[idx, 0], z_all[idx, 1], c='r', s=100)
+ax.set_title(f"Lowest pitch, highest loudness")
+plt.show()
+
 # %%
 # now highest pitch highest loudness
-df_highest_pitch = df[df['pitch'] == df['pitch'].max()]
-df_highest_pitch_highest_loudness = df_highest_pitch[df_highest_pitch['loudness']
-                                                     == df_highest_pitch['loudness'].max()]
+# df_highest_pitch = df[df['pitch'] == df['pitch'].max()]
+# df_highest_pitch_highest_loudness = df_highest_pitch[df_highest_pitch['loudness']
+#                                                      == df_highest_pitch['loudness'].max()]
+df_highest_pitch = df[df['pitch'] == pitch_high]
+# get the closest loudness to the highest loudness
+df_highest_pitch_highest_loudness = df_highest_pitch.iloc[(df_highest_pitch['loudness'] - loudness_high).abs().argsort()[:1]]
 df_highest_pitch_highest_loudness
+
+# %%
+# visualize the point in latent space
+fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+ax.scatter(z_all[:, 0], z_all[:, 1])
+idx = df_highest_pitch_highest_loudness.index[0]
+# get the row number of the sample
+idx = np.where(df.index == idx)[0][0]
+ax.scatter(z_all[idx, 0], z_all[idx, 1], c='r', s=100)
+ax.set_title(f"Highest pitch, highest loudness")
+plt.show()
+
+# %%
+# visualize the corners in the latent space
+fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+ax.scatter(z_all[:, 0], z_all[:, 1])
+idx_top_left = df_highest_pitch_highest_loudness.index[0]
+idx_bottom_left = df_lowest_pitch_highest_loudness.index[0]
+idx_top_right = df_highest_pitch_lowest_loudness.index[0]
+idx_bottom_right = df_lowest_pitch_lowest_loudness.index[0]
+# get the row number of the sample
+idx_top_left = np.where(df.index == idx_top_left)[0][0]
+idx_bottom_left = np.where(df.index == idx_bottom_left)[0][0]
+idx_top_right = np.where(df.index == idx_top_right)[0][0]
+idx_bottom_right = np.where(df.index == idx_bottom_right)[0][0]
+ax.scatter(z_all[idx_top_left, 0], z_all[idx_top_left, 1], c='r', s=100)
+ax.scatter(z_all[idx_bottom_left, 0], z_all[idx_bottom_left, 1], c='r', s=100)
+ax.scatter(z_all[idx_top_right, 0], z_all[idx_top_right, 1], c='r', s=100)
+ax.scatter(z_all[idx_bottom_right, 0], z_all[idx_bottom_right, 1], c='r', s=100)
+ax.set_title(f"Corners in latent space")
+plt.show()
 
 # %%
 # get their indices
@@ -206,6 +249,15 @@ for idx in indices:
     x = x.unsqueeze(0)
     x_recon, mean, logvar, z = model.VAE(x.to(model.device))
     latent_corners.append(z.detach().cpu().numpy())
+
+# %%
+# visualize encoded corners
+fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+ax.scatter(z_all[:, 0], z_all[:, 1])
+for corner in latent_corners:
+    ax.scatter(corner[0, 0], corner[0, 1], c='r', s=100)
+ax.set_title(f"Encoded corners")
+plt.show()
 
 # %%
 # interpolate between top left and bottom left
@@ -266,6 +318,6 @@ plt.subplots_adjust(wspace=0.1, hspace=0.1)
 plt.tight_layout()
 # remove white background
 fig.patch.set_visible(False)
-plt.savefig("traverse_latent_space_sinewave_mae-v25.7.png")
+plt.savefig("traverse_latent_space_sinewave_mae-v33.7.png")
 plt.show()
 # %%

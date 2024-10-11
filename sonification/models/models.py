@@ -611,7 +611,7 @@ class PlFactorVAE1D(LightningModule):
         # self.recon_loss = nn.MSELoss()
         self.recon_loss = nn.L1Loss()
         self.recon_weight = args.recon_weight
-        self.mmd_loss = MMDloss()
+        # self.mmd_loss = MMDloss()
 
         # kld loss
         self.kld = kld_loss
@@ -667,7 +667,7 @@ class PlFactorVAE1D(LightningModule):
             self.latent_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
         
         self.D2 = LinearCritique_w_dropout(
-            self.input_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
+            self.latent_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
 
         # train dataset scaler
         self.train_scaler = args.train_scaler
@@ -726,14 +726,15 @@ class PlFactorVAE1D(LightningModule):
         d_optimizer.zero_grad()
         self.manual_backward(d_tc_loss, retain_graph=True)
 
-        # Discriminator 2 forward pass (for reconstruction loss)
-        x_1_critique, x_1_judgement = self.D2(x_1)
-        x_recon_critique, x_recon_judgement = self.D2(x_recon.detach())
+        # Discriminator 2 forward pass (comparing to uniform distribution)
+        z_d2_critique, z_d2_judgement = self.D2(z.detach())
+        uniform_z = torch.rand_like(z) * 4 - 2
+        uniform_z_critique, uniform_z_judgement = self.D2(uniform_z)
 
         # Compute discriminator 2 loss
-        original_x_loss = self.d_criterion(x_1_judgement, torch.ones_like(x_1_judgement)) # * 0.9) # label 1 = the original x, with label smoothing
-        recon_x_loss = self.d_criterion(x_recon_judgement, torch.zeros_like(x_recon_judgement)) # label 0 = the reconstructed x
-        d2_loss = original_x_loss + recon_x_loss
+        uniform_z_loss = self.d_criterion(uniform_z_judgement, torch.ones_like(uniform_z_judgement)) # * 0.9) # label 1 = the original x, with label smoothing
+        z_d2_loss = self.d_criterion(z_d2_judgement, torch.zeros_like(z_d2_judgement)) # label 0 = the reconstructed x
+        d2_loss = uniform_z_loss + z_d2_loss
 
         # Discriminator 2 backward pass
         d2_optimizer.zero_grad()
@@ -758,6 +759,7 @@ class PlFactorVAE1D(LightningModule):
         # use kld decay after kld warmup
         if epoch_idx > self.kld_start_epoch + self.kld_warmup_epochs:
             kld_scale = kld_scale * (self.kld_decay ** (epoch_idx - self.kld_start_epoch - self.kld_warmup_epochs))
+        kld_scale = max(kld_scale, self.kld_weight_min)
         kld_loss = self.kld(mean, logvar)
         # kld_loss = self.mmd_loss.compute_mmd(z, prior_distribution='gaussian')
         # kld_loss = torch.max(kld_loss, torch.tensor(0.0).to(self.device))
@@ -772,9 +774,9 @@ class PlFactorVAE1D(LightningModule):
                 min(1.0, (epoch_idx - self.tc_start_epoch) /
                     self.tc_warmup_epochs) if epoch_idx > self.tc_start_epoch else 0
         # Feature matching loss (L2 loss between real and fake features)
-        # vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
-        vae_tc_loss = self.mmd_loss.compute_mmd(z_critique, prior_distribution='custom', custom_prior=z_2_perm_critique)
-        vae_tc_loss = torch.max(vae_tc_loss, torch.tensor(0.0).to(self.device))
+        vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
+        # vae_tc_loss = self.mmd_loss.compute_mmd(z_critique, prior_distribution='custom', custom_prior=z_2_perm_critique)
+        # vae_tc_loss = torch.max(vae_tc_loss, torch.tensor(0.0).to(self.device))
         # vae_tc_loss = F.cross_entropy(d_z, ones)
         self.tc_scale = vae_tc_scale
         scaled_vae_tc_loss = vae_tc_loss * self.tc_scale
@@ -782,11 +784,11 @@ class PlFactorVAE1D(LightningModule):
         # VAE adversarial reconstruction loss
         vae_dec_loss_scale = self.dec_loss_weight * min(1.0, (epoch_idx - self.dec_loss_start_epoch) / self.dec_loss_warmup_epochs) if epoch_idx > self.dec_loss_start_epoch else 0
         # Feature matching loss (L2 loss between real and fake features)
-        # vae_dec_loss = torch.mean((x_1_critique.mean(0) - x_recon_critique.mean(0)) ** 2)
-        x_1_critique = x_1_critique.view(x_1_critique.shape[0], -1)
-        x_recon_critique = x_recon_critique.view(x_recon_critique.shape[0], -1)
-        vae_dec_loss = self.mmd_loss.compute_mmd(x_1_critique, prior_distribution='custom', custom_prior=x_recon_critique)
-        vae_dec_loss = torch.max(vae_dec_loss, torch.tensor(0.0).to(self.device))
+        vae_dec_loss = torch.mean((uniform_z_critique.mean(0) - z_d2_critique.mean(0)) ** 2)
+        # x_1_critique = x_1_critique.view(x_1_critique.shape[0], -1)
+        # x_recon_critique = x_recon_critique.view(x_recon_critique.shape[0], -1)
+        # vae_dec_loss = self.mmd_loss.compute_mmd(x_1_critique, prior_distribution='custom', custom_prior=x_recon_critique)
+        # vae_dec_loss = torch.max(vae_dec_loss, torch.tensor(0.0).to(self.device))
         # diff = x_1_critique - x_recon_critique
         # diff = (diff ** 2).mean()
         # diff = diff / (x_1_critique ** 2).mean()
@@ -867,14 +869,15 @@ class PlFactorVAE1D(LightningModule):
         # d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
         #                    F.cross_entropy(d_z_2_perm, ones))
 
-        # Discriminator 2 forward pass (for reconstruction loss)
-        x_1_critique, x_1_judgement = self.D2(x_1)
-        x_recon_critique, x_recon_judgement = self.D2(x_recon.detach())
+        # Discriminator 2 forward pass (comparing to uniform distribution)
+        z_d2_critique, z_d2_judgement = self.D2(z.detach())
+        uniform_z = torch.rand_like(z) * 4 - 2
+        uniform_z_critique, uniform_z_judgement = self.D2(uniform_z)
 
         # Compute discriminator 2 loss
-        original_x_loss = self.d_criterion(x_1_judgement, torch.ones_like(x_1_judgement)) # * 0.9) # label 1 = the original x, with label smoothing
-        recon_x_loss = self.d_criterion(x_recon_judgement, torch.zeros_like(x_recon_judgement)) # label 0 = the reconstructed x
-        d2_loss = original_x_loss + recon_x_loss
+        uniform_z_loss = self.d_criterion(uniform_z_judgement, torch.ones_like(uniform_z_judgement)) # * 0.9) # label 1 = the original x, with label smoothing
+        z_d2_loss = self.d_criterion(z_d2_judgement, torch.zeros_like(z_d2_judgement)) # label 0 = the reconstructed x
+        d2_loss = uniform_z_loss + z_d2_loss
 
         # VAE reconstruction loss
         vae_recon_loss = self.recon_loss(x_recon, x_1)
@@ -896,11 +899,11 @@ class PlFactorVAE1D(LightningModule):
 
         # VAE adversarial reconstruction loss
         # Feature matching loss (L2 loss between real and fake features)
-        # vae_dec_loss = torch.mean((x_1_critique.mean(0) - x_recon_critique.mean(0)) ** 2)
-        x_1_critique = x_1_critique.view(x_1_critique.shape[0], -1)
-        x_recon_critique = x_recon_critique.view(x_recon_critique.shape[0], -1)
-        vae_dec_loss = self.mmd_loss.compute_mmd(x_1_critique, prior_distribution='custom', custom_prior=x_recon_critique)
-        vae_dec_loss = torch.max(vae_dec_loss, torch.tensor(0.0).to(self.device))
+        vae_dec_loss = torch.mean((uniform_z_critique.mean(0) - z_d2_critique.mean(0)) ** 2)
+        # x_1_critique = x_1_critique.view(x_1_critique.shape[0], -1)
+        # x_recon_critique = x_recon_critique.view(x_recon_critique.shape[0], -1)
+        # vae_dec_loss = self.mmd_loss.compute_mmd(x_1_critique, prior_distribution='custom', custom_prior=x_recon_critique)
+        # vae_dec_loss = torch.max(vae_dec_loss, torch.tensor(0.0).to(self.device))
         # diff = x_1_critique - x_recon_critique
         # diff = (diff ** 2).mean()
         # diff = diff / (x_1_critique ** 2).mean()
