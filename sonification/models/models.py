@@ -891,9 +891,9 @@ class PlFactorVAE1D(LightningModule):
 
         # VAE TC loss
         # Feature matching loss (L2 loss between real and fake features)
-        # vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
-        vae_tc_loss = self.mmd_loss.compute_mmd(z_critique, prior_distribution='custom', custom_prior=z_2_perm_critique)
-        vae_tc_loss = torch.max(vae_tc_loss, torch.tensor(0.0).to(self.device))
+        vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
+        # vae_tc_loss = self.mmd_loss.compute_mmd(z_critique, prior_distribution='custom', custom_prior=z_2_perm_critique)
+        # vae_tc_loss = torch.max(vae_tc_loss, torch.tensor(0.0).to(self.device))
         # vae_tc_loss = F.cross_entropy(d_z, ones)
         scaled_vae_tc_loss = vae_tc_loss * self.tc_scale
 
