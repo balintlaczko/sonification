@@ -759,7 +759,7 @@ class PlFactorVAE1D(LightningModule):
         # use kld decay after kld warmup
         if epoch_idx > self.kld_start_epoch + self.kld_warmup_epochs:
             kld_scale = kld_scale * (self.kld_decay ** (epoch_idx - self.kld_start_epoch - self.kld_warmup_epochs))
-        kld_scale = max(kld_scale, self.kld_weight_min)
+        kld_scale = max(kld_scale, self.kld_weight_min * self.latent_size / self.input_size)
         kld_loss = self.kld(mean, logvar)
         # kld_loss = self.mmd_loss.compute_mmd(z, prior_distribution='gaussian')
         # kld_loss = torch.max(kld_loss, torch.tensor(0.0).to(self.device))
