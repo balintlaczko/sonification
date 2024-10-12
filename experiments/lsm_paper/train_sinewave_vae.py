@@ -37,7 +37,7 @@ def main():
     # parser.add_argument('--vae_num_layers', type=int, default=50,)
     parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3, 3], 
                         help='kernel size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 256, 256, 256, 256],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[32, 64, 128, 256, 512, 1024],
                         help='channels for the layers')
     parser.add_argument('--d_hidden_size', type=int,
                         default=256, help='mlp hidden size')
@@ -114,7 +114,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v35', help='checkpoint name')
+                        default='mae-v36', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -122,7 +122,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='remove 2nd discriminator, go back to discriminator loss instead of feature matching',
+    parser.add_argument('--comment', type=str, default='d outputs 1d, inverse layers channels for decoder',
                         help='add a comment if needed')
 
     args = parser.parse_args()
