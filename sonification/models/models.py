@@ -639,12 +639,6 @@ class PlFactorVAE1D(LightningModule):
         self.tc_scale = args.tc_weight # just init for sanity check
         self.d_criterion = nn.BCELoss()
 
-        # adversarial loss
-        self.dec_loss_weight = args.dec_loss_weight
-        self.dec_loss_start_epoch = args.dec_loss_start_epoch
-        self.dec_loss_warmup_epochs = args.dec_loss_warmup_epochs
-        self.dec_loss_scale = args.dec_loss_weight # just init for sanity check
-
         self.ema_alpha = args.ema_alpha
 
         # learning rates
@@ -664,9 +658,6 @@ class PlFactorVAE1D(LightningModule):
         #                      self.layers_channels, self.input_size)
         
         self.D = LinearCritique_w_dropout(
-            self.latent_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
-        
-        self.D2 = LinearCritique_w_dropout(
             self.latent_size, self.d_hidden_size, 2, self.d_num_layers, self.d_dropout)
 
         # train dataset scaler
@@ -688,8 +679,8 @@ class PlFactorVAE1D(LightningModule):
         self.D2.train()
         epoch_idx = self.trainer.current_epoch
         # get the optimizers and schedulers
-        vae_optimizer, d_optimizer, d2_optimizer = self.optimizers()
-        vae_scheduler, d_scheduler, d2_scheduler = self.lr_schedulers()
+        vae_optimizer, d_optimizer = self.optimizers()
+        vae_scheduler, d_scheduler = self.lr_schedulers()
 
         # get the batch
         x_1, x_2 = batch
@@ -698,10 +689,6 @@ class PlFactorVAE1D(LightningModule):
         # add small amount of noise to the input
         x_1 = x_1 + torch.randn_like(x_1) * 0.001
         x_2 = x_2 + torch.randn_like(x_2) * 0.001
-
-        # create a batch of ones and zeros for the discriminator
-        # ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
-        # zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
@@ -725,21 +712,6 @@ class PlFactorVAE1D(LightningModule):
         # Discriminator backward pass
         d_optimizer.zero_grad()
         self.manual_backward(d_tc_loss, retain_graph=True)
-
-        # Discriminator 2 forward pass (comparing to uniform distribution)
-        z_d2_critique, z_d2_judgement = self.D2(z.detach())
-        uniform_z = torch.rand_like(z) * 4 - 2
-        uniform_z_critique, uniform_z_judgement = self.D2(uniform_z)
-
-        # Compute discriminator 2 loss
-        uniform_z_loss = self.d_criterion(uniform_z_judgement, torch.ones_like(uniform_z_judgement)) # * 0.9) # label 1 = the original x, with label smoothing
-        z_d2_loss = self.d_criterion(z_d2_judgement, torch.zeros_like(z_d2_judgement)) # label 0 = the reconstructed x
-        d2_loss = uniform_z_loss + z_d2_loss
-
-        # Discriminator 2 backward pass
-        d2_optimizer.zero_grad()
-        self.manual_backward(d2_loss, retain_graph=True)
-
 
         # VAE reconstruction loss
         vae_recon_loss = self.recon_loss(x_recon, x_1)
@@ -774,30 +746,16 @@ class PlFactorVAE1D(LightningModule):
                 min(1.0, (epoch_idx - self.tc_start_epoch) /
                     self.tc_warmup_epochs) if epoch_idx > self.tc_start_epoch else 0
         # Feature matching loss (L2 loss between real and fake features)
-        vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
+        # vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
         # vae_tc_loss = self.mmd_loss.compute_mmd(z_critique, prior_distribution='custom', custom_prior=z_2_perm_critique)
         # vae_tc_loss = torch.max(vae_tc_loss, torch.tensor(0.0).to(self.device))
         # vae_tc_loss = F.cross_entropy(d_z, ones)
+        vae_tc_loss = self.d_criterion(z_judgement, torch.zeros_like(z_judgement)) # label 0 = what we used for the shuffled z
         self.tc_scale = vae_tc_scale
         scaled_vae_tc_loss = vae_tc_loss * self.tc_scale
 
-        # VAE adversarial reconstruction loss
-        vae_dec_loss_scale = self.dec_loss_weight * min(1.0, (epoch_idx - self.dec_loss_start_epoch) / self.dec_loss_warmup_epochs) if epoch_idx > self.dec_loss_start_epoch else 0
-        # Feature matching loss (L2 loss between real and fake features)
-        vae_dec_loss = torch.mean((uniform_z_critique.mean(0) - z_d2_critique.mean(0)) ** 2)
-        # x_1_critique = x_1_critique.view(x_1_critique.shape[0], -1)
-        # x_recon_critique = x_recon_critique.view(x_recon_critique.shape[0], -1)
-        # vae_dec_loss = self.mmd_loss.compute_mmd(x_1_critique, prior_distribution='custom', custom_prior=x_recon_critique)
-        # vae_dec_loss = torch.max(vae_dec_loss, torch.tensor(0.0).to(self.device))
-        # diff = x_1_critique - x_recon_critique
-        # diff = (diff ** 2).mean()
-        # diff = diff / (x_1_critique ** 2).mean()
-        # vae_dec_loss = diff
-        self.dec_loss_scale = vae_dec_loss_scale
-        scaled_vae_dec_loss = vae_dec_loss * self.dec_loss_scale
-
         # VAE loss
-        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss + scaled_vae_dec_loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
 
         # VAE backward pass
         vae_optimizer.zero_grad()
@@ -808,10 +766,6 @@ class PlFactorVAE1D(LightningModule):
         # Discriminator Optimizer & Scheduler step
         d_optimizer.step()
         d_scheduler.step()
-
-        # Discriminator 2 Optimizer & Scheduler step
-        d2_optimizer.step()
-        d2_scheduler.step()
 
         # VAE Optimizer & Scheduler step
         vae_optimizer.step()
@@ -826,11 +780,8 @@ class PlFactorVAE1D(LightningModule):
             "vae_kld_loss": kld_loss,
             "vae_tc_loss": vae_tc_loss,
             "d_tc_loss": d_tc_loss,
-            "vae_dec_loss": vae_dec_loss,
             "kld_scale": self.kld_scale,
             "tc_scale": self.tc_scale,
-            "dec_loss_scale": self.dec_loss_scale,
-            "d2_loss": d2_loss,
         })
 
     def validation_step(self, batch, batch_idx):
@@ -845,10 +796,6 @@ class PlFactorVAE1D(LightningModule):
         # add small amount of noise to the input
         x_1 = x_1 + torch.randn_like(x_1) * 0.001
         x_2 = x_2 + torch.randn_like(x_2) * 0.001
-
-        # create a batch of ones and zeros for the discriminator
-        # ones = torch.ones(batch_size, dtype=torch.long, device=self.device)
-        # zeros = torch.zeros(batch_size, dtype=torch.long, device=self.device)
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
@@ -869,16 +816,6 @@ class PlFactorVAE1D(LightningModule):
         # d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
         #                    F.cross_entropy(d_z_2_perm, ones))
 
-        # Discriminator 2 forward pass (comparing to uniform distribution)
-        z_d2_critique, z_d2_judgement = self.D2(z.detach())
-        uniform_z = torch.rand_like(z) * 4 - 2
-        uniform_z_critique, uniform_z_judgement = self.D2(uniform_z)
-
-        # Compute discriminator 2 loss
-        uniform_z_loss = self.d_criterion(uniform_z_judgement, torch.ones_like(uniform_z_judgement)) # * 0.9) # label 1 = the original x, with label smoothing
-        z_d2_loss = self.d_criterion(z_d2_judgement, torch.zeros_like(z_d2_judgement)) # label 0 = the reconstructed x
-        d2_loss = uniform_z_loss + z_d2_loss
-
         # VAE reconstruction loss
         vae_recon_loss = self.recon_loss(x_recon, x_1)
         scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
@@ -891,27 +828,15 @@ class PlFactorVAE1D(LightningModule):
 
         # VAE TC loss
         # Feature matching loss (L2 loss between real and fake features)
-        vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
+        # vae_tc_loss = torch.mean((z_critique.mean(0) - z_2_perm_critique.mean(0)) ** 2)
         # vae_tc_loss = self.mmd_loss.compute_mmd(z_critique, prior_distribution='custom', custom_prior=z_2_perm_critique)
         # vae_tc_loss = torch.max(vae_tc_loss, torch.tensor(0.0).to(self.device))
         # vae_tc_loss = F.cross_entropy(d_z, ones)
+        vae_tc_loss = self.d_criterion(z_judgement, torch.zeros_like(z_judgement)) # label 0 = what we used for the shuffled z
         scaled_vae_tc_loss = vae_tc_loss * self.tc_scale
 
-        # VAE adversarial reconstruction loss
-        # Feature matching loss (L2 loss between real and fake features)
-        vae_dec_loss = torch.mean((uniform_z_critique.mean(0) - z_d2_critique.mean(0)) ** 2)
-        # x_1_critique = x_1_critique.view(x_1_critique.shape[0], -1)
-        # x_recon_critique = x_recon_critique.view(x_recon_critique.shape[0], -1)
-        # vae_dec_loss = self.mmd_loss.compute_mmd(x_1_critique, prior_distribution='custom', custom_prior=x_recon_critique)
-        # vae_dec_loss = torch.max(vae_dec_loss, torch.tensor(0.0).to(self.device))
-        # diff = x_1_critique - x_recon_critique
-        # diff = (diff ** 2).mean()
-        # diff = diff / (x_1_critique ** 2).mean()
-        # vae_dec_loss = diff
-        scaled_vae_dec_loss = vae_dec_loss * self.dec_loss_scale
-
         # VAE loss
-        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss + scaled_vae_dec_loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
 
         # log the losses
         self.log_dict({
@@ -919,9 +844,7 @@ class PlFactorVAE1D(LightningModule):
             "val_vae_recon_loss": vae_recon_loss,
             "val_vae_kld_loss": kld_loss,
             "val_vae_tc_loss": vae_tc_loss,
-            "val_vae_dec_loss": vae_dec_loss,
             "val_d_tc_loss": d_tc_loss,
-            "val_d2_loss": d2_loss,
         })
 
     def on_validation_epoch_end(self) -> None:
@@ -1029,15 +952,11 @@ class PlFactorVAE1D(LightningModule):
             self.VAE.parameters(), lr=self.lr_vae, betas=(0.9, 0.999))
         d_optimizer = torch.optim.AdamW(
             self.D.parameters(), lr=self.lr_d, betas=(0.5, 0.999))
-        d2_optimizer = torch.optim.AdamW(
-            self.D2.parameters(), lr=self.lr_d, betas=(0.5, 0.999))
         vae_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             vae_optimizer, gamma=self.lr_decay_vae)
         d_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             d_optimizer, gamma=self.lr_decay_d)
-        d2_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            d2_optimizer, gamma=self.lr_decay_d)
-        return [vae_optimizer, d_optimizer, d2_optimizer], [vae_scheduler, d_scheduler, d2_scheduler]
+        return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
 
 
 class PlMapper(LightningModule):

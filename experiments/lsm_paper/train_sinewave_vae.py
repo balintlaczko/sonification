@@ -52,11 +52,11 @@ def main():
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=8000, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=0.002,
+    parser.add_argument('--lr_vae', type=float, default=0.001,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
                         default=0.999988) # this will reduce lr by a factor of 1000 in around 100k epochs
-    parser.add_argument('--lr_d', type=float, default=0.001,
+    parser.add_argument('--lr_d', type=float, default=0.0005,
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.999988)
 
@@ -103,14 +103,6 @@ def main():
                         default=0, help='tc start epoch')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1,)
 
-    # adversarial reconstruction loss
-    parser.add_argument('--dec_loss_weight', type=float, default=10,
-                        help='weight for the decoder loss')
-    parser.add_argument('--dec_loss_start_epoch', type=int, default=0,
-                        help='start epoch for the decoder loss')
-    parser.add_argument('--dec_loss_warmup_epochs', type=int, default=1,
-                        help='number of epochs to warmup the decoder loss weight')
-
     parser.add_argument('--ema_alpha', type=float, default=0.99,
                         help='alpha for the EMA smoothing of the dynamic kld and tc')
 
@@ -122,7 +114,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v34', help='checkpoint name')
+                        default='mae-v35', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -130,7 +122,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='no mmd for feature matching, d2 now compares to uniform z, clip kld decay to kld_weight_min',
+    parser.add_argument('--comment', type=str, default='remove 2nd discriminator, go back to discriminator loss instead of feature matching',
                         help='add a comment if needed')
 
     args = parser.parse_args()
@@ -142,9 +134,9 @@ def main():
         root_path=args.root_path, csv_path=args.csv_path, flag="val", scaler=sinewave_ds_train.scaler)
 
     train_loader = DataLoader(
-        sinewave_ds_train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
+        sinewave_ds_train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, persistent_workers=True)
     val_loader = DataLoader(
-        sinewave_ds_val, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True)
+        sinewave_ds_val, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=2, persistent_workers=True)
 
     # create the model
     args.train_scaler = sinewave_ds_train.scaler
