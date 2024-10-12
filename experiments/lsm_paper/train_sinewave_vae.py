@@ -161,7 +161,7 @@ def main():
         mode="max",
     )
     stop_on_target_callback = EarlyStopping(
-        monitor="val_vae_loss",
+        monitor="val_vae_recon_loss",
         stopping_threshold=args.target_recon_loss,
         mode="min",
     )
