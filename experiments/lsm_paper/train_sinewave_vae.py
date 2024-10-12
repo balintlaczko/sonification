@@ -164,6 +164,7 @@ def main():
         monitor="val_vae_recon_loss",
         stopping_threshold=args.target_recon_loss,
         mode="min",
+        patience=1e10,
     )
     callbacks = [best_checkpoint_callback, last_checkpoint_callback]
     if args.stop_on_target_recon_loss > 0:
