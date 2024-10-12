@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 import random
 import numpy as np
 from lightning.pytorch import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from lightning.pytorch.loggers import WandbLogger#, TensorBoardLogger
 from sonification.models.models import PlFactorVAE1D
 from sonification.datasets import Sinewave_dataset
@@ -65,6 +65,8 @@ def main():
                         default=1, help='recon weight')
     parser.add_argument('--target_recon_loss', type=float, default=0.01,
                         help='target recon loss to keep in case of dynamic kld')
+    parser.add_argument('--stop_on_target_recon_loss', type=int, default=1,
+                        help='non-zero will stop training if the recon loss is below target_recon_loss')
     
     # kld loss
     parser.add_argument('--dynamic_kld', type=int, default=0,
@@ -158,10 +160,16 @@ def main():
         save_top_k=1,
         mode="max",
     )
+    stop_on_target_callback = EarlyStopping(
+        monitor="val_vae_loss",
+        stopping_threshold=args.target_recon_loss,
+        mode="min",
+    )
+    callbacks = [best_checkpoint_callback, last_checkpoint_callback]
+    if args.stop_on_target_recon_loss > 0:
+        callbacks.append(stop_on_target_callback)
 
-    # logger callbacks
-    # tensorboard_logger = TensorBoardLogger(
-    #     save_dir=args.logdir, name=args.ckpt_name)
+    # logger callback
     wandb_logger = WandbLogger(
         name=args.ckpt_name,
         project="sinewave_fvae",
@@ -170,7 +178,7 @@ def main():
     trainer = Trainer(
         max_epochs=args.train_epochs,
         enable_checkpointing=True,
-        callbacks=[best_checkpoint_callback, last_checkpoint_callback],
+        callbacks=callbacks,
         logger=wandb_logger,
         log_every_n_steps=1,
     )
