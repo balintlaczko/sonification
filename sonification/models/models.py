@@ -676,7 +676,6 @@ class PlFactorVAE1D(LightningModule):
     def training_step(self, batch, batch_idx):
         self.VAE.train()
         self.D.train()
-        self.D2.train()
         epoch_idx = self.trainer.current_epoch
         # get the optimizers and schedulers
         vae_optimizer, d_optimizer = self.optimizers()
@@ -787,7 +786,6 @@ class PlFactorVAE1D(LightningModule):
     def validation_step(self, batch, batch_idx):
         self.VAE.eval()
         self.D.eval()
-        self.D2.eval()
 
         # get the batch
         x_1, x_2 = batch
