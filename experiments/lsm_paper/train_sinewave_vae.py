@@ -120,7 +120,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v36.1', help='checkpoint name')
+                        default='mae-v37', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -128,7 +128,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='smaller model, stronger d, plot corners',
+    parser.add_argument('--comment', type=str, default='try latent consistency loss',
                         help='add a comment if needed')
 
     args = parser.parse_args()
