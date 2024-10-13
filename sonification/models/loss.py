@@ -120,6 +120,62 @@ def preserve_directions_and_distance_loss(source_latent, target_latent, e=1e-8):
     return loss
 
 
+def latent_consistency_loss(encoder, decoder, x, shift_vector, lambda_consistency=1.0, lambda_cross_consistency=1.0):
+    """
+    Implements the consistency loss where a shift in latent space leads to consistent changes in pixel space
+    across the batch.
+    
+    Args:
+        encoder: The encoder network that maps x to latent space.
+        decoder: The decoder network that maps latent embeddings back to pixel space.
+        x: Batch of input x (batch_size, channels, height, width).
+        shift_vector: The constant vector to apply as a shift to all latent embeddings (latent_dim,).
+        lambda_consistency: Weight for the proportionality consistency loss term.
+        lambda_cross_consistency: Weight for the cross-sample consistency term.
+    
+    Returns:
+        Combined consistency loss.
+    """
+    # Get the latent embeddings of the original x
+    latent_embeddings = encoder(x)  # Shape: (batch_size, latent_dim)
+    
+    # Apply the same shift vector to all embeddings
+    shifted_latent_embeddings = latent_embeddings + shift_vector
+    
+    # Decode both the original and shifted embeddings
+    decoded_x = decoder(latent_embeddings)  # Shape: (batch_size, channels, height, width)
+    decoded_shifted_x = decoder(shifted_latent_embeddings)  # Shape: (batch_size, channels, height, width)
+    
+    # Measure the pixel space difference between decoded x
+    delta_pixel = decoded_shifted_x - decoded_x  # The change in pixel space
+    
+    # Part 1: Proportionality consistency
+    latent_norm = torch.norm(shift_vector, p=2)
+    consistency_loss = F.mse_loss(delta_pixel, latent_norm * torch.ones_like(delta_pixel))
+    
+    # Part 2: Cross-sample consistency
+    batch_size = delta_pixel.size(0)
+    
+    # Reshape delta_pixel to (batch_size, -1) to flatten the pixel space dimensions
+    delta_pixel_flat = delta_pixel.view(delta_pixel.size(0), -1)  # Shape: (batch_size, num_pixels)
+
+    # # Compute pairwise differences between deltas efficiently
+    pairwise_mse = torch.cdist(delta_pixel_flat, delta_pixel_flat, p=2)
+    
+    # Exclude self-comparisons by zeroing the diagonal
+    pairwise_mse = pairwise_mse[~torch.eye(pairwise_mse.size(0), dtype=bool)].view(pairwise_mse.size(0), -1)
+    
+    # Calculate the mean cross-sample consistency loss
+    cross_consistency_loss = pairwise_mse.mean()
+    # Normalize by the number of pairs
+    cross_consistency_loss /= (batch_size * (batch_size - 1)) / 2  # Number of unique pairs
+    
+    # Combine the two losses
+    total_loss = lambda_consistency * consistency_loss + lambda_cross_consistency * cross_consistency_loss
+    
+    return total_loss
+
+
 # taken form: https://github.com/AntixK/PyTorch-VAE/blob/master/models/info_vae.py
 # then modified it into its own class
 class MMDloss(nn.Module):

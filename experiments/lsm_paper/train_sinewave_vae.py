@@ -107,6 +107,10 @@ def main():
 
     parser.add_argument('--ema_alpha', type=float, default=0.99,
                         help='alpha for the EMA smoothing of the dynamic kld and tc')
+    
+    # latent consistency loss
+    parser.add_argument('--latent_consistency_weight', type=float, default=1,
+                        help='latent consistency weight')
 
     # GPU
     parser.add_argument('--num_devices', type=int, nargs='*', default=[0],
@@ -215,6 +219,7 @@ def main():
         tc_weight=args.tc_weight,
         tc_start_epoch=args.tc_start_epoch,
         tc_warmup_epochs=args.tc_warmup_epochs,
+        latent_consistency_weight=args.latent_consistency_weight,
         vae_dropout=args.vae_dropout,
         d_dropout=args.d_dropout,
         comment=args.comment
