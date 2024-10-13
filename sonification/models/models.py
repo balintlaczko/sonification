@@ -824,13 +824,15 @@ class PlFactorVAE1D(LightningModule):
         scaled_vae_tc_loss = vae_tc_loss * self.tc_scale
 
         # VAE latent consistency loss
-        shift_vector = torch.randn(self.latent_size, device=self.device) * 0.1
-        vae_lc_loss = latent_consistency_loss(
-            self.encode, 
-            self.decode, 
-            x_1,
-            shift_vector)
-        scaled_vae_lc_loss = vae_lc_loss * self.latent_consistency_weight
+        scaled_vae_lc_loss = 0
+        if self.latent_consistency_weight > 0:
+            shift_vector = torch.randn(self.latent_size, device=self.device) * 0.1
+            vae_lc_loss = latent_consistency_loss(
+                self.encode, 
+                self.decode, 
+                x_1,
+                shift_vector)
+            scaled_vae_lc_loss = vae_lc_loss * self.latent_consistency_weight
 
         # VAE loss
         vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss + scaled_vae_lc_loss
