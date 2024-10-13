@@ -32,7 +32,7 @@ def main():
     parser.add_argument('--in_channels', type=int,
                         default=1, help='image color channels')
     parser.add_argument('--latent_size', type=int,
-                        default=8, help='latent size')
+                        default=2, help='latent size')
     # parser.add_argument('--vae_channels', type=int, default=64,)
     # parser.add_argument('--vae_num_layers', type=int, default=50,)
     parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3, 3], 
@@ -52,11 +52,11 @@ def main():
                         default=10000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=8000, help='batch size')
-    parser.add_argument('--lr_vae', type=float, default=0.001,
+    parser.add_argument('--lr_vae', type=float, default=0.003,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay_vae', type=float,
                         default=0.999988) # this will reduce lr by a factor of 1000 in around 100k epochs
-    parser.add_argument('--lr_d', type=float, default=0.0005,
+    parser.add_argument('--lr_d', type=float, default=0.0015,
                         help='learning rate for the discriminator')
     parser.add_argument('--lr_decay_d', type=float, default=0.999988)
 
@@ -83,7 +83,7 @@ def main():
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
                         default=1, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.01,
+    parser.add_argument('--kld_weight_min', type=float, default=0.001,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -120,7 +120,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v41', help='checkpoint name')
+                        default='mae-v42', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -134,10 +134,8 @@ def main():
     args = parser.parse_args()
 
     # create train and val datasets and loaders
-    sinewave_ds_train = Sinewave_dataset(
-        root_path=args.root_path, csv_path=args.csv_path, flag="train")
-    sinewave_ds_val = Sinewave_dataset(
-        root_path=args.root_path, csv_path=args.csv_path, flag="val", scaler=sinewave_ds_train.scaler)
+    sinewave_ds_train = Sinewave_dataset(root_path=args.root_path, csv_path=args.csv_path, flag="train", f_min=60, f_max=4000, power=1)
+    sinewave_ds_val = Sinewave_dataset(root_path=args.root_path, csv_path=args.csv_path, flag="val", f_min=60, f_max=4000, power=1, scaler=sinewave_ds_train.scaler)
 
     train_loader = DataLoader(
         sinewave_ds_train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, persistent_workers=True)

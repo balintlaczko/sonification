@@ -154,6 +154,7 @@ class Sinewave_dataset(Dataset):
         self.pad = pad
         self.n_mels = n_mels
         self.power = power
+        assert self.power in [1, 2]
         self.norm = norm
         self.mel_scale = mel_scale
 
@@ -233,8 +234,14 @@ class Sinewave_dataset(Dataset):
         mel_spec = self.mel_spec(sinewave)
         # average time dimension
         mel_spec_avg = mel_spec.mean(dim=2, keepdim=True)
-        mel_spec_avg_db = amplitude_to_DB(
-            mel_spec_avg, multiplier=10, amin=1e-5, db_multiplier=20, top_db=80)
+        # mel_spec_avg_db = amplitude_to_DB(
+        #     mel_spec_avg, 
+        #     multiplier=10 if self.power == 2 else 20, 
+        #     amin=1e-5, 
+        #     db_multiplier=20, 
+        #     top_db=80)
+        mel_spec_avg_db = 20 * torch.log10(mel_spec_avg + 1e-5)
+        # mel_spec_avg_db = mel_spec_avg
         # transform with scaler
         if self.scaler_fitted:
             mel_spec_avg_db = self.scaler.transform(
@@ -244,7 +251,7 @@ class Sinewave_dataset(Dataset):
         return mel_spec_avg_db.permute(0, 2, 1)  # (B, C=1, n_mels)
 
     def fit_scaler(self):
-        if self.flag != 'train' and self.scaler is not None:
+        if self.flag not in ['train', 'all'] and self.scaler is not None:
             print("Transforming dataset with external scaler")
             all_tensors = self.__getitem__(
                 np.arange(len(self.df)))  # (B, C=1, n_mels)
@@ -254,7 +261,7 @@ class Sinewave_dataset(Dataset):
                 self.all_tensors).unsqueeze(-1)  # (B, n_mels, C=1)
             self.scaler_fitted = True
             print("Scaler transformed")
-        elif self.flag == 'train':
+        elif self.flag in ['train', 'all']:
             all_tensors = self.__getitem__(
                 np.arange(len(self.df)))  # (B, C=1, n_mels)
             all_tensors = all_tensors.squeeze(1).numpy()  # (B, n_mels)
