@@ -32,7 +32,7 @@ def main():
     parser.add_argument('--in_channels', type=int,
                         default=1, help='image color channels')
     parser.add_argument('--latent_size', type=int,
-                        default=2, help='latent size')
+                        default=8, help='latent size')
     # parser.add_argument('--vae_channels', type=int, default=64,)
     # parser.add_argument('--vae_num_layers', type=int, default=50,)
     parser.add_argument('--kernel_size', type=int, nargs='*', default=[3, 3, 3, 3, 3, 3], 
@@ -83,13 +83,13 @@ def main():
                         help='cycling kld ramp up phase')
     parser.add_argument('--kld_weight_max', type=float,
                         default=1, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.001,
+    parser.add_argument('--kld_weight_min', type=float, default=0.01,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=1,
                         help='the number of epochs to warmup the kld weight')
-    parser.add_argument('--kld_decay', type=float, default=0.99,
+    parser.add_argument('--kld_decay', type=float, default=0.999,
                         help='kld decay factor that will be applied to the kld weight after the warmup')
     
     # total correlation loss term
@@ -120,7 +120,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/sinewave_fvae-mae-v3', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='mae-v40', help='checkpoint name')
+                        default='mae-v41', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -128,7 +128,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=100)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='no consistency loss, ultra fast kld decay, and low minimum kld',
+    parser.add_argument('--comment', type=str, default='8D latent',
                         help='add a comment if needed')
 
     args = parser.parse_args()
