@@ -939,6 +939,11 @@ class PlFactorVAE1D(LightningModule):
             z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
         z_all = z_all.cpu().numpy()
 
+        # if z dim > 2 then PCA to 2D
+        if self.args.latent_size > 2:
+            pca = PCA(n_components=2)
+            z_all = pca.fit_transform(z_all)
+
         # create the figure
         fig, ax = plt.subplots(1, 1, figsize=(20, 20))
         ax.scatter(z_all[:, 0], z_all[:, 1], c="blue")
