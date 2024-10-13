@@ -153,29 +153,30 @@ def latent_consistency_loss(encoder, decoder, x, shift_vector, lambda_consistenc
     latent_norm = torch.norm(shift_vector, p=2)
     consistency_loss = F.mse_loss(delta_pixel, latent_norm * torch.ones_like(delta_pixel))
     
-    # Part 2: Cross-sample consistency
+    # # Part 2: Cross-sample consistency
     
-    # Reshape delta_pixel to (batch_size, -1) to flatten the pixel space dimensions
-    delta_pixel_flat = delta_pixel.view(delta_pixel.size(0), -1)  # Shape: (batch_size, num_pixels)
+    # # Reshape delta_pixel to (batch_size, -1) to flatten the pixel space dimensions
+    # delta_pixel_flat = delta_pixel.view(delta_pixel.size(0), -1)  # Shape: (batch_size, num_pixels)
     
-    # Normalize the flattened delta_pixel to get unit vectors (directional vectors)
-    delta_pixel_flat_norm = F.normalize(delta_pixel_flat, p=2, dim=1)  # Shape: (batch_size, num_pixels)
+    # # Normalize the flattened delta_pixel to get unit vectors (directional vectors)
+    # delta_pixel_flat_norm = F.normalize(delta_pixel_flat, p=2, dim=1)  # Shape: (batch_size, num_pixels)
     
-    # Compute pairwise cosine similarity between deltas across the batch
-    cosine_similarity_matrix = torch.matmul(delta_pixel_flat_norm, delta_pixel_flat_norm.T)  # Shape: (batch_size, batch_size)
+    # # Compute pairwise cosine similarity between deltas across the batch
+    # cosine_similarity_matrix = torch.matmul(delta_pixel_flat_norm, delta_pixel_flat_norm.T)  # Shape: (batch_size, batch_size)
     
-    # We want the cosine similarity between all pairs to be close to 1 (indicating same direction)
-    # So we compute a loss that penalizes deviation from 1
-    cosine_consistency_loss = F.mse_loss(cosine_similarity_matrix, torch.ones_like(cosine_similarity_matrix))
+    # # We want the cosine similarity between all pairs to be close to 1 (indicating same direction)
+    # # So we compute a loss that penalizes deviation from 1
+    # cosine_consistency_loss = F.mse_loss(cosine_similarity_matrix, torch.ones_like(cosine_similarity_matrix))
     
-    # Exclude self-comparisons by zeroing the diagonal
-    cosine_consistency_loss = cosine_consistency_loss - F.mse_loss(torch.diag(cosine_similarity_matrix), torch.ones_like(torch.diag(cosine_similarity_matrix)))
+    # # Exclude self-comparisons by zeroing the diagonal
+    # cosine_consistency_loss = cosine_consistency_loss - F.mse_loss(torch.diag(cosine_similarity_matrix), torch.ones_like(torch.diag(cosine_similarity_matrix)))
     
     
-    # Combine the two losses
-    total_loss = lambda_consistency * consistency_loss + lambda_cross_consistency * cosine_consistency_loss
+    # # Combine the two losses
+    # total_loss = lambda_consistency * consistency_loss + lambda_cross_consistency * cosine_consistency_loss
     
-    return total_loss
+    # return total_loss
+    return consistency_loss
 
 
 # taken form: https://github.com/AntixK/PyTorch-VAE/blob/master/models/info_vae.py
