@@ -909,9 +909,65 @@ class PlFactorVAE1D(LightningModule):
             z = z.detach()
             z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
         z_all = z_all.cpu().numpy()
+
         # create the figure
         fig, ax = plt.subplots(1, 1, figsize=(20, 20))
-        ax.scatter(z_all[:, 0], z_all[:, 1])
+        ax.scatter(z_all[:, 0], z_all[:, 1], c="blue")
+
+        percentiles = [5, 10, 15, 20, 25, 30]
+        color_labels = ["red", "green", "yellow", "purple", "orange", "cyan"]
+        df = dataset.df
+        # get all unique pitch values sorter from low to high
+        pitch_values = np.sort(df['pitch'].unique())
+        # get the percentiles for the pitch values
+        n_pitches = len(pitch_values)
+        # get all unique loudness values sorter from low to high
+        loudness_values = np.sort(df['loudness'].unique())
+        # get the percentiles for the loudness values
+        n_loudnesses = len(loudness_values)
+
+        for idx, percentile in enumerate(percentiles):
+            percentile_low = percentile
+            percentile_high = 100 - percentile
+
+            pitch_low = pitch_values[int(n_pitches * percentile_low / 100)]
+            pitch_high = pitch_values[int(n_pitches * percentile_high / 100)]
+
+            loudness_low = loudness_values[int(n_loudnesses * percentile_low / 100)]
+            loudness_high = loudness_values[int(n_loudnesses * percentile_high / 100)]
+
+            # get the sample with the lowest pitch and lowest loudness
+            df_lowest_pitch = df[df['pitch'] == pitch_low]
+            # get the closest loudness to the lowest loudness
+            df_lowest_pitch_lowest_loudness = df_lowest_pitch.iloc[(df_lowest_pitch['loudness'] - loudness_low).abs().argsort()[:1]]
+            # now highest pitch lowest loudness
+            df_highest_pitch = df[df['pitch'] == pitch_high]
+            # get the closest loudness to the lowest loudness
+            df_highest_pitch_lowest_loudness = df_highest_pitch.iloc[(df_highest_pitch['loudness'] - loudness_low).abs().argsort()[:1]]
+            # now lowest pitch highest loudness
+            df_lowest_pitch = df[df['pitch'] == pitch_low]
+            # get the closest loudness to the highest loudness
+            df_lowest_pitch_highest_loudness = df_lowest_pitch.iloc[(df_lowest_pitch['loudness'] - loudness_high).abs().argsort()[:1]]
+            # now highest pitch highest loudness
+            df_highest_pitch = df[df['pitch'] == pitch_high]
+            # get the closest loudness to the highest loudness
+            df_highest_pitch_highest_loudness = df_highest_pitch.iloc[(df_highest_pitch['loudness'] - loudness_high).abs().argsort()[:1]]
+
+            idx_top_left = df_highest_pitch_highest_loudness.index[0]
+            idx_bottom_left = df_lowest_pitch_highest_loudness.index[0]
+            idx_top_right = df_highest_pitch_lowest_loudness.index[0]
+            idx_bottom_right = df_lowest_pitch_lowest_loudness.index[0]
+            # get the row number of the sample
+            idx_top_left = np.where(df.index == idx_top_left)[0][0]
+            idx_bottom_left = np.where(df.index == idx_bottom_left)[0][0]
+            idx_top_right = np.where(df.index == idx_top_right)[0][0]
+            idx_bottom_right = np.where(df.index == idx_bottom_right)[0][0]
+            
+            ax.scatter(z_all[idx_top_left, 0], z_all[idx_top_left, 1], c=color_labels[idx], s=100)
+            ax.scatter(z_all[idx_bottom_left, 0], z_all[idx_bottom_left, 1], c=color_labels[idx], s=100)
+            ax.scatter(z_all[idx_top_right, 0], z_all[idx_top_right, 1], c=color_labels[idx], s=100)
+            ax.scatter(z_all[idx_bottom_right, 0], z_all[idx_bottom_right, 1], c=color_labels[idx], s=100)
+
         ax.set_title(
             f"Latent space at epoch {self.trainer.current_epoch}")
         # save figure to checkpoint folder/latent
