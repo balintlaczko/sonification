@@ -154,24 +154,26 @@ def latent_consistency_loss(encoder, decoder, x, shift_vector, lambda_consistenc
     consistency_loss = F.mse_loss(delta_pixel, latent_norm * torch.ones_like(delta_pixel))
     
     # Part 2: Cross-sample consistency
-    batch_size = delta_pixel.size(0)
     
     # Reshape delta_pixel to (batch_size, -1) to flatten the pixel space dimensions
     delta_pixel_flat = delta_pixel.view(delta_pixel.size(0), -1)  # Shape: (batch_size, num_pixels)
-
-    # # Compute pairwise differences between deltas efficiently
-    pairwise_mse = torch.cdist(delta_pixel_flat, delta_pixel_flat, p=2)
+    
+    # Normalize the flattened delta_pixel to get unit vectors (directional vectors)
+    delta_pixel_flat_norm = F.normalize(delta_pixel_flat, p=2, dim=1)  # Shape: (batch_size, num_pixels)
+    
+    # Compute pairwise cosine similarity between deltas across the batch
+    cosine_similarity_matrix = torch.matmul(delta_pixel_flat_norm, delta_pixel_flat_norm.T)  # Shape: (batch_size, batch_size)
+    
+    # We want the cosine similarity between all pairs to be close to 1 (indicating same direction)
+    # So we compute a loss that penalizes deviation from 1
+    cosine_consistency_loss = F.mse_loss(cosine_similarity_matrix, torch.ones_like(cosine_similarity_matrix))
     
     # Exclude self-comparisons by zeroing the diagonal
-    pairwise_mse = pairwise_mse[~torch.eye(pairwise_mse.size(0), dtype=bool)].view(pairwise_mse.size(0), -1)
+    cosine_consistency_loss = cosine_consistency_loss - F.mse_loss(torch.diag(cosine_similarity_matrix), torch.ones_like(torch.diag(cosine_similarity_matrix)))
     
-    # Calculate the mean cross-sample consistency loss
-    cross_consistency_loss = pairwise_mse.mean()
-    # Normalize by the number of pairs
-    cross_consistency_loss /= (batch_size * (batch_size - 1)) / 2  # Number of unique pairs
     
     # Combine the two losses
-    total_loss = lambda_consistency * consistency_loss + lambda_cross_consistency * cross_consistency_loss
+    total_loss = lambda_consistency * consistency_loss + lambda_cross_consistency * cosine_consistency_loss
     
     return total_loss
 
