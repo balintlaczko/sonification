@@ -62,11 +62,11 @@ class ConvVAE(nn.Module):
     def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
         super(ConvVAE, self).__init__()
         self.encoder = ConvEncoder(
-            in_channels, latent_size, layers_channels, input_size)
-        self.mu = nn.Linear(latent_size, latent_size)
-        self.logvar = nn.Linear(latent_size, latent_size)
+            in_channels, input_size, layers_channels, input_size)
+        self.mu = nn.Linear(input_size, latent_size)
+        self.logvar = nn.Linear(input_size, latent_size)
         self.decoder = ConvDecoder(
-            latent_size, in_channels, layers_channels, input_size)
+            latent_size, in_channels, layers_channels[::-1], input_size)
 
     def encode(self, x):
         x = self.encoder(x)
@@ -108,7 +108,8 @@ class ConvVAE1D(nn.Module):
         z = self.reparameterize(mean, logvar)
         recon = self.decoder(z)
         return recon, mean, logvar, z
-    
+
+
 class ConvVAE1DRes(nn.Module):
     def __init__(self, in_channels, latent_size, layers_channels=[16, 32, 64, 128, 256], input_size=64):
         super(ConvVAE1DRes, self).__init__()
@@ -163,7 +164,7 @@ class PlVAE(LightningModule):
         super(PlVAE, self).__init__()
         # Important: This property activates manual optimization.
         self.automatic_optimization = False
-        # self.save_hyperparameters()
+        self.save_hyperparameters()
 
         # data params
         self.in_channels = args.in_channels
@@ -178,8 +179,11 @@ class PlVAE(LightningModule):
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
         self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        self.dynamic_kld_increment = args.dynamic_kld_increment
         self.kld_start_epoch = args.kld_start_epoch
         self.kld_warmup_epochs = args.kld_warmup_epochs
+        self.last_recon_loss = float("inf")  # initialize to infinity
+        self.kld_scale = args.kld_weight_min  # just init for sanity check
 
         # learning rates
         self.lr_vae = args.lr_vae
@@ -210,7 +214,8 @@ class PlVAE(LightningModule):
         vae_scheduler = self.lr_schedulers()
 
         # get the batch
-        x_1, x_2 = batch
+        # x_1, x_2 = batch
+        x_1 = batch
         epoch_idx = self.trainer.current_epoch
 
         # VAE forward pass
@@ -227,8 +232,11 @@ class PlVAE(LightningModule):
             kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
                 min(1.0, (epoch_idx - self.kld_start_epoch) /
                     self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
+        # calculate beta-norm according to beta-vae paper
+        kld_scale = kld_scale * self.latent_size / self.input_size
         kld_loss = self.kld(mean, logvar)
-        scaled_kld_loss = kld_loss * kld_scale
+        self.kld_scale = kld_scale
+        scaled_kld_loss = kld_loss * self.kld_scale
 
         # VAE loss
         vae_loss = scaled_vae_recon_loss + scaled_kld_loss
@@ -236,8 +244,8 @@ class PlVAE(LightningModule):
         # VAE backward pass
         vae_optimizer.zero_grad()
         self.manual_backward(vae_loss)
-        self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
-                            gradient_clip_algorithm="norm")
+        # self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
+        #                     gradient_clip_algorithm="norm")
 
         # Optimizer step
         vae_optimizer.step()
@@ -246,11 +254,12 @@ class PlVAE(LightningModule):
         vae_scheduler.step()
 
         # log the losses
-        self.last_recon_loss = vae_recon_loss
+        self.last_recon_loss = vae_recon_loss.item()
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_recon_loss": vae_recon_loss,
             "vae_kld_loss": kld_loss,
+            "kld_scale": self.kld_scale,
         })
         if self.args.dynamic_kld > 0:
             self.log_dict({"kld_scale": kld_scale})
@@ -259,22 +268,24 @@ class PlVAE(LightningModule):
         self.VAE.eval()
 
         # get the batch
-        x_1, x_2 = batch
+        # x_1, x_2 = batch
+        x_1 = batch
 
         # VAE forward pass
         x_recon, mean, logvar, z = self.VAE(x_1)
 
         # VAE reconstruction loss
         vae_recon_loss = self.mse(x_recon, x_1)
+        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
 
         # VAE KLD loss
         kld_loss = self.kld(mean, logvar)
+        scaled_kld_loss = kld_loss * self.kld_scale
 
         # VAE loss
-        vae_loss = vae_recon_loss + kld_loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss
 
         # log the losses
-        self.last_recon_loss = vae_recon_loss
         self.log_dict({
             "val_vae_loss": vae_loss,
             "val_vae_recon_loss": vae_recon_loss,
@@ -288,7 +299,7 @@ class PlVAE(LightningModule):
 
         if self.args.dynamic_kld > 0:
             if self.last_recon_loss < self.args.target_recon_loss:
-                self.kld_weight_dynamic += 0.0001
+                self.kld_weight_dynamic += self.dynamic_kld_increment
 
         if epoch % self.plot_interval != 0 and epoch != 0:
             return
@@ -304,16 +315,24 @@ class PlVAE(LightningModule):
         for i in range(num_recons):
             # get a random index
             idx = torch.randint(0, len(dataset), (1,)).item()
-            x, _ = dataset[idx]
+            # x, _ = dataset[idx]
+            x = dataset[idx]
             x_in = x.unsqueeze(0).to(self.device)
             x_recon, mean, logvar, z = self.VAE(x_in)
             # x_recon, z = self.VAE(x_in)
-            x_recon = x_recon[0, 0, ...].detach().cpu().numpy()
+            # x_recon: (B, C, H, W)
+            x_recon = x_recon[0, ...].detach().cpu().numpy()
+            # x_recon: (C, H, W)
+            # append zeros for blue channel
+            zeros = np.zeros_like(x_recon[0, ...][None, ...])
+            x_recon = np.concatenate(
+                (x_recon, zeros), axis=0)
+            x = np.concatenate((x.detach().cpu().numpy(), zeros), axis=0)
             # plot ground truth image
-            ax[0, i].imshow(x[0, ...], cmap="gray")
+            ax[0, i].imshow(x)
             ax[0, i].set_title(f"GT_{idx}")
             # plot reconstruction
-            ax[1, i].imshow(x_recon, cmap="gray")
+            ax[1, i].imshow(x_recon)
             ax[1, i].set_title(f"Recon_{idx}")
         # save figure to checkpoint folder/recons
         save_dir = os.path.join(self.args.ckpt_path,
@@ -332,7 +351,8 @@ class PlVAE(LightningModule):
         z_all = torch.zeros(
             len(dataset), self.args.latent_size).to(self.device)
         for batch_idx, data in enumerate(loader):
-            x, y = data
+            # x, y = data
+            x = data
             x_recon, mean, logvar, z = self.VAE(x.to(self.device))
             z = z.detach()
             z_all[batch_idx*batch_size: batch_idx*batch_size + batch_size] = z
@@ -583,7 +603,7 @@ class PlFactorVAE1D(LightningModule):
         super(PlFactorVAE1D, self).__init__()
         # Important: This property activates manual optimization.
         self.automatic_optimization = False
-        self.save_hyperparameters() # this will save args in the checkpoint
+        self.save_hyperparameters()  # this will save args in the checkpoint
 
         # data params
         self.in_channels = args.in_channels
@@ -626,17 +646,17 @@ class PlFactorVAE1D(LightningModule):
         self.cycling_kld = args.cycling_kld
         self.cycling_kld_period = args.cycling_kld_period
         self.cycling_kld_ramp_up_phase = args.cycling_kld_ramp_up_phase
-        self.kld_scale = args.kld_weight_min # just init for sanity check
+        self.kld_scale = args.kld_weight_min  # just init for sanity check
         self.kld_decay = args.kld_decay
 
         # tc loss
         self.tc_weight = args.tc_weight
         self.tc_start_epoch = args.tc_start_epoch
         self.tc_warmup_epochs = args.tc_warmup_epochs
-        self.tc_weight_dynamic = args.tc_weight # initialize to tc_weight
+        self.tc_weight_dynamic = args.tc_weight  # initialize to tc_weight
         self.dynamic_tc_increment = args.dynamic_tc_increment
         self.auto_dtc_scale = args.auto_dtc_scale
-        self.tc_scale = args.tc_weight # just init for sanity check
+        self.tc_scale = args.tc_weight  # just init for sanity check
         self.d_criterion = nn.BCELoss()
 
         # latent consistency loss
@@ -659,7 +679,7 @@ class PlFactorVAE1D(LightningModule):
                              self.layers_channels, self.input_size, self.vae_dropout)
         # self.VAE = ConvVAE1DRes(self.in_channels, self.latent_size,
         #                      self.layers_channels, self.input_size)
-        
+
         self.D = LinearDiscriminator_w_dropout(
             self.latent_size, self.d_hidden_size, 1, self.d_num_layers, self.d_dropout)
 
@@ -703,8 +723,10 @@ class PlFactorVAE1D(LightningModule):
         z_2_perm_judgement = self.D(z_2_perm.detach())
 
         # Compute discriminator loss
-        original_z_loss = self.d_criterion(z_judgement, torch.ones_like(z_judgement)) # label 1 = the original z
-        shuffled_z_loss = self.d_criterion(z_2_perm_judgement, torch.zeros_like(z_2_perm_judgement)) # label 0 = the shuffled z
+        original_z_loss = self.d_criterion(
+            z_judgement, torch.ones_like(z_judgement))  # label 1 = the original z
+        shuffled_z_loss = self.d_criterion(z_2_perm_judgement, torch.zeros_like(
+            z_2_perm_judgement))  # label 0 = the shuffled z
         d_tc_loss = (original_z_loss + shuffled_z_loss) / 2
 
         # Discriminator backward pass
@@ -719,7 +741,8 @@ class PlFactorVAE1D(LightningModule):
         if self.args.dynamic_kld > 0:
             kld_scale = self.kld_weight_dynamic
         elif self.cycling_kld > 0:
-            kld_scale = kl_scheduler(epoch=epoch_idx, cycle_period=self.cycling_kld_period, ramp_up_phase=self.cycling_kld_ramp_up_phase) * self.kld_weight_max
+            kld_scale = kl_scheduler(epoch=epoch_idx, cycle_period=self.cycling_kld_period,
+                                     ramp_up_phase=self.cycling_kld_ramp_up_phase) * self.kld_weight_max
         else:
             kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
                 min(1.0, (epoch_idx - self.kld_start_epoch) /
@@ -728,8 +751,11 @@ class PlFactorVAE1D(LightningModule):
         kld_scale = kld_scale * self.latent_size / self.input_size
         # use kld decay after kld warmup
         if epoch_idx > self.kld_start_epoch + self.kld_warmup_epochs:
-            kld_scale = kld_scale * (self.kld_decay ** (epoch_idx - self.kld_start_epoch - self.kld_warmup_epochs))
-        kld_scale = max(kld_scale, self.kld_weight_min * self.latent_size / self.input_size)
+            kld_scale = kld_scale * \
+                (self.kld_decay ** (epoch_idx -
+                 self.kld_start_epoch - self.kld_warmup_epochs))
+        kld_scale = max(kld_scale, self.kld_weight_min *
+                        self.latent_size / self.input_size)
         kld_loss = self.kld(mean, logvar)
         self.kld_scale = kld_scale
         scaled_kld_loss = kld_loss * self.kld_scale
@@ -742,7 +768,8 @@ class PlFactorVAE1D(LightningModule):
                 min(1.0, (epoch_idx - self.tc_start_epoch) /
                     self.tc_warmup_epochs) if epoch_idx > self.tc_start_epoch else 0
 
-        vae_tc_loss = self.d_criterion(z_judgement, torch.zeros_like(z_judgement)) # label 0 = what we used for the shuffled z
+        vae_tc_loss = self.d_criterion(z_judgement, torch.zeros_like(
+            z_judgement))  # label 0 = what we used for the shuffled z
         self.tc_scale = vae_tc_scale
         scaled_vae_tc_loss = vae_tc_loss * self.tc_scale
 
@@ -750,16 +777,18 @@ class PlFactorVAE1D(LightningModule):
         vae_lc_loss = 0
         scaled_vae_lc_loss = 0
         if self.latent_consistency_weight > 0:
-            shift_vector = torch.randn(self.latent_size, device=self.device) * 0.1
+            shift_vector = torch.randn(
+                self.latent_size, device=self.device) * 0.1
             vae_lc_loss = latent_consistency_loss(
-                self.encode, 
-                self.decode, 
+                self.encode,
+                self.decode,
                 x_1,
                 shift_vector)
             scaled_vae_lc_loss = vae_lc_loss * self.latent_consistency_weight
 
         # VAE loss
-        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss + scaled_vae_lc_loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + \
+            scaled_vae_tc_loss + scaled_vae_lc_loss
 
         # VAE backward pass
         vae_optimizer.zero_grad()
@@ -772,7 +801,6 @@ class PlFactorVAE1D(LightningModule):
         # VAE Optimizer & Scheduler step
         vae_optimizer.step()
         vae_scheduler.step()
-
 
         # log the losses
         self.last_recon_loss = vae_recon_loss.item()
@@ -810,8 +838,10 @@ class PlFactorVAE1D(LightningModule):
         z_2_perm_judgement = self.D(z_2_perm.detach())
 
         # Compute discriminator loss
-        original_z_loss = self.d_criterion(z_judgement, torch.ones_like(z_judgement)) # label 1 = the original z
-        shuffled_z_loss = self.d_criterion(z_2_perm_judgement, torch.zeros_like(z_2_perm_judgement)) # label 0 = the shuffled z
+        original_z_loss = self.d_criterion(
+            z_judgement, torch.ones_like(z_judgement))  # label 1 = the original z
+        shuffled_z_loss = self.d_criterion(z_2_perm_judgement, torch.zeros_like(
+            z_2_perm_judgement))  # label 0 = the shuffled z
         d_tc_loss = original_z_loss + shuffled_z_loss
 
         # VAE reconstruction loss
@@ -823,23 +853,26 @@ class PlFactorVAE1D(LightningModule):
         scaled_kld_loss = kld_loss * self.kld_scale
 
         # VAE TC loss
-        vae_tc_loss = self.d_criterion(z_judgement, torch.zeros_like(z_judgement)) # label 0 = what we used for the shuffled z
+        vae_tc_loss = self.d_criterion(z_judgement, torch.zeros_like(
+            z_judgement))  # label 0 = what we used for the shuffled z
         scaled_vae_tc_loss = vae_tc_loss * self.tc_scale
 
         # VAE latent consistency loss
         vae_lc_loss = 0
         scaled_vae_lc_loss = 0
         if self.latent_consistency_weight > 0:
-            shift_vector = torch.randn(self.latent_size, device=self.device) * 0.1
+            shift_vector = torch.randn(
+                self.latent_size, device=self.device) * 0.1
             vae_lc_loss = latent_consistency_loss(
-                self.encode, 
-                self.decode, 
+                self.encode,
+                self.decode,
                 x_1,
                 shift_vector)
             scaled_vae_lc_loss = vae_lc_loss * self.latent_consistency_weight
 
         # VAE loss
-        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss + scaled_vae_lc_loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + \
+            scaled_vae_tc_loss + scaled_vae_lc_loss
 
         # log the losses
         self.log_dict({
@@ -858,10 +891,12 @@ class PlFactorVAE1D(LightningModule):
 
         # adjust dynamic kld increment or auto kld scale
         if self.args.dynamic_kld > 0:
-            if self.auto_dkld_scale > 0: # in auto scale mode we scale in both directions
+            if self.auto_dkld_scale > 0:  # in auto scale mode we scale in both directions
                 last_val = self.kld_weight_dynamic
-                new_val = self.kld_weight_dynamic * (1 + self.args.target_recon_loss - self.last_recon_loss)
-                self.kld_weight_dynamic = np.clip(ema(last_val, new_val, alpha=self.ema_alpha), self.kld_weight_min, self.kld_weight_max)
+                new_val = self.kld_weight_dynamic * \
+                    (1 + self.args.target_recon_loss - self.last_recon_loss)
+                self.kld_weight_dynamic = np.clip(ema(
+                    last_val, new_val, alpha=self.ema_alpha), self.kld_weight_min, self.kld_weight_max)
             # in manual mode we increment the kld weight when the recon loss is below the target
             elif self.last_recon_loss < self.args.target_recon_loss:
                 self.kld_weight_dynamic += self.dynamic_kld_increment
@@ -870,8 +905,10 @@ class PlFactorVAE1D(LightningModule):
         if self.args.dynamic_tc > 0:
             if self.auto_dtc_scale > 0:
                 last_val = self.tc_weight_dynamic
-                new_val = self.tc_weight_dynamic * (1 + self.args.target_recon_loss - self.last_recon_loss)
-                self.tc_weight_dynamic = np.clip(ema(last_val, new_val, alpha=self.ema_alpha), self.tc_weight, self.tc_weight*10)
+                new_val = self.tc_weight_dynamic * \
+                    (1 + self.args.target_recon_loss - self.last_recon_loss)
+                self.tc_weight_dynamic = np.clip(
+                    ema(last_val, new_val, alpha=self.ema_alpha), self.tc_weight, self.tc_weight*10)
             # in manual mode we increment the tc weight when the recon loss is below the target
             elif self.last_recon_loss < self.args.target_recon_loss:
                 self.tc_weight_dynamic += self.dynamic_tc_increment
@@ -967,25 +1004,31 @@ class PlFactorVAE1D(LightningModule):
             pitch_low = pitch_values[int(n_pitches * percentile_low / 100)]
             pitch_high = pitch_values[int(n_pitches * percentile_high / 100)]
 
-            loudness_low = loudness_values[int(n_loudnesses * percentile_low / 100)]
-            loudness_high = loudness_values[int(n_loudnesses * percentile_high / 100)]
+            loudness_low = loudness_values[int(
+                n_loudnesses * percentile_low / 100)]
+            loudness_high = loudness_values[int(
+                n_loudnesses * percentile_high / 100)]
 
             # get the sample with the lowest pitch and lowest loudness
             df_lowest_pitch = df[df['pitch'] == pitch_low]
             # get the closest loudness to the lowest loudness
-            df_lowest_pitch_lowest_loudness = df_lowest_pitch.iloc[(df_lowest_pitch['loudness'] - loudness_low).abs().argsort()[:1]]
+            df_lowest_pitch_lowest_loudness = df_lowest_pitch.iloc[(
+                df_lowest_pitch['loudness'] - loudness_low).abs().argsort()[:1]]
             # now highest pitch lowest loudness
             df_highest_pitch = df[df['pitch'] == pitch_high]
             # get the closest loudness to the lowest loudness
-            df_highest_pitch_lowest_loudness = df_highest_pitch.iloc[(df_highest_pitch['loudness'] - loudness_low).abs().argsort()[:1]]
+            df_highest_pitch_lowest_loudness = df_highest_pitch.iloc[(
+                df_highest_pitch['loudness'] - loudness_low).abs().argsort()[:1]]
             # now lowest pitch highest loudness
             df_lowest_pitch = df[df['pitch'] == pitch_low]
             # get the closest loudness to the highest loudness
-            df_lowest_pitch_highest_loudness = df_lowest_pitch.iloc[(df_lowest_pitch['loudness'] - loudness_high).abs().argsort()[:1]]
+            df_lowest_pitch_highest_loudness = df_lowest_pitch.iloc[(
+                df_lowest_pitch['loudness'] - loudness_high).abs().argsort()[:1]]
             # now highest pitch highest loudness
             df_highest_pitch = df[df['pitch'] == pitch_high]
             # get the closest loudness to the highest loudness
-            df_highest_pitch_highest_loudness = df_highest_pitch.iloc[(df_highest_pitch['loudness'] - loudness_high).abs().argsort()[:1]]
+            df_highest_pitch_highest_loudness = df_highest_pitch.iloc[(
+                df_highest_pitch['loudness'] - loudness_high).abs().argsort()[:1]]
 
             idx_top_left = df_highest_pitch_highest_loudness.index[0]
             idx_bottom_left = df_lowest_pitch_highest_loudness.index[0]
@@ -996,11 +1039,15 @@ class PlFactorVAE1D(LightningModule):
             idx_bottom_left = np.where(df.index == idx_bottom_left)[0][0]
             idx_top_right = np.where(df.index == idx_top_right)[0][0]
             idx_bottom_right = np.where(df.index == idx_bottom_right)[0][0]
-            
-            ax.scatter(z_all[idx_top_left, 0], z_all[idx_top_left, 1], c=color_labels[idx], s=100)
-            ax.scatter(z_all[idx_bottom_left, 0], z_all[idx_bottom_left, 1], c=color_labels[idx], s=100)
-            ax.scatter(z_all[idx_top_right, 0], z_all[idx_top_right, 1], c=color_labels[idx], s=100)
-            ax.scatter(z_all[idx_bottom_right, 0], z_all[idx_bottom_right, 1], c=color_labels[idx], s=100)
+
+            ax.scatter(z_all[idx_top_left, 0],
+                       z_all[idx_top_left, 1], c=color_labels[idx], s=100)
+            ax.scatter(z_all[idx_bottom_left, 0],
+                       z_all[idx_bottom_left, 1], c=color_labels[idx], s=100)
+            ax.scatter(z_all[idx_top_right, 0],
+                       z_all[idx_top_right, 1], c=color_labels[idx], s=100)
+            ax.scatter(z_all[idx_bottom_right, 0],
+                       z_all[idx_bottom_right, 1], c=color_labels[idx], s=100)
 
         ax.set_title(
             f"Latent space at epoch {self.trainer.current_epoch}")

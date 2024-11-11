@@ -451,6 +451,7 @@ class CellularDataset(Dataset):
         # stack the patches
         patch = np.stack([patch_r, patch_g], axis=2)
         patch = patch.astype(np.float32)
+        patch = torch.from_numpy(patch).permute(2, 0, 1) # C, H, W
 
         return patch
     
