@@ -176,6 +176,7 @@ class PlVAE(LightningModule):
         self.mse = nn.MSELoss()
         self.kld = kld_loss
         self.recon_weight = args.recon_weight
+        self.target_recon_loss = args.target_recon_loss
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
         self.kld_weight_dynamic = args.kld_weight_min  # initialize to min

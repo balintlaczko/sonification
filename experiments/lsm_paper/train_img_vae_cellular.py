@@ -47,8 +47,20 @@ def main():
     parser.add_argument('--lr', type=float, default=1e-2,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay', type=float, default=0.9999)
+
+    # recon loss
     parser.add_argument('--recon_weight', type=float, default=1,
                         help='reconstruction weight')
+    parser.add_argument('--target_recon_loss', type=float, default=0.01,
+                        help='target recon loss to keep in case of dynamic kld')
+    parser.add_argument('--stop_on_target_recon_loss', type=int, default=0,
+                        help='non-zero will stop training if the recon loss is below target_recon_loss')
+    
+    # kld loss
+    parser.add_argument('--dynamic_kld', type=int, default=0,
+                        help='non-zero will use dynamic kld')
+    parser.add_argument('--dynamic_kld_increment', type=float, default=0.000005,
+                        help="in dynamic kld mode, increment the kld this much after every epoch when recon loss is below target")
     parser.add_argument('--kld_weight_max', type=float,
                         default=0.1, help='kld weight at the end of the warmup')
     parser.add_argument('--kld_weight_min', type=float, default=0.01,
@@ -151,6 +163,9 @@ def main():
         lr=args.lr,
         lr_decay=args.lr_decay,
         recon_weight=args.recon_weight,
+        target_recon_loss=args.target_recon_loss,
+        dynamic_kld=args.dynamic_kld,
+        dynamic_kld_increment=args.dynamic_kld_increment,
         kld_weight_max=args.kld_weight_max,
         kld_weight_min=args.kld_weight_min,
         kld_start_epoch=args.kld_start_epoch,
