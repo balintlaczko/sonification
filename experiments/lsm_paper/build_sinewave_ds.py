@@ -9,11 +9,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out_name", type=str,
                         default="./experiments/lsm_paper/sinewave.csv")
-    parser.add_argument('--min_pitch', type=int, default=56)
-    parser.add_argument('--max_pitch', type=int, default=80)
-    parser.add_argument('--min_db', type=int, default=-13)
-    parser.add_argument('--max_db', type=int, default=-1)
-    parser.add_argument('--n_samples', type=int, default=100000)
+    parser.add_argument('--min_pitch', type=int, default=38)
+    parser.add_argument('--max_pitch', type=int, default=86)
+    parser.add_argument('--min_db', type=int, default=-24)
+    parser.add_argument('--max_db', type=int, default=0)
+    parser.add_argument('--n_samples', type=int, default=10000)
     parser.add_argument('--val_split', type=float, default=0.2)
     args = parser.parse_args()
 

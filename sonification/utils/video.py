@@ -118,7 +118,7 @@ def videos2planes(
     return output_name
 
 
-def video_from_images(images: List[str], images_folder: str, destination_folder: str = None, target_name: str = None, overwrite: bool = False) -> str:
+def video_from_images(images: List[str], images_folder: str, destination_folder: str = None, target_name: str = None, fps: int = 10, overwrite: bool = False, print_cmd=False) -> str:
     """
     Render a video from a folder of images.
 
@@ -127,7 +127,9 @@ def video_from_images(images: List[str], images_folder: str, destination_folder:
         images_folder (str): Path to the folder containing the images.
         destination_folder (str, optional): Folder to put the rendered video into. If None, the images_folder will be used. Defaults to None.
         target_name (str, optional): Requested name of the video. Defaults to None.
+        fps (int, optional): Frames per second. Defaults to 10.
         overwrite (bool, optional): Allow to overwrite exisiting files. If False, the target_name will be incremented to avoid overwriting an older file. Defaults to False.
+        print_cmd (bool, optional): Print the ffmpeg command to the console. Defaults to False.
 
     Returns:
         str: Path to the rendered video.
@@ -146,7 +148,10 @@ def video_from_images(images: List[str], images_folder: str, destination_folder:
     for image in images:
         concat += f'{os.path.join(images_folder, image)}|'
 
-    cmd = ['ffmpeg', '-i', concat, '-c', 'mjpeg', '-q:v', '3', target_name]
+    cmd = ['ffmpeg', '-r', str(fps), '-i', concat, '-c', 'mjpeg', '-q:v', '3', target_name]
+
+    if print_cmd:
+        print(cmd)
 
     ffmpeg_cmd(cmd, len(images),
                pb_prefix="Rendering video from images:")
