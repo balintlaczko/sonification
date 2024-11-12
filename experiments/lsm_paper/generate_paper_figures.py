@@ -2,10 +2,8 @@
 # imports
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 from sonification.datasets import Sinewave_dataset, White_Square_dataset
 import torch
-import os
 from matplotlib import colors, gridspec
 
 # %%

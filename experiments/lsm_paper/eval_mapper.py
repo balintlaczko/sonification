@@ -1,7 +1,7 @@
 import argparse
 import torch
 from torch.utils.data import DataLoader
-from sonification.utils.matrix import square_over_bg, square_over_bg_falloff
+from sonification.utils.matrix import square_over_bg_falloff
 from sonification.models.models import PlFactorVAE, PlFactorVAE1D, PlMapper
 from sonification.datasets import Sinewave_dataset
 from sklearn.neighbors import KDTree

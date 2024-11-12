@@ -6,7 +6,7 @@ import random
 import numpy as np
 from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
+from lightning.pytorch.loggers import WandbLogger
 from sonification.models.models import PlFactorVAE, PlFactorVAE1D, PlMapper
 from sonification.datasets import White_Square_dataset, Sinewave_dataset
 

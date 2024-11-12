@@ -3,7 +3,7 @@ import cv2
 import os
 import tqdm
 from typing import List
-from .misc import generate_outfilename, str2sec
+from .misc import generate_outfilename
 
 
 def videos2planes(
@@ -134,10 +134,10 @@ def video_from_images(images: List[str], images_folder: str, destination_folder:
     Returns:
         str: Path to the rendered video.
     """
-    if destination_folder == None:
+    if destination_folder is None:
         destination_folder = images_folder
 
-    if target_name == None:
+    if target_name is None:
         target_name = os.path.join(
             destination_folder, f'{os.path.basename(os.path.dirname(images_folder))}.avi')
     if not overwrite:
@@ -188,7 +188,7 @@ def ffmpeg_cmd(command, total_time, pb_prefix='Progress', print_cmd=False, strea
     command = ['ffmpeg', '-hide_banner', '-loglevel', 'quiet'] + command[1:]
 
     if print_cmd:
-        if type(command) == list:
+        if isinstance(command, list):
             print(' '.join(command))
         else:
             print(command)
