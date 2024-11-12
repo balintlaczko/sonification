@@ -1,13 +1,7 @@
-from functools import partial
-from multiprocessing import Pool, cpu_count
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
-import numpy as np
 from pytimbre.waveform import Waveform
 from pytimbre.spectral.spectra import SpectrumByFFT
-import timbral_models
-from torch.utils.data import Dataset
-import pandas as pd
 from sonification.datasets import FmSynthDataset
 import json
 
@@ -26,7 +20,6 @@ fm_synth_ds = FmSynthDataset(csv_path, sr=sr, dur=dur)
 
 def extract_features(i, synths, sr):
     y, freq, ratio, index = synths[i]
-    # timbre = timbral_models.timbral_extractor(y, fs=sr, verbose=False)
     wfm = Waveform(y, sr, 0.0)
     spectrum = SpectrumByFFT(wfm, 4096)
     timbre = {
@@ -34,13 +27,6 @@ def extract_features(i, synths, sr):
         "freq": freq,
         "harm_ratio": ratio,
         "mod_index": index,
-        # "hardness": timbral_hardness,
-        # "depth": timbral_depth,
-        # "brightness": timbral_brightness,
-        # "roughness": timbral_roughness,
-        # "warmth": timbral_warmth,
-        # "sharpness": timbral_sharpness,
-        # "boominess": timbral_booming,
         "spectral_centroid": spectrum.spectral_centroid,
         "spectral_crest": spectrum.spectral_crest,
         "spectral_decrease": spectrum.spectral_decrease,
