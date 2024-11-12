@@ -187,8 +187,8 @@ class PlVAE(LightningModule):
         self.kld_scale = args.kld_weight_min  # just init for sanity check
 
         # learning rates
-        self.lr_vae = args.lr_vae
-        self.lr_decay_vae = args.lr_decay_vae
+        self.lr = args.lr
+        self.lr_decay = args.lr_decay
 
         # logging
         self.plot_interval = args.plot_interval
