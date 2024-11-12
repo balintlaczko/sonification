@@ -1,20 +1,12 @@
 # %%
 # imports
 
-import os
 import numpy as np
-import pandas as pd
 import torch
 import matplotlib.pyplot as plt
 from sonification.datasets import Sinewave_dataset
 from sonification.models.models import PlFactorVAE1D
-from torchvision.datasets import MNIST
-import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
-from sonification.utils.matrix import view
-from torch.utils.data import DataLoader
-import matplotlib.gridspec as gridspec
 import matplotlib.colors as colors
 from sklearn.decomposition import PCA
 
@@ -50,8 +42,7 @@ sinewaves_pca = pca.transform(sinewaves)
 
 fig, ax = plt.subplots(1, 1, figsize=(20, 20))
 ax.scatter(sinewaves_pca[:, 0], sinewaves_pca[:, 1])
-ax.set_title(
-    f"Latent space")
+ax.set_title("Latent space")
 plt.show()
 
 print(pca.explained_variance_ratio_.sum())
@@ -86,8 +77,7 @@ z_all = z_all.cpu().numpy()
 # create the figure
 fig, ax = plt.subplots(1, 1, figsize=(20, 20))
 ax.scatter(z_all[:, 0], z_all[:, 1])
-ax.set_title(
-    f"Latent space")
+ax.set_title("Latent space")
 plt.show()
 
 # %%
@@ -251,7 +241,7 @@ ax.scatter(z_all[idx_top_left, 0], z_all[idx_top_left, 1], c='r', s=100)
 ax.scatter(z_all[idx_bottom_left, 0], z_all[idx_bottom_left, 1], c='r', s=100)
 ax.scatter(z_all[idx_top_right, 0], z_all[idx_top_right, 1], c='r', s=100)
 ax.scatter(z_all[idx_bottom_right, 0], z_all[idx_bottom_right, 1], c='r', s=100)
-ax.set_title(f"Corners in latent space")
+ax.set_title("Corners in latent space")
 plt.show()
 
 # %%
@@ -279,7 +269,7 @@ fig, ax = plt.subplots(1, 1, figsize=(20, 20))
 ax.scatter(z_all[:, 0], z_all[:, 1])
 for corner in latent_corners:
     ax.scatter(corner[0, 0], corner[0, 1], c='r', s=100)
-ax.set_title(f"Encoded corners")
+ax.set_title("Encoded corners")
 plt.show()
 
 # %%
