@@ -88,11 +88,24 @@ def main():
         img_size=args.img_size,
         kernel_size=args.patch_size,
         flag="train")
-    # TODO: implement minmax scaler, add val dataset + loader, continue rewriting from here
+    val_dataset = CellularDataset(
+        csv_path=args.csv_path,
+        root_dir=args.root_path,
+        img_size=args.img_size,
+        kernel_size=args.patch_size,
+        flag="val")
+    # set the minmax values of val dataset to the train dataset for scaling
+    val_dataset.r_min = train_dataset.r_min
+    val_dataset.r_max = train_dataset.r_max
+    val_dataset.g_min = train_dataset.g_min
+    val_dataset.g_max = train_dataset.g_max
+    # TODO: add val dataset + loader, continue rewriting from here
 
     # create train and val dataloaders
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, prefetch_factor=2, persistent_workers=True,)
+    val_loader = DataLoader(
+        val_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, pin_memory=True, num_workers=4, prefetch_factor=2, persistent_workers=True,)
 
     # create the model
     model = PlVAE(args)
@@ -100,9 +113,9 @@ def main():
     # checkpoint callbacks
     checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
     best_checkpoint_callback = ModelCheckpoint(
-        monitor="vae_loss",
+        monitor="val_vae_loss",
         dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_{epoch:02d}-{loss:.4f}",
+        filename=args.ckpt_name + "_{epoch:02d}-{val_vae_loss:.4f}",
         save_top_k=1,
         mode="min",
     )
@@ -114,41 +127,39 @@ def main():
         mode="max",
     )
 
-    # logger callbacks
-    tensorboard_logger = TensorBoardLogger(
-        save_dir=args.logdir, name=args.ckpt_name)
+    # logger callback
+    wandb_logger = WandbLogger(
+        name=args.ckpt_name,
+        project="cellular_vae",
+        save_dir=args.logdir,)
 
     trainer = Trainer(
         max_epochs=args.train_epochs,
         enable_checkpointing=True,
         callbacks=[best_checkpoint_callback,
                    last_checkpoint_callback],
-        logger=tensorboard_logger,
+        logger=wandb_logger,
         log_every_n_steps=1,
     )
 
     hyperparameters = dict(
         img_size=args.img_size,
-        square_size=args.square_size,
+        patch_size=args.patch_size,
+        in_channels=args.in_channels,
         latent_size=args.latent_size,
         layers_channels=args.layers_channels,
-        d_hidden_size=args.d_hidden_size,
-        d_num_layers=args.d_num_layers,
-        lr_vae=args.lr_vae,
-        lr_decay_vae=args.lr_decay_vae,
-        lr_d=args.lr_d,
-        lr_decay_d=args.lr_decay_d,
+        lr=args.lr,
+        lr_decay=args.lr_decay,
         recon_weight=args.recon_weight,
         kld_weight_max=args.kld_weight_max,
         kld_weight_min=args.kld_weight_min,
         kld_start_epoch=args.kld_start_epoch,
         kld_warmup_epochs=args.kld_warmup_epochs,
-        tc_weight=args.tc_weight,
         comment=args.comment,
     )
     trainer.logger.log_hyperparams(hyperparameters)
 
-    trainer.fit(model=model, train_dataloaders=train_loader,
+    trainer.fit(model, train_loader, val_loader,
                 ckpt_path=args.resume_ckpt_path)
 
 

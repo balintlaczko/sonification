@@ -66,6 +66,11 @@ class CellularDataset(Dataset):
                 self.idx2yx.append((i, j))
         self.n_patches_per_img = len(self.idx2yx)
 
+        # read the data and get the min/max values
+        self.read_data(csv_path, flag)
+        self.get_data_minmax()
+
+    def read_data(self, csv_path, flag):
         # parse flag
         assert flag in ['train', 'val', 'all']
         self.flag = flag
@@ -75,6 +80,25 @@ class CellularDataset(Dataset):
         # filter for the set we want (train/val)
         if self.flag != 'all':
             self.df = self.df[self.df.dataset == self.flag]
+
+    def get_data_minmax(self):
+        # get the min/max values
+        if self.flag == 'val':
+            return
+        self.r_min = self.df.r_min.min()
+        self.r_max = self.df.r_max.max()
+        self.g_min = self.df.g_min.min()
+        self.g_max = self.df.g_max.max()
+
+    def scale(self, patch_r, patch_g):
+        patch_r = (patch_r - self.r_min) / (self.r_max - self.r_min)
+        patch_g = (patch_g - self.g_min) / (self.g_max - self.g_min)
+        return patch_r, patch_g
+
+    def scale_inv(self, patch_r, patch_g):
+        patch_r = patch_r * (self.r_max - self.r_min) + self.r_min
+        patch_g = patch_g * (self.g_max - self.g_min) + self.g_min
+        return patch_r, patch_g
 
     def __len__(self):
         return len(self.df) * self.n_patches_per_img
@@ -98,6 +122,9 @@ class CellularDataset(Dataset):
         y, x = self.idx2yx[patch_idx]
         patch_r = img_r[y:y+self.kernel_size, x:x+self.kernel_size]
         patch_g = img_g[y:y+self.kernel_size, x:x+self.kernel_size]
+
+        # scale the patches
+        patch_r, patch_g = self.scale(patch_r, patch_g)
 
         # stack the patches
         patch = np.stack([patch_r, patch_g], axis=2)

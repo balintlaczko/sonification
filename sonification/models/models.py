@@ -328,6 +328,9 @@ class PlVAE(LightningModule):
             x_recon = np.concatenate(
                 (x_recon, zeros), axis=0)
             x = np.concatenate((x.detach().cpu().numpy(), zeros), axis=0)
+            # inverse scale the images
+            x_recon = dataset.scale_inv(x_recon)
+            x = dataset.scale_inv(x)
             # plot ground truth image
             ax[0, i].imshow(x)
             ax[0, i].set_title(f"GT_{idx}")
