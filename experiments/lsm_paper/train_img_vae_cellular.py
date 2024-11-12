@@ -21,11 +21,11 @@ def main():
 
     # root path
     parser.add_argument('--root_path', type=str,
-                        default='./experiments/lsm_paper/', help='root path')
+                        default=r'C:\Users\Balint Laczko\Desktop\work\Sonification\CELLULAR\images', help='root path')
 
     # dataset
     parser.add_argument('--csv_path', type=str,
-                        default=r'C:\Users\Balint Laczko\Desktop\work\Sonification\CELLULAR\images', help='csv path')
+                        default='./experiments/lsm_paper/cellular.csv', help='csv path')
     parser.add_argument('--img_size', type=int,
                         default=2048, help='image size')
     parser.add_argument('--patch_size', type=int,
