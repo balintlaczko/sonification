@@ -14,6 +14,7 @@ import matplotlib.colors as colors
 import numpy as np
 # import pca from sklearn
 from sklearn.decomposition import PCA
+from tqdm import tqdm
 
 
 class AE(nn.Module):
@@ -218,52 +219,62 @@ class PlVAE(LightningModule):
         # x_1, x_2 = batch
         x_1 = batch
         epoch_idx = self.trainer.current_epoch
+        # get training dataset
+        dataset = self.trainer.train_dataloader.dataset
 
-        # VAE forward pass
-        x_recon, mean, logvar, z = self.VAE(x_1)
+        # loop through all patches in the images
+        vae_loss = None
+        for idx, yx in enumerate(tqdm(dataset.idx2yx)):
+            y, x = yx
+            # get the patch
+            x_1_patch = x_1[:, :, y:y+self.input_size,
+                            x:x+self.input_size]
 
-        # VAE reconstruction loss
-        vae_recon_loss = self.mse(x_recon, x_1)
-        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
+            # VAE forward pass
+            x_recon, mean, logvar, z = self.VAE(x_1_patch)
 
-        # VAE KLD loss
-        if self.args.dynamic_kld > 0:
-            kld_scale = self.kld_weight_dynamic
-        else:
-            kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
-                min(1.0, (epoch_idx - self.kld_start_epoch) /
-                    self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
-        # calculate beta-norm according to beta-vae paper
-        kld_scale = kld_scale * self.latent_size / self.input_size
-        kld_loss = self.kld(mean, logvar)
-        self.kld_scale = kld_scale
-        scaled_kld_loss = kld_loss * self.kld_scale
+            # VAE reconstruction loss
+            vae_recon_loss = self.mse(x_recon, x_1_patch)
+            scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
 
-        # VAE loss
-        vae_loss = scaled_vae_recon_loss + scaled_kld_loss
+            # VAE KLD loss
+            if self.args.dynamic_kld > 0:
+                kld_scale = self.kld_weight_dynamic
+            else:
+                kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
+                    min(1.0, (epoch_idx - self.kld_start_epoch) /
+                        self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
+            # calculate beta-norm according to beta-vae paper
+            kld_scale = kld_scale * self.latent_size / self.input_size
+            kld_loss = self.kld(mean, logvar)
+            self.kld_scale = kld_scale
+            scaled_kld_loss = kld_loss * self.kld_scale
 
-        # VAE backward pass
-        vae_optimizer.zero_grad()
-        self.manual_backward(vae_loss)
-        # self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
-        #                     gradient_clip_algorithm="norm")
+            # VAE loss
+            vae_loss = scaled_vae_recon_loss + scaled_kld_loss
 
-        # Optimizer step
-        vae_optimizer.step()
+            # VAE backward pass
+            vae_optimizer.zero_grad()
+            self.manual_backward(vae_loss)
+            # self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
+            #                     gradient_clip_algorithm="norm")
 
-        # LR scheduler step
-        vae_scheduler.step()
+            # Optimizer step
+            vae_optimizer.step()
 
-        # log the losses
-        self.last_recon_loss = vae_recon_loss.item()
-        self.log_dict({
-            "vae_loss": vae_loss,
-            "vae_recon_loss": vae_recon_loss,
-            "vae_kld_loss": kld_loss,
-            "kld_scale": self.kld_scale,
-        })
-        if self.args.dynamic_kld > 0:
-            self.log_dict({"kld_scale": kld_scale})
+            # LR scheduler step
+            vae_scheduler.step()
+
+            # log the losses
+            self.last_recon_loss = vae_recon_loss.item()
+            self.log_dict({
+                "vae_loss": vae_loss,
+                "vae_recon_loss": vae_recon_loss,
+                "vae_kld_loss": kld_loss,
+                "kld_scale": self.kld_scale,
+            })
+            if self.args.dynamic_kld > 0:
+                self.log_dict({"kld_scale": kld_scale})
 
     def validation_step(self, batch, batch_idx):
         self.VAE.eval()
@@ -271,20 +282,33 @@ class PlVAE(LightningModule):
         # get the batch
         # x_1, x_2 = batch
         x_1 = batch
+        # get validation dataset
+        dataset = self.trainer.val_dataloaders.dataset
 
-        # VAE forward pass
-        x_recon, mean, logvar, z = self.VAE(x_1)
+        # loop through all patches in the images
+        vae_loss = None
+        for idx, yx in enumerate(tqdm(dataset.idx2yx)):
+            y, x = yx
+            # get the patch
+            x_1_patch = x_1[:, :, y:y+self.input_size,
+                            x:x+self.input_size]
 
-        # VAE reconstruction loss
-        vae_recon_loss = self.mse(x_recon, x_1)
-        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
+            # VAE forward pass
+            x_recon, mean, logvar, z = self.VAE(x_1_patch)
 
-        # VAE KLD loss
-        kld_loss = self.kld(mean, logvar)
-        scaled_kld_loss = kld_loss * self.kld_scale
+            # VAE reconstruction loss
+            vae_recon_loss = self.mse(x_recon, x_1_patch)
+            scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
 
-        # VAE loss
-        vae_loss = scaled_vae_recon_loss + scaled_kld_loss
+            # VAE KLD loss
+            kld_loss = self.kld(mean, logvar)
+            scaled_kld_loss = kld_loss * self.kld_scale
+
+            # VAE loss
+            if idx == 0:
+                vae_loss = scaled_vae_recon_loss + scaled_kld_loss
+            else:
+                vae_loss += scaled_vae_recon_loss + scaled_kld_loss
 
         # log the losses
         self.log_dict({
@@ -306,7 +330,7 @@ class PlVAE(LightningModule):
             return
 
         self.save_recon_plot()
-        self.save_latent_space_plot()
+        # self.save_latent_space_plot()
 
     def save_recon_plot(self, num_recons=4):
         """Save a figure of N reconstructions"""
@@ -318,20 +342,43 @@ class PlVAE(LightningModule):
             idx = torch.randint(0, len(dataset), (1,)).item()
             # x, _ = dataset[idx]
             x = dataset[idx]
+            patch_idx = torch.randint(0, len(dataset.idx2yx), (1,)).item()
+            _y, _x = dataset.idx2yx[patch_idx]
+            x = x[:, _y:_y+self.input_size, _x:_x+self.input_size]
             x_in = x.unsqueeze(0).to(self.device)
             x_recon, mean, logvar, z = self.VAE(x_in)
             # x_recon, z = self.VAE(x_in)
             # x_recon: (B, C, H, W)
             x_recon = x_recon[0, ...].detach().cpu().numpy()
             # x_recon: (C, H, W)
+            x = x.detach().cpu().numpy()
+
+            # # split r and g channels
+            # x_recon_r, x_recon_g = x_recon[:2, ...]
+            # x_r, x_g = x[:2, ...]
+            # # inverse scale the images
+            # x_recon_r, x_recon_g = dataset.scale_inv(
+            #     x_recon_r[None, ...], x_recon_g[None, ...])
+            # x_r, x_g = dataset.scale_inv(x_r[None, ...], x_g[None, ...])
+            # # merge the images
+            # x_recon = np.concatenate((x_recon_r, x_recon_g), axis=0)
+            # x = np.concatenate((x_r, x_g), axis=0)
+
             # append zeros for blue channel
             zeros = np.zeros_like(x_recon[0, ...][None, ...])
             x_recon = np.concatenate(
                 (x_recon, zeros), axis=0)
-            x = np.concatenate((x.detach().cpu().numpy(), zeros), axis=0)
-            # inverse scale the images
-            x_recon = dataset.scale_inv(x_recon)
-            x = dataset.scale_inv(x)
+            x = np.concatenate((x, zeros), axis=0)
+
+            # from channels-first to channels-last
+            x_recon = np.moveaxis(x_recon, 0, -1)
+            x = np.moveaxis(x, 0, -1)
+
+            # normalize the images
+            x_recon = (x_recon - x_recon.min()) / \
+                (x_recon.max() - x_recon.min())
+            x = (x - x.min()) / (x.max() - x.min())
+
             # plot ground truth image
             ax[0, i].imshow(x)
             ax[0, i].set_title(f"GT_{idx}")
@@ -346,7 +393,7 @@ class PlVAE(LightningModule):
         plt.savefig(os.path.join(save_dir, fig_name))
         plt.close(fig)
 
-    def save_latent_space_plot(self, batch_size=128):
+    def save_latent_space_plot(self, batch_size=1024):
         """Save a figure of the latent space"""
         # get the length of the training dataset
         dataset = self.trainer.val_dataloaders.dataset
@@ -380,9 +427,9 @@ class PlVAE(LightningModule):
 
     def configure_optimizers(self):
         vae_optimizer = torch.optim.Adam(
-            self.VAE.parameters(), lr=self.lr_vae, betas=(0.9, 0.999))
+            self.VAE.parameters(), lr=self.lr, betas=(0.9, 0.999))
         vae_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            vae_optimizer, gamma=self.lr_decay_vae)
+            vae_optimizer, gamma=self.lr_decay)
         return [vae_optimizer], [vae_scheduler]
 
 

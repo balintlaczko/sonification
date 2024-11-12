@@ -36,7 +36,7 @@ def main():
                         default=2, help='image color channels')
     parser.add_argument('--latent_size', type=int,
                         default=32, help='latent size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[64, 128, 256, 512],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[8, 16, 32, 64],
                         help='channels for the layers')
 
     # training
@@ -46,7 +46,7 @@ def main():
                         default=64, help='batch size')
     parser.add_argument('--lr', type=float, default=1e-2,
                         help='learning rate for the vae')
-    parser.add_argument('--lr_decay', type=float, default=0.9999)
+    parser.add_argument('--lr_decay', type=float, default=0.9999999)
 
     # recon loss
     parser.add_argument('--recon_weight', type=float, default=1,
@@ -55,7 +55,7 @@ def main():
                         help='target recon loss to keep in case of dynamic kld')
     parser.add_argument('--stop_on_target_recon_loss', type=int, default=0,
                         help='non-zero will stop training if the recon loss is below target_recon_loss')
-    
+
     # kld loss
     parser.add_argument('--dynamic_kld', type=int, default=0,
                         help='non-zero will use dynamic kld')
@@ -115,11 +115,12 @@ def main():
 
     # create train and val dataloaders
     train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, prefetch_factor=2, persistent_workers=True,)
+        train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=2, prefetch_factor=2, persistent_workers=True,)
     val_loader = DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, pin_memory=True, num_workers=4, prefetch_factor=2, persistent_workers=True,)
+        val_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, pin_memory=True, num_workers=2, prefetch_factor=2, persistent_workers=True,)
 
     # create the model
+    args.img_size = args.patch_size
     model = PlVAE(args)
 
     # checkpoint callbacks
@@ -152,6 +153,8 @@ def main():
                    last_checkpoint_callback],
         logger=wandb_logger,
         log_every_n_steps=1,
+        # limit_train_batches=1,
+        # limit_val_batches=1,
     )
 
     hyperparameters = dict(

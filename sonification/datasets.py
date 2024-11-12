@@ -61,8 +61,8 @@ class CellularDataset(Dataset):
         self.n_patches_per_img = (
             (self.img_size - self.kernel_size) // self.stride)**2 + 1
         self.idx2yx = []
-        for i in range(0, self.img_size - self.kernel_size, self.stride):
-            for j in range(0, self.img_size - self.kernel_size, self.stride):
+        for i in range(0, self.img_size - self.kernel_size - 1, self.stride):
+            for j in range(0, self.img_size - self.kernel_size - 1, self.stride):
                 self.idx2yx.append((i, j))
         self.n_patches_per_img = len(self.idx2yx)
 
@@ -101,16 +101,18 @@ class CellularDataset(Dataset):
         return patch_r, patch_g
 
     def __len__(self):
-        return len(self.df) * self.n_patches_per_img
+        # return len(self.df) * self.n_patches_per_img
+        return len(self.df)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        img_idx = idx // self.n_patches_per_img
-        patch_idx = idx % self.n_patches_per_img
+        # img_idx = idx // self.n_patches_per_img
+        # patch_idx = idx % self.n_patches_per_img
 
         # get the image paths
-        row = self.df.iloc[img_idx]
+        # row = self.df.iloc[img_idx]
+        row = self.df.iloc[idx]
         img_path_r = os.path.join(self.root_dir, row.path_r)
         img_path_g = os.path.join(self.root_dir, row.path_g)
 
@@ -118,13 +120,14 @@ class CellularDataset(Dataset):
         img_r = cv2.imread(img_path_r, cv2.IMREAD_UNCHANGED)
         img_g = cv2.imread(img_path_g, cv2.IMREAD_UNCHANGED)
 
-        # get the patch coordinates
-        y, x = self.idx2yx[patch_idx]
-        patch_r = img_r[y:y+self.kernel_size, x:x+self.kernel_size]
-        patch_g = img_g[y:y+self.kernel_size, x:x+self.kernel_size]
+        # # get the patch coordinates
+        # y, x = self.idx2yx[patch_idx]
+        # patch_r = img_r[y:y+self.kernel_size, x:x+self.kernel_size]
+        # patch_g = img_g[y:y+self.kernel_size, x:x+self.kernel_size]
 
         # scale the patches
-        patch_r, patch_g = self.scale(patch_r, patch_g)
+        # patch_r, patch_g = self.scale(patch_r, patch_g)
+        patch_r, patch_g = self.scale(img_r, img_g)
 
         # stack the patches
         patch = np.stack([patch_r, patch_g], axis=2)
@@ -330,10 +333,10 @@ class Sinewave_dataset(Dataset):
         # average time dimension
         mel_spec_avg = mel_spec.mean(dim=2, keepdim=True)
         mel_spec_avg_db = amplitude_to_DB(
-            mel_spec_avg, 
-            multiplier=10 if self.power == 2 else 20, 
-            amin=1e-5, 
-            db_multiplier=20, 
+            mel_spec_avg,
+            multiplier=10 if self.power == 2 else 20,
+            amin=1e-5,
+            db_multiplier=20,
             top_db=80)
         # mel_spec_avg_db = 20 * torch.log10(mel_spec_avg + 1e-5)
         # mel_spec_avg_db = mel_spec_avg
