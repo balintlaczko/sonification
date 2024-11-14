@@ -21,7 +21,7 @@ def main():
 
     # root path
     parser.add_argument('--root_path', type=str,
-                        default=r'C:\Users\Balint Laczko\Desktop\work\Sonification\CELLULAR\images', help='root path')
+                        default=r'/home/balint/cellular/images', help='root path')
 
     # dataset
     parser.add_argument('--csv_path', type=str,
@@ -36,7 +36,7 @@ def main():
                         default=2, help='image color channels')
     parser.add_argument('--latent_size', type=int,
                         default=32, help='latent size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[8, 16, 32, 64, 128],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[8, 16, 32, 64, 128, 256],
                         help='channels for the layers')
 
     # training
@@ -80,7 +80,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/cellular', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='cellular-v2', help='checkpoint name')
+                        default='cellular-v3', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -117,7 +117,7 @@ def main():
 
     # create train and val dataloaders
     train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=2, prefetch_factor=2, persistent_workers=True,)
+        train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, prefetch_factor=2, persistent_workers=True,)
     val_loader = DataLoader(
         val_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=2, prefetch_factor=2, persistent_workers=True,)
 
