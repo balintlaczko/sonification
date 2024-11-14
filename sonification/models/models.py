@@ -187,6 +187,8 @@ class PlVAE(LightningModule):
         self.last_recon_loss = float("inf")  # initialize to infinity
         self.kld_scale = args.kld_weight_min  # just init for sanity check
 
+        self.max_patches_per_batch = args.max_patches_per_batch
+
         # learning rates
         self.lr = args.lr
         self.lr_decay = args.lr_decay
@@ -224,7 +226,12 @@ class PlVAE(LightningModule):
 
         # loop through all patches in the images
         vae_loss = None
-        for idx, yx in enumerate(tqdm(dataset.idx2yx)):
+        # shuffle dataset.idx2yx
+        yx_shuffled = dataset.idx2yx.copy()
+        np.random.shuffle(yx_shuffled)
+        # cap it if necessary
+        yx_shuffled = yx_shuffled[:self.max_patches_per_batch]
+        for idx, yx in enumerate(tqdm(yx_shuffled)):
             y, x = yx
             # get the patch
             x_1_patch = x_1[:, :, y:y+self.input_size,
@@ -265,16 +272,16 @@ class PlVAE(LightningModule):
             # LR scheduler step
             vae_scheduler.step()
 
-            # log the losses
-            self.last_recon_loss = vae_recon_loss.item()
-            self.log_dict({
-                "vae_loss": vae_loss,
-                "vae_recon_loss": vae_recon_loss,
-                "vae_kld_loss": kld_loss,
-                "kld_scale": self.kld_scale,
-            })
-            if self.args.dynamic_kld > 0:
-                self.log_dict({"kld_scale": kld_scale})
+        # log the losses
+        self.last_recon_loss = vae_recon_loss.item()
+        self.log_dict({
+            "vae_loss": vae_loss,
+            "vae_recon_loss": vae_recon_loss,
+            "vae_kld_loss": kld_loss,
+            "kld_scale": self.kld_scale,
+        })
+        if self.args.dynamic_kld > 0:
+            self.log_dict({"kld_scale": kld_scale})
 
     def validation_step(self, batch, batch_idx):
         self.VAE.eval()
@@ -287,7 +294,12 @@ class PlVAE(LightningModule):
 
         # loop through all patches in the images
         vae_loss = None
-        for idx, yx in enumerate(tqdm(dataset.idx2yx)):
+        # shuffle dataset.idx2yx
+        yx_shuffled = dataset.idx2yx.copy()
+        np.random.shuffle(yx_shuffled)
+        # cap it if necessary
+        yx_shuffled = yx_shuffled[:self.max_patches_per_batch]
+        for idx, yx in enumerate(tqdm(yx_shuffled)):
             y, x = yx
             # get the patch
             x_1_patch = x_1[:, :, y:y+self.input_size,

@@ -36,20 +36,22 @@ def main():
                         default=2, help='image color channels')
     parser.add_argument('--latent_size', type=int,
                         default=32, help='latent size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[8, 16, 32, 64],
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[8, 16, 32, 64, 128],
                         help='channels for the layers')
 
     # training
     parser.add_argument('--train_epochs', type=int,
                         default=1000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
-                        default=64, help='batch size')
-    parser.add_argument('--lr', type=float, default=1e-2,
+                        default=32, help='batch size')
+    parser.add_argument('--max_patches_per_batch', type=int, default=1000,
+                        help='max number of patches to sample from an image. If -1 all patches will be sampled')
+    parser.add_argument('--lr', type=float, default=1e-3,
                         help='learning rate for the vae')
     parser.add_argument('--lr_decay', type=float, default=0.9999999)
 
     # recon loss
-    parser.add_argument('--recon_weight', type=float, default=1,
+    parser.add_argument('--recon_weight', type=float, default=1000,
                         help='reconstruction weight')
     parser.add_argument('--target_recon_loss', type=float, default=0.01,
                         help='target recon loss to keep in case of dynamic kld')
@@ -62,12 +64,12 @@ def main():
     parser.add_argument('--dynamic_kld_increment', type=float, default=0.000005,
                         help="in dynamic kld mode, increment the kld this much after every epoch when recon loss is below target")
     parser.add_argument('--kld_weight_max', type=float,
-                        default=0.1, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.01,
+                        default=0.01, help='kld weight at the end of the warmup')
+    parser.add_argument('--kld_weight_min', type=float, default=0.001,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
-    parser.add_argument('--kld_warmup_epochs', type=int, default=1000,
+    parser.add_argument('--kld_warmup_epochs', type=int, default=1,
                         help='the number of epochs to warmup the kld weight')
 
     # GPU
@@ -78,7 +80,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/cellular', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='cellular-v1', help='checkpoint name')
+                        default='cellular-v2', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -117,7 +119,7 @@ def main():
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=2, prefetch_factor=2, persistent_workers=True,)
     val_loader = DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, pin_memory=True, num_workers=2, prefetch_factor=2, persistent_workers=True,)
+        val_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=2, prefetch_factor=2, persistent_workers=True,)
 
     # create the model
     args.img_size = args.patch_size
@@ -153,13 +155,14 @@ def main():
                    last_checkpoint_callback],
         logger=wandb_logger,
         log_every_n_steps=1,
-        # limit_train_batches=1,
-        # limit_val_batches=1,
+        limit_train_batches=10,
+        limit_val_batches=2,
     )
 
     hyperparameters = dict(
         img_size=args.img_size,
         patch_size=args.patch_size,
+        max_patches_per_batch=args.max_patches_per_batch,
         in_channels=args.in_channels,
         latent_size=args.latent_size,
         layers_channels=args.layers_channels,
