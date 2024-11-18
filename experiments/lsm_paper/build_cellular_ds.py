@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 
 # process an image
 
-def process_image(root_path, image_paths_rg, kernel_size=256, stride=10):
+def process_image(root_path, image_paths_rg, kernel_size=128, stride=64):
     img_path_r, img_path_g = image_paths_rg
     # load images as 16-bit grayscale
     img_r = cv2.imread(os.path.join(root_path, img_path_r),
@@ -27,7 +27,7 @@ def process_image(root_path, image_paths_rg, kernel_size=256, stride=10):
 
 
 if __name__ == '__main__':
-    root_path = r'C:\Users\Balint Laczko\Desktop\work\Sonification\CELLULAR\images'
+    root_path = '/home/balint/cellular/images'
     # get all image paths
     image_paths = [img for img in os.listdir(
         root_path) if img.endswith(".TIF")]

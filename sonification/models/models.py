@@ -177,6 +177,7 @@ class PlVAE(LightningModule):
         self.mse = nn.MSELoss()
         self.kld = kld_loss
         self.recon_weight = args.recon_weight
+        self.red_ch_weight = args.red_ch_weight
         self.target_recon_loss = args.target_recon_loss
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
@@ -188,10 +189,12 @@ class PlVAE(LightningModule):
         self.kld_scale = args.kld_weight_min  # just init for sanity check
 
         self.max_patches_per_batch = args.max_patches_per_batch
+        self.n_train_batches = args.n_train_batches
 
         # learning rates
         self.lr = args.lr
         self.lr_decay = args.lr_decay
+        self.lr_scheduler_patience = args.lr_scheduler_patience
 
         # logging
         self.plot_interval = args.plot_interval
@@ -241,7 +244,18 @@ class PlVAE(LightningModule):
             x_recon, mean, logvar, z = self.VAE(x_1_patch)
 
             # VAE reconstruction loss
-            vae_recon_loss = self.mse(x_recon, x_1_patch)
+            x_recon_r, x_recon_g = x_recon[:, 0, ...], x_recon[:, 1, ...]
+            # add back removed axis
+            x_recon_r = x_recon_r.unsqueeze(1)
+            x_recon_g = x_recon_g.unsqueeze(1)
+            x_1_patch_r, x_1_patch_g = x_1_patch[:, 0, ...], x_1_patch[:, 1, ...]
+            x_1_patch_r = x_1_patch_r.unsqueeze(1)
+            x_1_patch_g = x_1_patch_g.unsqueeze(1)
+
+            vae_recon_loss_r = self.mse(x_recon_r, x_1_patch_r)
+            vae_recon_loss_g = self.mse(x_recon_g, x_1_patch_g)
+            # vae_recon_loss = self.mse(x_recon, x_1_patch)
+            vae_recon_loss = vae_recon_loss_r * self.red_ch_weight + vae_recon_loss_g
             scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
 
             # VAE KLD loss
@@ -263,14 +277,14 @@ class PlVAE(LightningModule):
             # VAE backward pass
             vae_optimizer.zero_grad()
             self.manual_backward(vae_loss)
-            # self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
-            #                     gradient_clip_algorithm="norm")
+            self.clip_gradients(vae_optimizer, gradient_clip_val=0.5,
+                                gradient_clip_algorithm="norm")
 
             # Optimizer step
             vae_optimizer.step()
 
             # LR scheduler step
-            vae_scheduler.step()
+            vae_scheduler.step(vae_loss)
 
         # log the losses
         self.last_recon_loss = vae_recon_loss.item()
@@ -279,6 +293,7 @@ class PlVAE(LightningModule):
             "vae_recon_loss": vae_recon_loss,
             "vae_kld_loss": kld_loss,
             "kld_scale": self.kld_scale,
+            "lr": vae_optimizer.param_groups[0]["lr"],
         })
         if self.args.dynamic_kld > 0:
             self.log_dict({"kld_scale": kld_scale})
@@ -309,7 +324,19 @@ class PlVAE(LightningModule):
             x_recon, mean, logvar, z = self.VAE(x_1_patch)
 
             # VAE reconstruction loss
-            vae_recon_loss = self.mse(x_recon, x_1_patch)
+            # print(x_recon.shape, x_recon[:, 0, ...].shape)
+            x_recon_r, x_recon_g = x_recon[:, 0, ...], x_recon[:, 1, ...]
+            # add back removed axis
+            x_recon_r = x_recon_r.unsqueeze(1)
+            x_recon_g = x_recon_g.unsqueeze(1)
+            x_1_patch_r, x_1_patch_g = x_1_patch[:, 0, ...], x_1_patch[:, 1, ...]
+            x_1_patch_r = x_1_patch_r.unsqueeze(1)
+            x_1_patch_g = x_1_patch_g.unsqueeze(1)
+
+            vae_recon_loss_r = self.mse(x_recon_r, x_1_patch_r)
+            vae_recon_loss_g = self.mse(x_recon_g, x_1_patch_g)
+            # vae_recon_loss = self.mse(x_recon, x_1_patch)
+            vae_recon_loss = vae_recon_loss_r * self.red_ch_weight + vae_recon_loss_g
             scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
 
             # VAE KLD loss
@@ -440,8 +467,8 @@ class PlVAE(LightningModule):
     def configure_optimizers(self):
         vae_optimizer = torch.optim.Adam(
             self.VAE.parameters(), lr=self.lr, betas=(0.9, 0.999))
-        vae_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            vae_optimizer, gamma=self.lr_decay)
+        vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            vae_optimizer, mode="min", factor=self.lr_decay, patience=self.lr_scheduler_patience * self.max_patches_per_batch * self.n_train_batches, verbose=True)
         return [vae_optimizer], [vae_scheduler]
 
 

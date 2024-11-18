@@ -21,7 +21,7 @@ def main():
 
     # root path
     parser.add_argument('--root_path', type=str,
-                        default=r'/home/balint/cellular/images', help='root path')
+                        default='/home/balint/cellular/images', help='root path')
 
     # dataset
     parser.add_argument('--csv_path', type=str,
@@ -29,14 +29,14 @@ def main():
     parser.add_argument('--img_size', type=int,
                         default=2048, help='image size')
     parser.add_argument('--patch_size', type=int,
-                        default=256, help='size of an image patch')
+                        default=128, help='size of an image patch')
 
     # model
     parser.add_argument('--in_channels', type=int,
                         default=2, help='image color channels')
     parser.add_argument('--latent_size', type=int,
-                        default=32, help='latent size')
-    parser.add_argument('--layers_channels', type=int, nargs='*', default=[8, 16, 32, 64, 128, 256],
+                        default=128, help='latent size')
+    parser.add_argument('--layers_channels', type=int, nargs='*', default=[256, 256, 256, 256, 256, 256],
                         help='channels for the layers')
 
     # training
@@ -44,28 +44,36 @@ def main():
                         default=1000000, help='number of training epochs')
     parser.add_argument('--batch_size', type=int,
                         default=32, help='batch size')
-    parser.add_argument('--max_patches_per_batch', type=int, default=1000,
+    parser.add_argument('--n_train_batches', type=int, default=1000,
+                        help='number of batches to train on')
+    parser.add_argument('--n_val_batches', type=int, default=200,
+                        help='number of batches to validate on')
+    parser.add_argument('--max_patches_per_batch', type=int, default=10,
                         help='max number of patches to sample from an image. If -1 all patches will be sampled')
-    parser.add_argument('--lr', type=float, default=1e-3,
+    parser.add_argument('--lr', type=float, default=1e-2,
                         help='learning rate for the vae')
-    parser.add_argument('--lr_decay', type=float, default=0.9999999)
+    parser.add_argument('--lr_decay', type=float, default=0.5,)
+    parser.add_argument('--lr_scheduler_patience', type=int, default=20,
+                        help='patience for the lr scheduler')
 
     # recon loss
-    parser.add_argument('--recon_weight', type=float, default=1000,
+    parser.add_argument('--recon_weight', type=float, default=10000,
                         help='reconstruction weight')
-    parser.add_argument('--target_recon_loss', type=float, default=0.01,
+    parser.add_argument('--red_ch_weight', type=float, default=20.0,
+                        help="the red channel's weight compared to the green")
+    parser.add_argument('--target_recon_loss', type=float, default=1e-5,
                         help='target recon loss to keep in case of dynamic kld')
     parser.add_argument('--stop_on_target_recon_loss', type=int, default=0,
                         help='non-zero will stop training if the recon loss is below target_recon_loss')
 
     # kld loss
-    parser.add_argument('--dynamic_kld', type=int, default=0,
+    parser.add_argument('--dynamic_kld', type=int, default=1,
                         help='non-zero will use dynamic kld')
     parser.add_argument('--dynamic_kld_increment', type=float, default=0.000005,
                         help="in dynamic kld mode, increment the kld this much after every epoch when recon loss is below target")
     parser.add_argument('--kld_weight_max', type=float,
-                        default=0.01, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.001,
+                        default=1, help='kld weight at the end of the warmup')
+    parser.add_argument('--kld_weight_min', type=float, default=0.01,
                         help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0,
                         help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
@@ -80,7 +88,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str,
                         default='./ckpt/cellular', help='checkpoint path')
     parser.add_argument('--ckpt_name', type=str,
-                        default='cellular-v3', help='checkpoint name')
+                        default='cellular-v16', help='checkpoint name')
     parser.add_argument('--resume_ckpt_path', type=str,
                         default=None,)
     parser.add_argument(
@@ -88,7 +96,7 @@ def main():
     parser.add_argument('--plot_interval', type=int, default=1)
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='first attempt',
+    parser.add_argument('--comment', type=str, default='smaller patches, 10 patches per batch',
                         help='add a comment if needed')
 
     args = parser.parse_args()
@@ -113,13 +121,12 @@ def main():
     val_dataset.r_max = train_dataset.r_max
     val_dataset.g_min = train_dataset.g_min
     val_dataset.g_max = train_dataset.g_max
-    # TODO: add val dataset + loader, continue rewriting from here
 
     # create train and val dataloaders
     train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, prefetch_factor=2, persistent_workers=True,)
+        train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=8, prefetch_factor=2, persistent_workers=True,)
     val_loader = DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=2, prefetch_factor=2, persistent_workers=True,)
+        val_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, pin_memory=True, num_workers=8, prefetch_factor=2, persistent_workers=True,)
 
     # create the model
     args.img_size = args.patch_size
@@ -155,8 +162,8 @@ def main():
                    last_checkpoint_callback],
         logger=wandb_logger,
         log_every_n_steps=1,
-        limit_train_batches=10,
-        limit_val_batches=2,
+        limit_train_batches=args.n_train_batches,
+        limit_val_batches=args.n_val_batches,
     )
 
     hyperparameters = dict(
@@ -168,7 +175,12 @@ def main():
         layers_channels=args.layers_channels,
         lr=args.lr,
         lr_decay=args.lr_decay,
+        lr_scheduler_patience=args.lr_scheduler_patience,
+        batch_size=args.batch_size,
+        n_train_batches=args.n_train_batches,
+        n_val_batches=args.n_val_batches,
         recon_weight=args.recon_weight,
+        red_ch_weight=args.red_ch_weight,
         target_recon_loss=args.target_recon_loss,
         dynamic_kld=args.dynamic_kld,
         dynamic_kld_increment=args.dynamic_kld_increment,
