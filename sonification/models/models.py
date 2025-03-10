@@ -2,10 +2,13 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from .layers import LinearEncoder, LinearDecoder, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearCritique, LinearCritique_w_dropout, LinearProjector, LinearDiscriminator_w_dropout
+from .layers import LinearEncoder, LinearDecoder, MLP, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
+from .ddsp import FMSynth
+from torchaudio.transforms import MelSpectrogram
 from lightning.pytorch import LightningModule
-from ..utils.tensor import permute_dims
+from ..utils.tensor import permute_dims, midi2frequency, scale
 from ..utils.misc import kl_scheduler, ema
+from ..utils.dsp import seconds2samples
 from .loss import kld_loss, latent_consistency_loss
 import matplotlib.pyplot as plt
 import os
@@ -15,6 +18,7 @@ import numpy as np
 # import pca from sklearn
 from sklearn.decomposition import PCA
 from tqdm import tqdm
+from auraloss.freq import MultiResolutionSTFTLoss
 
 
 class AE(nn.Module):
@@ -1306,4 +1310,200 @@ class PlMapper(LightningModule):
             self.model.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ExponentialLR(
             optimizer, gamma=self.lr_decay)
+        return [optimizer], [scheduler]
+
+
+class FMParamEstimator(nn.Module):
+    def __init__(
+            self,
+            latent_size=128,
+            input_dim_h=64,
+            input_dim_w=29,
+            n_res_block=2,
+            n_res_channel=32,
+            hidden_dim=512,
+            num_layers=2,
+            stride=4,
+            ):
+        super(FMParamEstimator, self).__init__()
+
+        self.encoder = MultiScaleEncoder(
+            in_channel=1,
+            channel=latent_size,
+            n_res_block=n_res_block,
+            n_res_channel=n_res_channel,
+            stride=stride,
+            kernels=[4, 4],
+            input_dim_h=input_dim_h,
+            input_dim_w=input_dim_w,
+        )
+        self.mlp = MLP(
+            input_dim=latent_size * (input_dim_h // stride) * (input_dim_w // stride),
+            hidden_dim=hidden_dim,
+            output_dim=3, # the 3 FM params
+            num_layers=num_layers,
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = x.view(x.size(0), -1)
+        x = self.mlp(x)
+        return x
+
+
+
+class PlFMParamEstimator(LightningModule):
+    def __init__(self, args):
+        super(PlFMParamEstimator, self).__init__()
+        # Important: This property activates manual optimization.
+        self.automatic_optimization = False
+        self.save_hyperparameters()
+
+        self.sr = args.sr
+        self.batch_size = args.batch_size
+        self.lr = args.lr
+        self.lr_decay = args.lr_decay
+        self.param_loss_weight = args.param_loss_weight
+        self.length_s = args.length_s
+        print("length_s:", self.length_s)
+        self.n_samples = seconds2samples(self.length_s, self.sr)
+        print("n_samples:", self.n_samples)
+        self.n_fft = args.n_fft
+        print("n_fft:", self.n_fft)
+        self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
+        print("spectrogram_w:", self.spectrogram_w)
+        self.max_harm_ratio = args.max_harm_ratio
+        self.max_mod_idx = args.max_mod_idx
+
+        # models
+        self.input_synth = FMSynth(sr=self.sr)
+        self.input_synth.eval()
+        self.mel_spectrogram = MelSpectrogram(
+            sample_rate=self.sr,
+            n_fft=self.n_fft,
+            f_min=args.f_min,
+            f_max=args.f_max,
+            n_mels=args.n_mels,
+            power=args.power,
+            normalized=args.normalized,
+        )
+        self.model = FMParamEstimator(
+            latent_size=args.latent_size,
+            input_dim_h=args.n_mels,
+            input_dim_w=self.spectrogram_w,
+            hidden_dim=args.hidden_dim,
+            n_res_block=args.n_res_block,
+            n_res_channel=args.n_res_channel,
+            num_layers=args.num_layers,
+            stride=4,
+        )
+        self.output_synth = FMSynth(sr=self.sr)
+
+        # mss loss
+        # define the loss function
+        self.mss_loss = MultiResolutionSTFTLoss(
+            fft_sizes=[1024, 2048],
+            hop_sizes=[256, 512],
+            win_lengths=[1024, 2048],
+            scale="mel",
+            n_bins=128,
+            sample_rate=self.sr,
+            perceptual_weighting=True,
+        )
+        self.mss_loss.eval()
+
+
+    def sample_fm_params(self, batch_size):
+        pitches_norm = torch.rand(batch_size)
+        pitches = scale(pitches_norm, 0, 1, 38, 86)
+        freqs = midi2frequency(pitches)
+        ratios_norm = torch.rand(batch_size)
+        ratios = scale(ratios_norm, 0, 1, 0, self.max_harm_ratio)
+        indices_norm = torch.rand(batch_size)
+        indices = scale(indices_norm, 0, 1, 0, self.max_mod_idx)
+        # stack norm params together
+        norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1).to(self.device)
+        # now repeat on the samples dimension
+        freqs = freqs.unsqueeze(1).repeat(1, self.n_samples).to(self.device)
+        ratios = ratios.unsqueeze(1).repeat(1, self.n_samples).to(self.device)
+        indices = indices.unsqueeze(1).repeat(1, self.n_samples).to(self.device)
+        return norm_params, freqs, ratios, indices
+    
+
+    def scale_predicted_params(self, predicted_params):
+        # separate the param dim
+        pitches = predicted_params[:, 0]
+        ratios = predicted_params[:, 1]
+        indices = predicted_params[:, 2]
+        # clamp everything to 0..1
+        pitches = torch.clamp(pitches, 0, 1)
+        ratios = torch.clamp(ratios, 0, 1)
+        indices = torch.clamp(indices, 0, 1)
+        # scale to the correct range
+        pitches = scale(pitches, 0, 1, 38, 86)
+        freqs = midi2frequency(pitches)
+        ratios = scale(ratios, 0, 1, 0, self.max_harm_ratio)
+        indices = scale(indices, 0, 1, 0, self.max_mod_idx)
+        # re-stack them
+        out = torch.cat([freqs.unsqueeze(1), ratios.unsqueeze(1), indices.unsqueeze(1)], dim=1)
+        return out
+
+
+    def forward(self, x):
+        x = self.mel_spectrogram(x)
+        return self.model(x)
+
+
+    def training_step(self, batch, batch_idx):
+        self.model.train()
+
+        # get the optimizer and scheduler
+        optimizer = self.optimizers()
+        scheduler = self.lr_schedulers()
+
+        # get the batch
+        norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
+        x = self.input_synth(freqs, ratios, indices).detach()
+        in_wf = x.unsqueeze(1)
+
+        # forward pass
+        in_spec = self.mel_spectrogram(in_wf)
+        norm_predicted_params = self.model(in_spec)
+        # scale the predicted params
+        predicted_params = self.scale_predicted_params(norm_predicted_params)
+        # now repeat on the samples dimension
+        predicted_freqs = predicted_params[:, 0].unsqueeze(1).repeat(1, self.n_samples)
+        predicted_ratios = predicted_params[:, 1].unsqueeze(1).repeat(1, self.n_samples)
+        predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.n_samples)
+
+        # generate the output
+        y = self.output_synth(predicted_freqs, predicted_ratios, predicted_indices)
+        out_wf = y.unsqueeze(1)
+
+        # loss: MSS + param loss
+        # param loss
+        param_loss = F.mse_loss(norm_predicted_params, norm_params.detach())
+        # mss loss
+        mss_loss = self.mss_loss(in_wf, out_wf)
+        loss = (param_loss * self.param_loss_weight) + mss_loss
+
+        # backward pass
+        optimizer.zero_grad()
+        self.manual_backward(loss)
+        optimizer.step()
+        scheduler.step(loss.item())
+
+        # log losses
+        self.log_dict({
+            "train_loss": loss,
+            "param_loss": param_loss,
+            "mss_loss": mss_loss,
+            "lr": scheduler.get_last_lr()[0],
+        })
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=self.lr)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min', factor=self.lr_decay, patience=4000, verbose=True)
         return [optimizer], [scheduler]
