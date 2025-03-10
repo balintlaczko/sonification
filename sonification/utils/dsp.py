@@ -1,6 +1,5 @@
 import numpy as np
 from numba import jit, njit, prange
-import torch
 import cv2
 import librosa
 import scipy.io.wavfile as wav
