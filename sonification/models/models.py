@@ -1365,13 +1365,9 @@ class PlFMParamEstimator(LightningModule):
         self.lr_decay = args.lr_decay
         self.param_loss_weight = args.param_loss_weight
         self.length_s = args.length_s
-        print("length_s:", self.length_s)
         self.n_samples = seconds2samples(self.length_s, self.sr)
-        print("n_samples:", self.n_samples)
         self.n_fft = args.n_fft
-        print("n_fft:", self.n_fft)
         self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
-        print("spectrogram_w:", self.spectrogram_w)
         self.max_harm_ratio = args.max_harm_ratio
         self.max_mod_idx = args.max_mod_idx
 
@@ -1385,7 +1381,7 @@ class PlFMParamEstimator(LightningModule):
             f_max=args.f_max,
             n_mels=args.n_mels,
             power=args.power,
-            normalized=args.normalized,
+            normalized=args.normalized > 0,
         )
         self.model = FMParamEstimator(
             latent_size=args.latent_size,
