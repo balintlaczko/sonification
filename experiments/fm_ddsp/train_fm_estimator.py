@@ -18,6 +18,7 @@ def main():
 
     parser = argparse.ArgumentParser()
 
+    # audio params
     parser.add_argument("--sr", type=int, default=48000)
     parser.add_argument("--length_s", type=float, default=0.25)
     parser.add_argument("--n_fft", type=int, default=2048)
@@ -26,19 +27,22 @@ def main():
     parser.add_argument("--n_mels", type=int, default=512)
     parser.add_argument("--power", type=float, default=0.5)
     parser.add_argument("--normalized", type=int, default=1)
+    parser.add_argument("--max_harm_ratio", type=int, default=6)
+    parser.add_argument("--max_mod_idx", type=int, default=6)
+    # model params
     parser.add_argument("--latent_size", type=int, default=128)
+    parser.add_argument("--encoder_kernels", type=list, default=[4, 8])
     parser.add_argument("--n_res_block", type=int, default=12)
     parser.add_argument("--n_res_channel", type=int, default=32)
     parser.add_argument("--hidden_dim", type=int, default=64)
     parser.add_argument("--num_layers", type=int, default=3)
+    # training params
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--lr_decay", type=float, default=0.5)
     parser.add_argument("--train_epochs", type=int, default=100)
     parser.add_argument("--steps_per_epoch", type=int, default=1000)
     parser.add_argument("--param_loss_weight", type=int, default=8)
-    parser.add_argument("--max_harm_ratio", type=int, default=6)
-    parser.add_argument("--max_mod_idx", type=int, default=6)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
     parser.add_argument("--ckpt_name", type=str, default="wandb_test")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")

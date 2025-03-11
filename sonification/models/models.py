@@ -1317,6 +1317,7 @@ class FMParamEstimator(nn.Module):
     def __init__(
             self,
             latent_size=128,
+            encoder_kernels=[4, 4],
             input_dim_h=64,
             input_dim_w=29,
             n_res_block=2,
@@ -1333,7 +1334,7 @@ class FMParamEstimator(nn.Module):
             n_res_block=n_res_block,
             n_res_channel=n_res_channel,
             stride=stride,
-            kernels=[4, 4],
+            kernels=encoder_kernels,
             input_dim_h=input_dim_h,
             input_dim_w=input_dim_w,
         )
@@ -1385,6 +1386,7 @@ class PlFMParamEstimator(LightningModule):
         )
         self.model = FMParamEstimator(
             latent_size=args.latent_size,
+            encoder_kernels=args.encoder_kernels,
             input_dim_h=args.n_mels,
             input_dim_w=self.spectrogram_w,
             hidden_dim=args.hidden_dim,
@@ -1402,7 +1404,7 @@ class PlFMParamEstimator(LightningModule):
             hop_sizes=[256, 512],
             win_lengths=[1024, 2048],
             scale="mel",
-            n_bins=128,
+            n_bins=args.n_mels,
             sample_rate=self.sr,
             perceptual_weighting=True,
         )
