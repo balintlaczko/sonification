@@ -92,7 +92,33 @@ def main():
     )
 
     # save hyperparameters
-    hyperparams = vars(args)
+    hyperparams = dict(
+        sr=args.sr,
+        length_s=args.length_s,
+        n_fft=args.n_fft,
+        f_min=args.f_min,
+        f_max=args.f_max,
+        n_mels=args.n_mels,
+        power=args.power,
+        normalized=args.normalized,
+        latent_size=args.latent_size,
+        n_res_block=args.n_res_block,
+        n_res_channel=args.n_res_channel,
+        hidden_dim=args.hidden_dim,
+        num_layers=args.num_layers,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        lr_decay=args.lr_decay,
+        train_epochs=args.train_epochs,
+        steps_per_epoch=args.steps_per_epoch,
+        param_loss_weight=args.param_loss_weight,
+        max_harm_ratio=args.max_harm_ratio,
+        max_mod_idx=args.max_mod_idx,
+        ckpt_path=args.ckpt_path,
+        ckpt_name=args.ckpt_name,
+        logdir=args.logdir,
+        comment=args.comment
+    )
     trainer.logger.log_hyperparams(hyperparams)
 
     # train model
