@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--max_mod_idx", type=int, default=6)
     # model params
     parser.add_argument("--latent_size", type=int, default=128)
-    parser.add_argument("--encoder_kernels", type=list, default=[4, 8])
+    parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[4, 8])
     parser.add_argument("--n_res_block", type=int, default=12)
     parser.add_argument("--n_res_channel", type=int, default=32)
     parser.add_argument("--hidden_dim", type=int, default=64)
