@@ -1467,7 +1467,11 @@ class PlFMParamEstimator(LightningModule):
         in_wf = x.unsqueeze(1)
 
         # forward pass
+        # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf)
+        # normalize it
+        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # predict the params
         norm_predicted_params = self.model(in_spec)
         # scale the predicted params
         predicted_params = self.scale_predicted_params(norm_predicted_params)

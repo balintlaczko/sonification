@@ -21,18 +21,18 @@ class Args:
 
 args = Args()
 args.sr = 48000
-args.length_s = 0.5
+args.length_s = 0.25
 args.n_fft = 2048
 args.f_min = midi2frequency(38)
 args.f_max = midi2frequency(86)
 args.n_mels = 512
-args.power = 2.0
+args.power = 0.5
 args.normalized = True
-args.latent_size = 64
-args.n_res_block = 8
+args.latent_size = 128
+args.n_res_block = 12
 args.n_res_channel = 32
 args.hidden_dim = 64
-args.num_layers = 8
+args.num_layers = 3
 args.batch_size = 512
 args.lr = 1e-4
 args.lr_decay = 0.5
