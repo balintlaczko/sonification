@@ -1404,7 +1404,7 @@ class PlFMParamEstimator(LightningModule):
             hop_sizes=[256, 512],
             win_lengths=[1024, 2048],
             scale="mel",
-            n_bins=args.n_mels,
+            n_bins=128,
             sample_rate=self.sr,
             perceptual_weighting=True,
         )
