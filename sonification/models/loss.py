@@ -2,7 +2,6 @@ import torch
 from torch import nn
 from torch import Tensor
 import torch.nn.functional as F
-from ..utils.misc import quickSort
 
 # taken from https://github.com/1Konny/FactorVAE/blob/master/ops.py
 
