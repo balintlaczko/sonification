@@ -106,6 +106,7 @@ def main():
         power=args.power,
         normalized=args.normalized,
         latent_size=args.latent_size,
+        encoder_kernels=args.encoder_kernels,
         n_res_block=args.n_res_block,
         n_res_channel=args.n_res_channel,
         hidden_dim=args.hidden_dim,
