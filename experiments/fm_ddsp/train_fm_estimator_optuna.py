@@ -11,6 +11,7 @@ from sonification.utils.misc import midi2frequency
 from torch.utils.data import DataLoader
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
+import wandb
 
 def objective(trial: optuna.trial.Trial) -> float:
 
@@ -57,16 +58,16 @@ def objective(trial: optuna.trial.Trial) -> float:
         batch_size=batch_size,
         lr=lr,
         lr_decay=0.5,
-        train_epochs=50,
-        steps_per_epoch=1000,
+        train_epochs=2,
+        steps_per_epoch=200,
         param_loss_weight=param_loss_weight,
         ckpt_path="./ckpt/fm_ddsp-optuna",
-        ckpt_name=f"optuna_trial_{str(trial.number).zfill(4)}",
+        ckpt_name=f"optuna_trial_{str(trial.number).zfill(3)}",
         logdir="./logs/fm_ddsp-optuna",
         comment=""
     )
 
-# a dummy dataloader
+    # a dummy dataloader
     dataloader = DataLoader(
         range(args.steps_per_epoch * args.batch_size),
         batch_size=args.batch_size,
@@ -81,7 +82,7 @@ def objective(trial: optuna.trial.Trial) -> float:
     best_checkpoint_callback = ModelCheckpoint(
         monitor="train_loss",
         dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_val_{epoch:02d}-{train_loss:.4f}",
+        filename=args.ckpt_name + "_best_{epoch:02d}-{train_loss:.4f}",
         save_top_k=1,
         mode="min",
     )
@@ -148,6 +149,9 @@ def objective(trial: optuna.trial.Trial) -> float:
 
     # train model
     trainer.fit(model, train_dataloaders=dataloader)
+
+    # close logger
+    wandb.finish()
 
     return trainer.callback_metrics["mss_loss"].item()
 
