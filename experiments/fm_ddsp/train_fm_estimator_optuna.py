@@ -57,7 +57,7 @@ def objective(trial: optuna.trial.Trial) -> float:
         batch_size=batch_size,
         lr=lr,
         lr_decay=0.5,
-        train_epochs=40,
+        train_epochs=50,
         steps_per_epoch=1000,
         param_loss_weight=param_loss_weight,
         ckpt_path="./ckpt/fm_ddsp-optuna",
