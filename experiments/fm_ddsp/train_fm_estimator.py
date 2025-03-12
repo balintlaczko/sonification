@@ -11,11 +11,6 @@ from sonification.utils.misc import midi2frequency
 from torch.utils.data import DataLoader
 
 def main():
-    fix_seed = 2025
-    random.seed(fix_seed)
-    torch.manual_seed(fix_seed)
-    np.random.seed(fix_seed)
-
     parser = argparse.ArgumentParser()
 
     # audio params
@@ -131,5 +126,10 @@ def main():
 
 
 if __name__ == "__main__":
+    fix_seed = 2025
+    random.seed(fix_seed)
+    torch.manual_seed(fix_seed)
+    np.random.seed(fix_seed)
+
     torch.set_float32_matmul_precision('high')
     main()
