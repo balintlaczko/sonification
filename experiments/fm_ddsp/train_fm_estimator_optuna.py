@@ -111,7 +111,7 @@ def objective(trial: optuna.trial.Trial) -> float:
         enable_checkpointing=True,
         callbacks=callbacks,
         logger=logger,
-        log_every_n_steps=1,
+        log_every_n_steps=50,
         limit_train_batches=args.steps_per_epoch,
     )
 
