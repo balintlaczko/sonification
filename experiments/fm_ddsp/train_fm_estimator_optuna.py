@@ -30,7 +30,7 @@ def objective(trial: optuna.trial.Trial) -> float:
     # training params
     batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512])
     lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-    param_loss_weight = trial.suggest_float("param_loss_weight", 0, 100, log=True)
+    param_loss_weight = trial.suggest_float("param_loss_weight", 0, 100)
 
     class Args:
         def __init__(self, **kwargs):
