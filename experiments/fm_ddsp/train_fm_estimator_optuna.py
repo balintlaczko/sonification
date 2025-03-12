@@ -1,4 +1,3 @@
-import argparse
 import os
 import torch
 import random
@@ -22,8 +21,8 @@ def objective(trial: optuna.trial.Trial) -> float:
     power = trial.suggest_categorical("power", [1, 0.5, 2])
     # model params
     latent_size = trial.suggest_categorical("latent_size", [32, 64, 128, 256])
-    encoder_kernel_1 = trial.suggest_categorical("encoder_kernel_1", [1, 2, 4, 6, 8])
-    encoder_kernel_2 = trial.suggest_categorical("encoder_kernel_2", [8, 10, 12, 14, 16])
+    encoder_kernel_1 = trial.suggest_categorical("encoder_kernel_1", [4, 8])
+    encoder_kernel_2 = trial.suggest_categorical("encoder_kernel_2", [4, 8, 16])
     n_res_block = trial.suggest_int("n_res_block", 1, 32)
     n_res_channel = trial.suggest_categorical("n_res_channel", [8, 16, 32, 64])
     hidden_dim = trial.suggest_categorical("hidden_dim", [16, 32, 64, 128])
@@ -31,7 +30,7 @@ def objective(trial: optuna.trial.Trial) -> float:
     # training params
     batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512])
     lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-    param_loss_weight = trial.suggest_float("param_loss_weight", 0, 100)
+    param_loss_weight = trial.suggest_float("param_loss_weight", 0, 50)
 
     class Args:
         def __init__(self, **kwargs):
