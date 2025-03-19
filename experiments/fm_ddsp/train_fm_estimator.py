@@ -25,10 +25,10 @@ def main():
     parser.add_argument("--max_harm_ratio", type=int, default=6)
     parser.add_argument("--max_mod_idx", type=int, default=6)
     # model params
-    parser.add_argument("--latent_size", type=int, default=64)
+    parser.add_argument("--latent_size", type=int, default=128)
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[4, 16])
     parser.add_argument("--n_res_block", type=int, default=16)
-    parser.add_argument("--n_res_channel", type=int, default=64)
+    parser.add_argument("--n_res_channel", type=int, default=128)
     parser.add_argument("--hidden_dim", type=int, default=32)
     parser.add_argument("--num_layers", type=int, default=3)
     # training params
@@ -39,7 +39,7 @@ def main():
     parser.add_argument("--steps_per_epoch", type=int, default=1000)
     parser.add_argument("--param_loss_weight", type=int, default=10)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
-    parser.add_argument("--ckpt_name", type=str, default="optuna_inspired_1")
+    parser.add_argument("--ckpt_name", type=str, default="optuna_inspired_2")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
     parser.add_argument("--comment", type=str, default="")
     
