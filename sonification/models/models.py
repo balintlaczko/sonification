@@ -1507,5 +1507,5 @@ class PlFMParamEstimator(LightningModule):
         optimizer = torch.optim.Adam(
             self.model.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=self.lr_decay, patience=4000)
+            optimizer, mode='min', factor=self.lr_decay, patience=6000)
         return [optimizer], [scheduler]
