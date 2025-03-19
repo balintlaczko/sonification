@@ -132,4 +132,5 @@ if __name__ == "__main__":
     np.random.seed(fix_seed)
 
     torch.set_float32_matmul_precision('high')
+    os.environ["WANDB_START_METHOD"] = "thread"
     main()
