@@ -1364,7 +1364,10 @@ class PlFMParamEstimator(LightningModule):
         self.batch_size = args.batch_size
         self.lr = args.lr
         self.lr_decay = args.lr_decay
-        self.param_loss_weight = args.param_loss_weight
+        self.param_loss_weight_start = args.param_loss_weight_start
+        self.param_loss_weight = args.param_loss_weight_start # initialize to start
+        self.param_loss_weight_end = args.param_loss_weight_end
+        self.param_loss_weight_end_epoch = args.param_loss_weight_end_epoch
         self.length_s = args.length_s
         self.n_samples = seconds2samples(self.length_s, self.sr)
         self.n_fft = args.n_fft
@@ -1487,6 +1490,11 @@ class PlFMParamEstimator(LightningModule):
         param_loss = F.mse_loss(norm_predicted_params, norm_params.detach())
         # mss loss
         mss_loss = self.mss_loss(in_wf, out_wf)
+        # calculate current param loss weight
+        current_epoch = self.trainer.current_epoch
+        param_loss_weight = self.param_loss_weight_start + (self.param_loss_weight_end - self.param_loss_weight_start) * \
+            min(1.0, current_epoch / self.param_loss_weight_end_epoch)
+        self.param_loss_weight = param_loss_weight
         loss = (param_loss * self.param_loss_weight) + mss_loss
 
         # backward pass
@@ -1501,11 +1509,12 @@ class PlFMParamEstimator(LightningModule):
             "param_loss": param_loss,
             "mss_loss": mss_loss,
             "lr": scheduler.get_last_lr()[0],
+            "param_loss_weight": self.param_loss_weight,
         })
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
             self.model.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=self.lr_decay, patience=6000)
+            optimizer, mode='min', factor=self.lr_decay, patience=10000)
         return [optimizer], [scheduler]
