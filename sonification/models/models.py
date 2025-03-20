@@ -1524,7 +1524,7 @@ class PlFMParamEstimator(LightningModule):
             "param_loss_weight": self.param_loss_weight,
         })
 
-    def on_validation_epoch_end(self):
+    def on_train_epoch_end(self):
         subprocess.run(["wandb", "sync", self.logdir])
 
     def configure_optimizers(self):
