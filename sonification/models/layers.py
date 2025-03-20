@@ -441,7 +441,7 @@ class MLP(nn.Module):
     def mlp_layer(self, input_dim, output_dim) -> list:
         return [
             nn.Linear(input_dim, output_dim),
-            nn.LayerNorm(output_dim),
+            nn.BatchNorm1d(output_dim),
             nn.LeakyReLU(0.2, inplace=self.relu_inplace),
         ]
 

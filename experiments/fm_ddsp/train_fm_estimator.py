@@ -32,8 +32,8 @@ def main():
     parser.add_argument("--hidden_dim", type=int, default=32)
     parser.add_argument("--num_layers", type=int, default=3)
     # training params
-    parser.add_argument("--batch_size", type=int, default=1024)
-    parser.add_argument("--lr", type=float, default=0.01)
+    parser.add_argument("--batch_size", type=int, default=512)
+    parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--lr_decay", type=float, default=0.5)
     parser.add_argument("--train_epochs", type=int, default=1000)
     parser.add_argument("--steps_per_epoch", type=int, default=1000)
@@ -42,7 +42,7 @@ def main():
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=10)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=20)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
-    parser.add_argument("--ckpt_name", type=str, default="grad_test")
+    parser.add_argument("--ckpt_name", type=str, default="grad_test_2")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
     parser.add_argument("--comment", type=str, default="")
     
@@ -88,8 +88,10 @@ def main():
         name=args.ckpt_name,
         project="fm_ddsp",
         save_dir=logdir,
-        offline=True
+        # offline=True,
+        # log_model='all'
         )
+    logger.watch(model, log='all')
 
     # create trainer
     trainer = Trainer(

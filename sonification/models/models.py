@@ -1463,7 +1463,7 @@ class PlFMParamEstimator(LightningModule):
 
 
     def training_step(self, batch, batch_idx):
-        torch.autograd.set_detect_anomaly(True)
+        # torch.autograd.set_detect_anomaly(True)
         self.model.train()
 
         # get the optimizer and scheduler
@@ -1481,7 +1481,9 @@ class PlFMParamEstimator(LightningModule):
         # normalize it
         in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         # predict the params
+        # print("Before model - requires_grad: ", in_spec.requires_grad)
         norm_predicted_params = self.model(in_spec)
+        # print("After model - requires_grad: ", norm_predicted_params.requires_grad)
         # scale the predicted params
         predicted_params = self.scale_predicted_params(norm_predicted_params)
         # now repeat on the samples dimension
@@ -1490,7 +1492,9 @@ class PlFMParamEstimator(LightningModule):
         predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.n_samples)
 
         # generate the output
+        # print(f"Before synth - requires_grad: {predicted_freqs.requires_grad}")
         y = self.output_synth(predicted_freqs, predicted_ratios, predicted_indices)
+        # print(f"After synth - requires_grad: {y.requires_grad}")
         out_wf = y.unsqueeze(1)
 
         # loss: MSS + param loss
@@ -1514,7 +1518,7 @@ class PlFMParamEstimator(LightningModule):
         # backward pass
         optimizer.zero_grad()
         self.manual_backward(loss)
-        print(norm_predicted_params.grad is not None)
+        # print(norm_predicted_params.grad is not None)
         optimizer.step()
         scheduler.step(loss.item())
 
