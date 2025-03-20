@@ -1367,7 +1367,8 @@ class PlFMParamEstimator(LightningModule):
         self.param_loss_weight_start = args.param_loss_weight_start
         self.param_loss_weight = args.param_loss_weight_start # initialize to start
         self.param_loss_weight_end = args.param_loss_weight_end
-        self.param_loss_weight_end_epoch = args.param_loss_weight_end_epoch
+        self.param_loss_weight_ramp_start_epoch = args.param_loss_weight_ramp_start_epoch
+        self.param_loss_weight_ramp_end_epoch = args.param_loss_weight_ramp_end_epoch
         self.length_s = args.length_s
         self.n_samples = seconds2samples(self.length_s, self.sr)
         self.n_fft = args.n_fft
@@ -1492,8 +1493,14 @@ class PlFMParamEstimator(LightningModule):
         mss_loss = self.mss_loss(in_wf, out_wf)
         # calculate current param loss weight
         current_epoch = self.trainer.current_epoch
-        param_loss_weight = self.param_loss_weight_start + (self.param_loss_weight_end - self.param_loss_weight_start) * \
-            min(1.0, current_epoch / self.param_loss_weight_end_epoch)
+        if current_epoch < self.param_loss_weight_ramp_start_epoch:
+            param_loss_weight = self.param_loss_weight_start
+        elif current_epoch > self.param_loss_weight_ramp_end_epoch:
+            param_loss_weight = self.param_loss_weight_end
+        else:
+            param_loss_weight = self.param_loss_weight_start + (self.param_loss_weight_end - self.param_loss_weight_start) * \
+                (current_epoch - self.param_loss_weight_ramp_start_epoch) / \
+                (self.param_loss_weight_ramp_end_epoch - self.param_loss_weight_ramp_start_epoch)
         self.param_loss_weight = param_loss_weight
         loss = (param_loss * self.param_loss_weight) + mss_loss
 
