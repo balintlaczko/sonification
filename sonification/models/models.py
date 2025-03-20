@@ -22,6 +22,7 @@ from tqdm import tqdm
 from auraloss.freq import MultiResolutionSTFTLoss
 import time
 import wandb
+import subprocess
 
 
 class AE(nn.Module):
@@ -1378,6 +1379,7 @@ class PlFMParamEstimator(LightningModule):
         self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
         self.max_harm_ratio = args.max_harm_ratio
         self.max_mod_idx = args.max_mod_idx
+        self.logdir = args.logdir
 
         # models
         self.input_synth = FMSynth(sr=self.sr)
@@ -1521,6 +1523,9 @@ class PlFMParamEstimator(LightningModule):
             "lr": scheduler.get_last_lr()[0],
             "param_loss_weight": self.param_loss_weight,
         })
+
+    def on_validation_epoch_end(self):
+        subprocess.run(["wandb", "sync", self.logdir])
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(

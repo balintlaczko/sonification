@@ -48,6 +48,13 @@ def main():
     
     args = parser.parse_args()
 
+    # change relative path to absolute path
+    logdir = os.path.abspath(args.logdir)
+    logdir = os.path.join(logdir, args.ckpt_name)
+    os.makedirs(logdir, exist_ok=True)
+    print(f"Logging to {logdir}")
+    args.logdir = logdir
+
     # a dummy dataloader
     dataloader = DataLoader(
         range(args.steps_per_epoch * args.batch_size),
@@ -77,16 +84,11 @@ def main():
     callbacks = [best_checkpoint_callback, last_checkpoint_callback]
 
     # create logger
-    # change relative path to absolute path
-    logdir = os.path.abspath(args.logdir)
-    logdir = os.path.join(logdir, args.ckpt_name)
-    os.makedirs(logdir, exist_ok=True)
-    print(f"Logging to {logdir}")
     logger = WandbLogger(
         name=args.ckpt_name,
         project="fm_ddsp",
         save_dir=logdir,
-        # offline=True
+        offline=True
         )
 
     # create trainer
