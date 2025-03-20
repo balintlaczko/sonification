@@ -80,6 +80,7 @@ def main():
     # change relative path to absolute path
     logdir = os.path.abspath(args.logdir)
     logdir = os.path.join(logdir, args.ckpt_name)
+    os.makedirs(logdir, exist_ok=True)
     print(f"Logging to {logdir}")
     logger = WandbLogger(
         name=args.ckpt_name,
