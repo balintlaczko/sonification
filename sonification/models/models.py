@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+import wandb.sync
 from .layers import LinearEncoder, LinearDecoder, MLP, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
 from .ddsp import FMSynth
 from torchaudio.transforms import MelSpectrogram
@@ -20,6 +21,7 @@ from sklearn.decomposition import PCA
 from tqdm import tqdm
 from auraloss.freq import MultiResolutionSTFTLoss
 import time
+import wandb
 
 
 class AE(nn.Module):
@@ -1519,9 +1521,6 @@ class PlFMParamEstimator(LightningModule):
             "lr": scheduler.get_last_lr()[0],
             "param_loss_weight": self.param_loss_weight,
         })
-
-    def on_train_epoch_end(self):
-        time.sleep(2) # try to facilitate the logger to catch up
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(

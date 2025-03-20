@@ -77,10 +77,12 @@ def main():
     callbacks = [best_checkpoint_callback, last_checkpoint_callback]
 
     # create logger
+    logdir = os.path.join(args.logdir, args.ckpt_name)
     logger = WandbLogger(
         name=args.ckpt_name,
         project="fm_ddsp",
-        save_dir=args.logdir,
+        save_dir=logdir,
+        # offline=True
         )
 
     # create trainer
@@ -89,7 +91,7 @@ def main():
         enable_checkpointing=True,
         callbacks=callbacks,
         logger=logger,
-        log_every_n_steps=250,
+        log_every_n_steps=50,
         limit_train_batches=args.steps_per_epoch,
     )
 
@@ -122,7 +124,7 @@ def main():
         max_mod_idx=args.max_mod_idx,
         ckpt_path=args.ckpt_path,
         ckpt_name=args.ckpt_name,
-        logdir=args.logdir,
+        logdir=logdir,
         comment=args.comment
     )
     trainer.logger.log_hyperparams(hyperparams)
