@@ -1421,12 +1421,12 @@ class PlFMParamEstimator(LightningModule):
 
 
     def sample_fm_params(self, batch_size):
-        pitches_norm = torch.rand(batch_size)
+        pitches_norm = torch.rand(batch_size, requires_grad=True)
         pitches = scale(pitches_norm, 0, 1, 38, 86)
         freqs = midi2frequency(pitches)
-        ratios_norm = torch.rand(batch_size)
+        ratios_norm = torch.rand(batch_size, requires_grad=True)
         ratios = scale(ratios_norm, 0, 1, 0, self.max_harm_ratio)
-        indices_norm = torch.rand(batch_size)
+        indices_norm = torch.rand(batch_size, requires_grad=True)
         indices = scale(indices_norm, 0, 1, 0, self.max_mod_idx)
         # stack norm params together
         norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1).to(self.device)
@@ -1471,7 +1471,7 @@ class PlFMParamEstimator(LightningModule):
 
         # get the batch
         norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
-        x = self.input_synth(freqs, ratios, indices).detach()
+        x = self.input_synth(freqs, ratios, indices) #.detach()
         in_wf = x.unsqueeze(1)
 
         # forward pass
@@ -1513,13 +1513,6 @@ class PlFMParamEstimator(LightningModule):
         # backward pass
         optimizer.zero_grad()
         self.manual_backward(loss)
-
-        for name, param in self.output_synth.named_parameters():
-            if param.grad is not None:
-                print(f"{name}: grad norm = {param.grad.norm().item()}")
-            else:
-                print(f"{name}: no gradient")
-
         optimizer.step()
         scheduler.step(loss.item())
 
