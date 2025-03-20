@@ -1462,6 +1462,7 @@ class PlFMParamEstimator(LightningModule):
 
 
     def training_step(self, batch, batch_idx):
+        torch.autograd.set_detect_anomaly(True)
         self.model.train()
 
         # get the optimizer and scheduler
@@ -1512,6 +1513,13 @@ class PlFMParamEstimator(LightningModule):
         # backward pass
         optimizer.zero_grad()
         self.manual_backward(loss)
+
+        for name, param in self.output_synth.named_parameters():
+            if param.grad is not None:
+                print(f"{name}: grad norm = {param.grad.norm().item()}")
+            else:
+                print(f"{name}: no gradient")
+
         optimizer.step()
         scheduler.step(loss.item())
 
