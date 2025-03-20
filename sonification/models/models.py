@@ -19,7 +19,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 from auraloss.freq import MultiResolutionSTFTLoss
-from time import time
+import time
 
 
 class AE(nn.Module):
