@@ -1421,7 +1421,7 @@ class PlFMParamEstimator(LightningModule):
 
 
     def sample_fm_params(self, batch_size):
-        grad=True
+        grad=False
         pitches_norm = torch.rand(batch_size, requires_grad=grad)
         pitches = scale(pitches_norm, 0, 1, 38, 86)
         freqs = midi2frequency(pitches)
@@ -1472,7 +1472,7 @@ class PlFMParamEstimator(LightningModule):
 
         # get the batch
         norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
-        x = self.input_synth(freqs, ratios, indices)#.detach()
+        x = self.input_synth(freqs, ratios, indices).detach()
         in_wf = x.unsqueeze(1)
 
         # forward pass
@@ -1514,7 +1514,7 @@ class PlFMParamEstimator(LightningModule):
         # backward pass
         optimizer.zero_grad()
         self.manual_backward(loss)
-        # print(x.grad is not None)
+        print(norm_predicted_params.grad is not None)
         optimizer.step()
         scheduler.step(loss.item())
 
