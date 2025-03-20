@@ -1517,7 +1517,9 @@ class PlFMParamEstimator(LightningModule):
             "mss_loss": mss_loss,
             "lr": scheduler.get_last_lr()[0],
             "param_loss_weight": self.param_loss_weight,
-        })
+        },
+        logger=True,
+        on_epoch=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
