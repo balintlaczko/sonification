@@ -1342,17 +1342,47 @@ class FMParamEstimator(nn.Module):
             input_dim_h=input_dim_h,
             input_dim_w=input_dim_w,
         )
-        self.mlp = MLP(
-            input_dim=latent_size * (input_dim_h // stride) * (input_dim_w // stride),
-            hidden_dim=hidden_dim,
-            output_dim=3, # the 3 FM params
-            num_layers=num_layers,
+        self.post_encoder = nn.Sequential(
+            nn.Conv2d(64, 64, 3, 2, 1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 64, 3, 2, 1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 64, 3, 2, 1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 64, 3, 2, 1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 64, 3, 2, 1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 64, 3, 2, 1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2),
+        )
+        # self.mlp = MLP(
+        #     # input_dim=latent_size * (input_dim_h // stride) * (input_dim_w // stride),
+        #     input_dim=latent_size,
+        #     hidden_dim=hidden_dim,
+        #     output_dim=3, # the 3 FM params
+        #     num_layers=num_layers,
+        # )
+        self.mlp = nn.Sequential(
+            nn.Linear(latent_size, 3),
+            nn.Sigmoid()
         )
 
     def forward(self, x):
         x = self.encoder(x)
+        # print(x.shape)
+        x = self.post_encoder(x)
+        # print(x.shape)
         x = x.view(x.size(0), -1)
+        # print(x.shape)
         x = self.mlp(x)
+        # print(x.shape)
         return x
 
 
@@ -1519,6 +1549,8 @@ class PlFMParamEstimator(LightningModule):
         optimizer.zero_grad()
         self.manual_backward(loss)
         # print(norm_predicted_params.grad is not None)
+        # clip gradients
+        self.clip_gradients(optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
         optimizer.step()
         scheduler.step(loss.item())
 
@@ -1531,6 +1563,16 @@ class PlFMParamEstimator(LightningModule):
             "param_loss_weight": self.param_loss_weight,
         },
         prog_bar=True)
+
+    def on_train_epoch_end(self):
+        epoch = self.trainer.current_epoch
+        if epoch % 10 == 0:
+            logdir = os.path.join(self.logdir, "wandb")
+            logdir_items = os.listdir(logdir)
+            logdir_folder = [item for item in logdir_items if item.startswith("offline-run")][0]
+            logdir_folder = os.path.join(logdir, logdir_folder)
+            print(f"Syncing {logdir_folder}")
+            subprocess.run(["wandb", "sync", logdir_folder])
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(

@@ -443,6 +443,7 @@ class MLP(nn.Module):
             nn.Linear(input_dim, output_dim),
             nn.BatchNorm1d(output_dim),
             nn.LeakyReLU(0.2, inplace=self.relu_inplace),
+            nn.Dropout(0.2)
         ]
 
     def forward(self, x):

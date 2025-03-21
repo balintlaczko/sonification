@@ -4,7 +4,7 @@ import torch
 import random
 import numpy as np
 from lightning.pytorch import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint, StochasticWeightAveraging
 from lightning.pytorch.loggers import WandbLogger
 from sonification.models.models import PlFMParamEstimator
 from sonification.utils.misc import midi2frequency
@@ -37,14 +37,14 @@ def main():
     parser.add_argument("--lr_decay", type=float, default=0.5)
     parser.add_argument("--train_epochs", type=int, default=1000)
     parser.add_argument("--steps_per_epoch", type=int, default=1000)
-    parser.add_argument("--param_loss_weight_start", type=int, default=10)
-    parser.add_argument("--param_loss_weight_end", type=int, default=0)
-    parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=10)
-    parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=20)
+    parser.add_argument("--param_loss_weight_start", type=int, default=9.5)
+    parser.add_argument("--param_loss_weight_end", type=int, default=9.5)
+    parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
+    parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
-    parser.add_argument("--ckpt_name", type=str, default="grad_test_2")
+    parser.add_argument("--ckpt_name", type=str, default="grad_test_8")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
-    parser.add_argument("--comment", type=str, default="")
+    parser.add_argument("--comment", type=str, default="add post_encoder")
     
     args = parser.parse_args()
 
@@ -81,15 +81,15 @@ def main():
         save_top_k=1,
         mode="max",
     )
-    callbacks = [best_checkpoint_callback, last_checkpoint_callback]
+    swa = StochasticWeightAveraging(swa_lrs=1e-2)
+    callbacks = [best_checkpoint_callback, last_checkpoint_callback, swa]
 
     # create logger
     logger = WandbLogger(
         name=args.ckpt_name,
         project="fm_ddsp",
         save_dir=logdir,
-        # offline=True,
-        # log_model='all'
+        offline=True,
         )
     logger.watch(model, log='all')
 
