@@ -289,10 +289,10 @@ class ResBlock(nn.Module):
 
         # this is the residual block
         self.conv = nn.Sequential(
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(in_channel, channel, 3, padding=1),
             nn.BatchNorm2d(channel),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(channel, in_channel, 1),
             nn.BatchNorm2d(in_channel),
         )
@@ -388,10 +388,10 @@ class MultiScaleEncoder(nn.Module):
                 lane = [
                     nn.Conv2d(in_channel, channel // 2, kernel,
                               stride=2, padding=padding),
-                    nn.ReLU(inplace=True),
+                    nn.LeakyReLU(0.2, inplace=True),
                     nn.Conv2d(channel // 2, channel, kernel,
                               stride=2, padding=padding),
-                    nn.ReLU(inplace=True),
+                    nn.LeakyReLU(0.2, inplace=True),
                     nn.Conv2d(channel, channel, 3, padding=1),
                 ]
 
@@ -400,7 +400,7 @@ class MultiScaleEncoder(nn.Module):
                 lane = [
                     nn.Conv2d(in_channel, channel // 2, kernel,
                               stride=2, padding=padding),
-                    nn.ReLU(inplace=True),
+                    nn.LeakyReLU(0.2, inplace=True),
                     nn.Conv2d(channel // 2, channel, 3, padding=1),
                 ]
 

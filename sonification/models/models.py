@@ -1434,6 +1434,11 @@ class PlFMParamEstimator(LightningModule):
             num_layers=args.num_layers,
             stride=4,
         )
+        def init_weights_kaiming(m):
+            if isinstance(m, (nn.Conv2d, nn.Linear)):  # Apply to conv and linear layers
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
+        self.model.apply(init_weights_kaiming)
+
         self.output_synth = FMSynth(sr=self.sr)
 
         # mss loss
@@ -1566,7 +1571,9 @@ class PlFMParamEstimator(LightningModule):
 
     def on_train_epoch_end(self):
         epoch = self.trainer.current_epoch
-        if epoch % 100 == 0:
+        interval = 50
+        interval = max(10, interval) 
+        if epoch % interval == 0:
             logdir = os.path.join(self.logdir, "wandb")
             logdir_items = os.listdir(logdir)
             logdir_folder = [item for item in logdir_items if item.startswith("offline-run")][0]
@@ -1575,8 +1582,8 @@ class PlFMParamEstimator(LightningModule):
             subprocess.run(["wandb", "sync", logdir_folder])
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(
+        optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=self.lr_decay, patience=50000)
+            optimizer, mode='min', factor=self.lr_decay, patience=30000)
         return [optimizer], [scheduler]
