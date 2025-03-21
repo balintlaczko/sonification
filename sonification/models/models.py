@@ -1343,23 +1343,23 @@ class FMParamEstimator(nn.Module):
             input_dim_w=input_dim_w,
         )
         self.post_encoder = nn.Sequential(
-            nn.Conv2d(64, 64, 3, 2, 1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(latent_size, latent_size, 3, 2, 1),
+            nn.BatchNorm2d(latent_size),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 64, 3, 2, 1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(latent_size, latent_size, 3, 2, 1),
+            nn.BatchNorm2d(latent_size),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 64, 3, 2, 1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(latent_size, latent_size, 3, 2, 1),
+            nn.BatchNorm2d(latent_size),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 64, 3, 2, 1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(latent_size, latent_size, 3, 2, 1),
+            nn.BatchNorm2d(latent_size),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 64, 3, 2, 1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(latent_size, latent_size, 3, 2, 1),
+            nn.BatchNorm2d(latent_size),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 64, 3, 2, 1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(latent_size, latent_size, 3, 2, 1),
+            nn.BatchNorm2d(latent_size),
             nn.LeakyReLU(0.2),
         )
         # self.mlp = MLP(
@@ -1370,7 +1370,7 @@ class FMParamEstimator(nn.Module):
         #     num_layers=num_layers,
         # )
         self.mlp = nn.Sequential(
-            nn.Linear(latent_size, 3),
+            nn.Linear(latent_size * (latent_size // 64), 3),
             nn.Sigmoid()
         )
 
@@ -1566,7 +1566,7 @@ class PlFMParamEstimator(LightningModule):
 
     def on_train_epoch_end(self):
         epoch = self.trainer.current_epoch
-        if epoch % 10 == 0:
+        if epoch % 100 == 0:
             logdir = os.path.join(self.logdir, "wandb")
             logdir_items = os.listdir(logdir)
             logdir_folder = [item for item in logdir_items if item.startswith("offline-run")][0]
@@ -1578,5 +1578,5 @@ class PlFMParamEstimator(LightningModule):
         optimizer = torch.optim.Adam(
             self.model.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=self.lr_decay, patience=20000)
+            optimizer, mode='min', factor=self.lr_decay, patience=50000)
         return [optimizer], [scheduler]
