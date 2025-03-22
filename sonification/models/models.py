@@ -1370,7 +1370,19 @@ class FMParamEstimator(nn.Module):
         #     num_layers=num_layers,
         # )
         self.mlp = nn.Sequential(
-            nn.Linear(latent_size * (latent_size // 64), 3),
+            nn.Linear(latent_size * (latent_size // 64), 128),
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(0.2),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.LeakyReLU(0.2),
+            nn.Linear(64, 32),
+            nn.BatchNorm1d(32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, 16),
+            nn.BatchNorm1d(16),
+            nn.LeakyReLU(0.2),
+            nn.Linear(16, 3),
             nn.Sigmoid()
         )
 
@@ -1493,8 +1505,16 @@ class PlFMParamEstimator(LightningModule):
 
 
     def forward(self, x):
-        x = self.mel_spectrogram(x)
-        return self.model(x)
+        in_wf = x.unsqueeze(1)
+        # get the mel spectrogram
+        in_spec = self.mel_spectrogram(in_wf)
+        # normalize it
+        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # predict the params
+        norm_predicted_params = self.model(in_spec)
+        # scale the predicted params
+        predicted_params = self.scale_predicted_params(norm_predicted_params)
+        return predicted_params
 
 
     def training_step(self, batch, batch_idx):
@@ -1516,9 +1536,7 @@ class PlFMParamEstimator(LightningModule):
         # normalize it
         in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         # predict the params
-        # print("Before model - requires_grad: ", in_spec.requires_grad)
         norm_predicted_params = self.model(in_spec)
-        # print("After model - requires_grad: ", norm_predicted_params.requires_grad)
         # scale the predicted params
         predicted_params = self.scale_predicted_params(norm_predicted_params)
         # now repeat on the samples dimension
@@ -1527,9 +1545,7 @@ class PlFMParamEstimator(LightningModule):
         predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.n_samples)
 
         # generate the output
-        # print(f"Before synth - requires_grad: {predicted_freqs.requires_grad}")
         y = self.output_synth(predicted_freqs, predicted_ratios, predicted_indices)
-        # print(f"After synth - requires_grad: {y.requires_grad}")
         out_wf = y.unsqueeze(1)
 
         # loss: MSS + param loss
@@ -1553,7 +1569,6 @@ class PlFMParamEstimator(LightningModule):
         # backward pass
         optimizer.zero_grad()
         self.manual_backward(loss)
-        # print(norm_predicted_params.grad is not None)
         # clip gradients
         self.clip_gradients(optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
         optimizer.step()
@@ -1588,6 +1603,13 @@ class PlFMParamEstimator(LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.lr)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        warmup_steps = 5000
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, total_iters=warmup_steps)
+        plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=self.lr_decay, patience=50000)
+        scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, plateau_scheduler],
+            milestones=[warmup_steps]
+        )
         return [optimizer], [scheduler]
