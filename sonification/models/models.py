@@ -1571,7 +1571,11 @@ class PlFMParamEstimator(LightningModule):
 
     def on_train_epoch_end(self):
         epoch = self.trainer.current_epoch
-        interval = 50
+        interval = 100
+        if epoch < 500:
+            interval = 50
+        else:
+            interval = 100
         interval = max(10, interval) 
         if epoch % interval == 0:
             logdir = os.path.join(self.logdir, "wandb")
@@ -1585,5 +1589,5 @@ class PlFMParamEstimator(LightningModule):
         optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=self.lr_decay, patience=40000)
+            optimizer, mode='min', factor=self.lr_decay, patience=50000)
         return [optimizer], [scheduler]

@@ -27,24 +27,24 @@ def main():
     # model params
     parser.add_argument("--latent_size", type=int, default=128)
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[4, 16])
-    parser.add_argument("--n_res_block", type=int, default=12)
+    parser.add_argument("--n_res_block", type=int, default=24)
     parser.add_argument("--n_res_channel", type=int, default=128)
     parser.add_argument("--hidden_dim", type=int, default=32)
     parser.add_argument("--num_layers", type=int, default=3)
     # training params
     parser.add_argument("--batch_size", type=int, default=512)
-    parser.add_argument("--lr", type=float, default=0.0005)
-    parser.add_argument("--lr_decay", type=float, default=0.5)
-    parser.add_argument("--train_epochs", type=int, default=1000)
+    parser.add_argument("--lr", type=float, default=0.0001)
+    parser.add_argument("--lr_decay", type=float, default=0.75)
+    parser.add_argument("--train_epochs", type=int, default=2000)
     parser.add_argument("--steps_per_epoch", type=int, default=1000)
     parser.add_argument("--param_loss_weight_start", type=int, default=9.5)
     parser.add_argument("--param_loss_weight_end", type=int, default=9.5)
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
-    parser.add_argument("--ckpt_name", type=str, default="grad_test_13")
+    parser.add_argument("--ckpt_name", type=str, default="grad_test_14")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
-    parser.add_argument("--comment", type=str, default="leaky relu everywhere, kaiming init, use adamw")
+    parser.add_argument("--comment", type=str, default="more resblocks, no swa")
     
     args = parser.parse_args()
 
@@ -81,8 +81,8 @@ def main():
         save_top_k=1,
         mode="max",
     )
-    swa = StochasticWeightAveraging(swa_lrs=1e-2)
-    callbacks = [best_checkpoint_callback, last_checkpoint_callback, swa]
+    # swa = StochasticWeightAveraging(swa_lrs=1e-2)
+    callbacks = [best_checkpoint_callback, last_checkpoint_callback] #, swa]
 
     # create logger
     logger = WandbLogger(
