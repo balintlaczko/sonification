@@ -1410,6 +1410,7 @@ class PlFMParamEstimator(LightningModule):
         self.batch_size = args.batch_size
         self.lr = args.lr
         self.lr_decay = args.lr_decay
+        self.warmup_epochs = args.warmup_epochs
         self.param_loss_weight_start = args.param_loss_weight_start
         self.param_loss_weight = args.param_loss_weight_start # initialize to start
         self.param_loss_weight_end = args.param_loss_weight_end
@@ -1600,16 +1601,16 @@ class PlFMParamEstimator(LightningModule):
             print(f"Syncing {logdir_folder}")
             subprocess.run(["wandb", "sync", logdir_folder])
 
+    def on_train_batch_start(self, batch, batch_idx):
+        epoch = self.trainer.current_epoch
+        if epoch < self.warmup_epochs:
+            lr_scale = min(1.0, (epoch + 1) / self.warmup_epochs)
+            for pg in self.trainer.optimizers[0].param_groups:
+                pg["lr"] = self.lr * lr_scale
+
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.lr)
-        warmup_steps = 5000
-        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, total_iters=warmup_steps)
-        plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=self.lr_decay, patience=50000)
-        scheduler = torch.optim.lr_scheduler.SequentialLR(
-            optimizer,
-            schedulers=[warmup_scheduler, plateau_scheduler],
-            milestones=[warmup_steps]
-        )
         return [optimizer], [scheduler]

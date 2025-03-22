@@ -35,6 +35,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--lr", type=float, default=0.0001)
     parser.add_argument("--lr_decay", type=float, default=0.75)
+    parser.add_argument("--warmup_epochs", type=int, default=1)
     parser.add_argument("--train_epochs", type=int, default=10000)
     parser.add_argument("--steps_per_epoch", type=int, default=1000)
     parser.add_argument("--param_loss_weight_start", type=int, default=9.5)
@@ -122,6 +123,7 @@ def main():
         batch_size=args.batch_size,
         lr=args.lr,
         lr_decay=args.lr_decay,
+        warmup_epochs=args.warmup_epochs,
         train_epochs=args.train_epochs,
         steps_per_epoch=args.steps_per_epoch,
         param_loss_weight_start=args.param_loss_weight_start,
