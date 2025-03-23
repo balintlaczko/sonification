@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
-    parser.add_argument("--ckpt_name", type=str, default="grad_test_15")
+    parser.add_argument("--ckpt_name", type=str, default="grad_test_16")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
     parser.add_argument("--comment", type=str, default="new pyramid head, warmup")
     
@@ -92,7 +92,7 @@ def main():
         save_dir=logdir,
         offline=True,
         )
-    logger.watch(model, log='all')
+    # logger.watch(model, log='all')
 
     # create trainer
     trainer = Trainer(
