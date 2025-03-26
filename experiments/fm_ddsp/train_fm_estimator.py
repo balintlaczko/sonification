@@ -38,14 +38,14 @@ def main():
     parser.add_argument("--warmup_epochs", type=int, default=5)
     parser.add_argument("--train_epochs", type=int, default=10000)
     parser.add_argument("--steps_per_epoch", type=int, default=1000)
-    parser.add_argument("--param_loss_weight_start", type=int, default=30)
-    parser.add_argument("--param_loss_weight_end", type=int, default=30)
+    parser.add_argument("--param_loss_weight_start", type=int, default=100)
+    parser.add_argument("--param_loss_weight_end", type=int, default=100)
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
-    parser.add_argument("--ckpt_name", type=str, default="grad_test_17")
+    parser.add_argument("--ckpt_name", type=str, default="grad_test_18")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
-    parser.add_argument("--comment", type=str, default="warmup5, param30, res64")
+    parser.add_argument("--comment", type=str, default="warmup5, param100, res64")
     
     args = parser.parse_args()
 
