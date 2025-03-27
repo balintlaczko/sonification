@@ -1332,6 +1332,8 @@ class FMParamEstimator(nn.Module):
             ):
         super(FMParamEstimator, self).__init__()
 
+        self.chans_per_group = 16
+
         self.encoder = MultiScaleEncoder(
             in_channel=1,
             channel=latent_size,
@@ -1344,22 +1346,28 @@ class FMParamEstimator(nn.Module):
         )
         self.post_encoder = nn.Sequential(
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            nn.BatchNorm2d(latent_size),
+            # nn.BatchNorm2d(latent_size),
+            nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            nn.BatchNorm2d(latent_size),
+            # nn.BatchNorm2d(latent_size),
+            nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            nn.BatchNorm2d(latent_size),
+            # nn.BatchNorm2d(latent_size),
+            nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            nn.BatchNorm2d(latent_size),
+            # nn.BatchNorm2d(latent_size),
+            nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            nn.BatchNorm2d(latent_size),
+            # nn.BatchNorm2d(latent_size),
+            nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            nn.BatchNorm2d(latent_size),
+            # nn.BatchNorm2d(latent_size),
+            nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
         )
         # self.mlp = MLP(
@@ -1371,16 +1379,20 @@ class FMParamEstimator(nn.Module):
         # )
         self.mlp = nn.Sequential(
             nn.Linear(latent_size * (latent_size // 64), 128),
-            nn.BatchNorm1d(128),
+            # nn.BatchNorm1d(128),
+            nn.GroupNorm(128 // self.chans_per_group, 128),
             nn.LeakyReLU(0.2),
             nn.Linear(128, 64),
-            nn.BatchNorm1d(64),
+            # nn.BatchNorm1d(64),
+            nn.GroupNorm(64 // self.chans_per_group, 64),
             nn.LeakyReLU(0.2),
             nn.Linear(64, 32),
-            nn.BatchNorm1d(32),
+            # nn.BatchNorm1d(32),
+            nn.GroupNorm(32 // self.chans_per_group, 32),
             nn.LeakyReLU(0.2),
             nn.Linear(32, 16),
-            nn.BatchNorm1d(16),
+            # nn.BatchNorm1d(16),
+            nn.GroupNorm(16 // self.chans_per_group, 16),
             nn.LeakyReLU(0.2),
             nn.Linear(16, 3),
             nn.Sigmoid()
@@ -1515,7 +1527,7 @@ class PlFMParamEstimator(LightningModule):
         norm_predicted_params = self.model(in_spec)
         # scale the predicted params
         predicted_params = self.scale_predicted_params(norm_predicted_params)
-        return predicted_params
+        return predicted_params, norm_predicted_params
 
 
     def training_step(self, batch, batch_idx):

@@ -284,17 +284,19 @@ class ConvDecoder1DRes(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, in_channel, channel):
+    def __init__(self, in_channel, channel, chans_per_group=16):
         super(ResBlock, self).__init__()
 
         # this is the residual block
         self.conv = nn.Sequential(
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(in_channel, channel, 3, padding=1),
-            nn.BatchNorm2d(channel),
+            # nn.BatchNorm2d(channel),
+            nn.GroupNorm(channel // chans_per_group, channel),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(channel, in_channel, 1),
-            nn.BatchNorm2d(in_channel),
+            # nn.BatchNorm2d(in_channel),
+            nn.GroupNorm(in_channel // chans_per_group, in_channel),
         )
 
     def forward(self, input):
@@ -409,18 +411,32 @@ class MultiScaleEncoder(nn.Module):
                          for _ in range(n_res_block)])
 
             # add final ReLU
-            lane.append(nn.ReLU(inplace=True))
+            lane.append(nn.LeakyReLU(inplace=True))
 
             # add to list of blocks
             self.lanes.append(nn.Sequential(*lane))
 
-    def forward(self, input):
-        # reducing with this so the "+" still means whatever it should
-        def add_lane(x, y):
-            return x + y
+    # # reducing with this so the "+" still means whatever it should
+    # def add_lane(self, x, y):
+    #     return x + y
+    
+    # def forward(self, input):
+    #     # # reducing with this so the "+" still means whatever it should
+    #     # def add_lane(x, y):
+    #     #     return x + y
 
-        # apply each block to the input, then sum the results
-        return reduce(add_lane, [lane(input) for lane in self.lanes])
+    #     # apply each block to the input, then sum the results
+    #     return reduce(self.add_lane, [lane(input) for lane in self.lanes])
+    
+    def forward(self, input):
+        # Process all lanes and stack the results
+        outputs = [lane(input) for lane in self.lanes]
+        
+        # Use torch's built-in sum function to add all outputs together
+        if len(outputs) == 1:
+            return outputs[0]
+        else:
+            return torch.stack(outputs).sum(dim=0)
 
 
 class MLP(nn.Module):
