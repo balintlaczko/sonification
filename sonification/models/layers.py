@@ -382,7 +382,7 @@ class MultiScaleEncoder(nn.Module):
 
         # create a lane for each kernel size
         for kernel in kernels:
-            padding = [kernel_side // 2 - 1 for kernel_side in kernel]
+            padding = [(kernel_side - 1) // 2 for kernel_side in kernel]
             lane = None
 
             if stride == 4:
@@ -415,18 +415,6 @@ class MultiScaleEncoder(nn.Module):
 
             # add to list of blocks
             self.lanes.append(nn.Sequential(*lane))
-
-    # # reducing with this so the "+" still means whatever it should
-    # def add_lane(self, x, y):
-    #     return x + y
-    
-    # def forward(self, input):
-    #     # # reducing with this so the "+" still means whatever it should
-    #     # def add_lane(x, y):
-    #     #     return x + y
-
-    #     # apply each block to the input, then sum the results
-    #     return reduce(self.add_lane, [lane(input) for lane in self.lanes])
     
     def forward(self, input):
         # Process all lanes and stack the results
