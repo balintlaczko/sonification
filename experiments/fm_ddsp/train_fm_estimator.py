@@ -90,7 +90,7 @@ def main():
         name=args.ckpt_name,
         project="fm_ddsp",
         save_dir=logdir,
-        offline=True,
+        offline=False,
         )
     # logger.watch(model, log='all')
 

@@ -1598,6 +1598,7 @@ class PlFMParamEstimator(LightningModule):
         prog_bar=True)
 
     def on_train_epoch_end(self):
+        return
         epoch = self.trainer.current_epoch
         interval = 100
         if epoch < 500:
