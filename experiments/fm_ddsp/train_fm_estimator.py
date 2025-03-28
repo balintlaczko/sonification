@@ -142,6 +142,7 @@ def main():
     # train model
     resume_path = os.listdir(checkpoint_path)
     if resume_path:
+        resume_path = sorted(resume_path)
         resume_path = os.path.join(checkpoint_path, resume_path[-1])
         print(f"Resuming from {resume_path}")
         trainer.fit(model, train_dataloaders=dataloader, ckpt_path=resume_path)
