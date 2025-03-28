@@ -9,6 +9,7 @@ from lightning.pytorch.loggers import WandbLogger
 from sonification.models.models import PlFMParamEstimator
 from sonification.utils.misc import midi2frequency
 from torch.utils.data import DataLoader
+import wandb
 
 def main():
     parser = argparse.ArgumentParser()
@@ -89,6 +90,7 @@ def main():
         project="fm_ddsp",
         save_dir=logdir,
         offline=False,
+        settings=wandb.Settings(_disable_stats=True),
         )
     # logger.watch(model, log='all')
 
