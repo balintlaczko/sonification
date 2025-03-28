@@ -1326,8 +1326,6 @@ class FMParamEstimator(nn.Module):
             input_dim_w=29,
             n_res_block=2,
             n_res_channel=32,
-            hidden_dim=512,
-            num_layers=2,
             stride=4,
             ):
         super(FMParamEstimator, self).__init__()
@@ -1346,52 +1344,36 @@ class FMParamEstimator(nn.Module):
         )
         self.post_encoder = nn.Sequential(
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            # nn.BatchNorm2d(latent_size),
             nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            # nn.BatchNorm2d(latent_size),
             nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            # nn.BatchNorm2d(latent_size),
             nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            # nn.BatchNorm2d(latent_size),
             nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            # nn.BatchNorm2d(latent_size),
             nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
             nn.Conv2d(latent_size, latent_size, 3, 2, 1),
-            # nn.BatchNorm2d(latent_size),
             nn.GroupNorm(latent_size // self.chans_per_group, latent_size),
             nn.LeakyReLU(0.2),
         )
-        # self.mlp = MLP(
-        #     # input_dim=latent_size * (input_dim_h // stride) * (input_dim_w // stride),
-        #     input_dim=latent_size,
-        #     hidden_dim=hidden_dim,
-        #     output_dim=3, # the 3 FM params
-        #     num_layers=num_layers,
-        # )
+
         self.mlp = nn.Sequential(
             nn.Linear(latent_size * (latent_size // 64), 128),
-            # nn.BatchNorm1d(128),
             nn.GroupNorm(128 // self.chans_per_group, 128),
             nn.LeakyReLU(0.2),
             nn.Linear(128, 64),
-            # nn.BatchNorm1d(64),
             nn.GroupNorm(64 // self.chans_per_group, 64),
             nn.LeakyReLU(0.2),
             nn.Linear(64, 32),
-            # nn.BatchNorm1d(32),
             nn.GroupNorm(32 // self.chans_per_group, 32),
             nn.LeakyReLU(0.2),
             nn.Linear(32, 16),
-            # nn.BatchNorm1d(16),
             nn.GroupNorm(16 // self.chans_per_group, 16),
             nn.LeakyReLU(0.2),
             nn.Linear(16, 3),
@@ -1400,13 +1382,9 @@ class FMParamEstimator(nn.Module):
 
     def forward(self, x):
         x = self.encoder(x)
-        # print(x.shape)
         x = self.post_encoder(x)
-        # print(x.shape)
         x = x.view(x.size(0), -1)
-        # print(x.shape)
         x = self.mlp(x)
-        # print(x.shape)
         return x
 
 
@@ -1428,8 +1406,7 @@ class PlFMParamEstimator(LightningModule):
         self.param_loss_weight_end = args.param_loss_weight_end
         self.param_loss_weight_ramp_start_epoch = args.param_loss_weight_ramp_start_epoch
         self.param_loss_weight_ramp_end_epoch = args.param_loss_weight_ramp_end_epoch
-        self.length_s = args.length_s
-        self.n_samples = seconds2samples(self.length_s, self.sr)
+        self.n_samples = args.length_samps
         self.n_fft = args.n_fft
         self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
         self.max_harm_ratio = args.max_harm_ratio
@@ -1453,10 +1430,8 @@ class PlFMParamEstimator(LightningModule):
             encoder_kernels=args.encoder_kernels,
             input_dim_h=args.n_mels,
             input_dim_w=self.spectrogram_w,
-            hidden_dim=args.hidden_dim,
             n_res_block=args.n_res_block,
             n_res_channel=args.n_res_channel,
-            num_layers=args.num_layers,
             stride=4,
         )
         def init_weights_kaiming(m):
@@ -1481,20 +1456,19 @@ class PlFMParamEstimator(LightningModule):
 
 
     def sample_fm_params(self, batch_size):
-        grad=False
-        pitches_norm = torch.rand(batch_size, requires_grad=grad)
+        pitches_norm = torch.rand(batch_size)
         pitches = scale(pitches_norm, 0, 1, 38, 86)
         freqs = midi2frequency(pitches)
-        ratios_norm = torch.rand(batch_size, requires_grad=grad)
+        ratios_norm = torch.rand(batch_size)
         ratios = scale(ratios_norm, 0, 1, 0, self.max_harm_ratio)
-        indices_norm = torch.rand(batch_size, requires_grad=grad)
+        indices_norm = torch.rand(batch_size)
         indices = scale(indices_norm, 0, 1, 0, self.max_mod_idx)
         # stack norm params together
         norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1).to(self.device)
         # now repeat on the samples dimension
-        freqs = freqs.unsqueeze(1).repeat(1, self.n_samples).to(self.device)
-        ratios = ratios.unsqueeze(1).repeat(1, self.n_samples).to(self.device)
-        indices = indices.unsqueeze(1).repeat(1, self.n_samples).to(self.device)
+        freqs = freqs.unsqueeze(1).repeat(1, self.sr).to(self.device)
+        ratios = ratios.unsqueeze(1).repeat(1, self.sr).to(self.device)
+        indices = indices.unsqueeze(1).repeat(1, self.sr).to(self.device)
         return norm_params, freqs, ratios, indices
     
 
@@ -1541,6 +1515,9 @@ class PlFMParamEstimator(LightningModule):
         # get the batch
         norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
         x = self.input_synth(freqs, ratios, indices).detach()
+        # select a random slice of self.n_samples
+        start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
+        x = x[:, start_idx[0]:start_idx[0] + self.n_samples]
         in_wf = x.unsqueeze(1)
 
         # forward pass
@@ -1553,9 +1530,9 @@ class PlFMParamEstimator(LightningModule):
         # scale the predicted params
         predicted_params = self.scale_predicted_params(norm_predicted_params)
         # now repeat on the samples dimension
-        predicted_freqs = predicted_params[:, 0].unsqueeze(1).repeat(1, self.n_samples)
-        predicted_ratios = predicted_params[:, 1].unsqueeze(1).repeat(1, self.n_samples)
-        predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.n_samples)
+        predicted_freqs = predicted_params[:, 0].unsqueeze(1).repeat(1, self.sr)
+        predicted_ratios = predicted_params[:, 1].unsqueeze(1).repeat(1, self.sr)
+        predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.sr)
 
         # generate the output
         y = self.output_synth(predicted_freqs, predicted_ratios, predicted_indices)
@@ -1597,22 +1574,22 @@ class PlFMParamEstimator(LightningModule):
         },
         prog_bar=True)
 
-    def on_train_epoch_end(self):
-        return
-        epoch = self.trainer.current_epoch
-        interval = 100
-        if epoch < 500:
-            interval = 50
-        else:
-            interval = 100
-        interval = max(10, interval) 
-        if epoch % interval == 0:
-            logdir = os.path.join(self.logdir, "wandb")
-            logdir_items = os.listdir(logdir)
-            logdir_folder = [item for item in logdir_items if item.startswith("offline-run")][0]
-            logdir_folder = os.path.join(logdir, logdir_folder)
-            print(f"Syncing {logdir_folder}")
-            subprocess.run(["wandb", "sync", logdir_folder])
+    # def on_train_epoch_end(self):
+    #     return
+    #     epoch = self.trainer.current_epoch
+    #     interval = 100
+    #     if epoch < 500:
+    #         interval = 50
+    #     else:
+    #         interval = 100
+    #     interval = max(10, interval) 
+    #     if epoch % interval == 0:
+    #         logdir = os.path.join(self.logdir, "wandb")
+    #         logdir_items = os.listdir(logdir)
+    #         logdir_folder = [item for item in logdir_items if item.startswith("offline-run")][0]
+    #         logdir_folder = os.path.join(logdir, logdir_folder)
+    #         print(f"Syncing {logdir_folder}")
+    #         subprocess.run(["wandb", "sync", logdir_folder])
 
     def on_train_batch_start(self, batch, batch_idx):
         epoch = self.trainer.current_epoch
