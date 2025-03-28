@@ -1515,14 +1515,15 @@ class PlFMParamEstimator(LightningModule):
         # get the batch
         norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
         x = self.input_synth(freqs, ratios, indices).detach()
+        in_wf = x.unsqueeze(1)
         # select a random slice of self.n_samples
         start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
         x = x[:, start_idx[0]:start_idx[0] + self.n_samples]
-        in_wf = x.unsqueeze(1)
+        in_wf_slice = x.unsqueeze(1)
 
         # forward pass
         # get the mel spectrogram
-        in_spec = self.mel_spectrogram(in_wf)
+        in_spec = self.mel_spectrogram(in_wf_slice)
         # normalize it
         in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         # predict the params

@@ -136,7 +136,10 @@ def main():
     trainer.logger.log_hyperparams(hyperparams)
 
     # train model
-    resume_path = os.listdir(checkpoint_path)
+    try:
+        resume_path = os.listdir(checkpoint_path)
+    except FileNotFoundError:
+        resume_path = None
     if resume_path:
         resume_path = sorted(resume_path)
         resume_path = os.path.join(checkpoint_path, resume_path[-1])
