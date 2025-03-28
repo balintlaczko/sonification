@@ -140,7 +140,13 @@ def main():
     trainer.logger.log_hyperparams(hyperparams)
 
     # train model
-    trainer.fit(model, train_dataloaders=dataloader)
+    resume_path = os.listdir(checkpoint_path)
+    if resume_path:
+        resume_path = os.path.join(checkpoint_path, resume_path[-1])
+        print(f"Resuming from {resume_path}")
+        trainer.fit(model, train_dataloaders=dataloader, ckpt_path=resume_path)
+    else:
+        trainer.fit(model, train_dataloaders=dataloader)
 
 
 if __name__ == "__main__":
