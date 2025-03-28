@@ -15,7 +15,7 @@ def main():
 
     # audio params
     parser.add_argument("--sr", type=int, default=48000)
-    parser.add_argument("--length_s", type=float, default=0.25)
+    parser.add_argument("--length_samps", type=int, default=4096)
     parser.add_argument("--n_fft", type=int, default=4096)
     parser.add_argument("--f_min", type=float, default=midi2frequency(38))
     parser.add_argument("--f_max", type=float, default=midi2frequency(86))
@@ -26,11 +26,9 @@ def main():
     parser.add_argument("--max_mod_idx", type=int, default=6)
     # model params
     parser.add_argument("--latent_size", type=int, default=128)
-    parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[4, 16])
+    parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 15])
     parser.add_argument("--n_res_block", type=int, default=24)
     parser.add_argument("--n_res_channel", type=int, default=64)
-    parser.add_argument("--hidden_dim", type=int, default=32)
-    parser.add_argument("--num_layers", type=int, default=3)
     # training params
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--lr", type=float, default=0.0001)
@@ -43,9 +41,9 @@ def main():
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
-    parser.add_argument("--ckpt_name", type=str, default="grad_test_19")
+    parser.add_argument("--ckpt_name", type=str, default="nn_tilde")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
-    parser.add_argument("--comment", type=str, default="warmup10, param100, res64, groupnorm")
+    parser.add_argument("--comment", type=str, default="samps4096, kernels3_15")
     
     args = parser.parse_args()
 
@@ -107,7 +105,7 @@ def main():
     # save hyperparameters
     hyperparams = dict(
         sr=args.sr,
-        length_s=args.length_s,
+        length_samps=args.length_samps,
         n_fft=args.n_fft,
         f_min=args.f_min,
         f_max=args.f_max,
@@ -118,8 +116,6 @@ def main():
         encoder_kernels=args.encoder_kernels,
         n_res_block=args.n_res_block,
         n_res_channel=args.n_res_channel,
-        hidden_dim=args.hidden_dim,
-        num_layers=args.num_layers,
         batch_size=args.batch_size,
         lr=args.lr,
         lr_decay=args.lr_decay,
