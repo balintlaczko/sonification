@@ -98,7 +98,7 @@ def main():
         enable_checkpointing=True,
         callbacks=callbacks,
         logger=logger,
-        log_every_n_steps=250,
+        log_every_n_steps=1000,
         limit_train_batches=args.steps_per_epoch,
     )
 
