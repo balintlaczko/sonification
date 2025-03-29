@@ -382,19 +382,17 @@ class MultiScaleEncoder(nn.Module):
 
         # create a lane for each kernel size
         for kernel in kernels:
-            padding = [(kernel_side - 1) // 2 for kernel_side in kernel]
+            padding = [max(1, (kernel_side - 1) // 2) for kernel_side in kernel]
             lane = None
 
             if stride == 4:
                 # base block: in -> out/2 -> out -> out
                 lane = [
-                    nn.Conv2d(in_channel, channel // 2, kernel,
-                              stride=2, padding=padding),
+                    nn.Conv2d(in_channel, channel // 2, kernel, stride=2, padding=padding),
                     nn.LeakyReLU(0.2, inplace=True),
-                    nn.Conv2d(channel // 2, channel, kernel,
-                              stride=2, padding=padding),
+                    nn.Conv2d(channel // 2, channel, kernel, stride=2, padding=padding),
                     nn.LeakyReLU(0.2, inplace=True),
-                    nn.Conv2d(channel, channel, 3, padding=1),
+                    nn.Conv2d(channel, channel, 3, stride=[1, 2], padding=1),
                 ]
 
             elif stride == 2:

@@ -1381,10 +1381,15 @@ class FMParamEstimator(nn.Module):
         )
 
     def forward(self, x):
+        # print("x shape: ", x.shape)
         x = self.encoder(x)
+        # print("encoder x shape: ", x.shape)
         x = self.post_encoder(x)
+        # print("post_encoder x shape: ", x.shape)
         x = x.view(x.size(0), -1)
+        # print("post_encoder x view shape: ", x.shape)
         x = self.mlp(x)
+        # print("mlp x shape: ", x.shape)
         return x
 
 
@@ -1456,19 +1461,19 @@ class PlFMParamEstimator(LightningModule):
 
 
     def sample_fm_params(self, batch_size):
-        pitches_norm = torch.rand(batch_size)
+        pitches_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
         pitches = scale(pitches_norm, 0, 1, 38, 86)
         freqs = midi2frequency(pitches)
-        ratios_norm = torch.rand(batch_size)
-        ratios = scale(ratios_norm, 0, 1, 0, self.max_harm_ratio)
-        indices_norm = torch.rand(batch_size)
-        indices = scale(indices_norm, 0, 1, 0, self.max_mod_idx)
+        ratios_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
+        ratios = ratios_norm * self.max_harm_ratio
+        indices_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
+        indices = indices_norm * self.max_mod_idx
         # stack norm params together
-        norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1).to(self.device)
+        norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1)#.to(self.device)
         # now repeat on the samples dimension
-        freqs = freqs.unsqueeze(1).repeat(1, self.sr).to(self.device)
-        ratios = ratios.unsqueeze(1).repeat(1, self.sr).to(self.device)
-        indices = indices.unsqueeze(1).repeat(1, self.sr).to(self.device)
+        freqs = freqs.unsqueeze(1).repeat(1, self.n_samples * 2)#.to(self.device)
+        ratios = ratios.unsqueeze(1).repeat(1, self.n_samples * 2)#.to(self.device)
+        indices = indices.unsqueeze(1).repeat(1, self.n_samples * 2)#.to(self.device)
         return norm_params, freqs, ratios, indices
     
 
@@ -1492,6 +1497,9 @@ class PlFMParamEstimator(LightningModule):
 
 
     def forward(self, x):
+        # scale input to -1 1
+        x = (x - x.min()) / (x.max() - x.min())
+        x = x * 2 - 1
         in_wf = x.unsqueeze(1)
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf)
@@ -1517,13 +1525,26 @@ class PlFMParamEstimator(LightningModule):
         x = self.input_synth(freqs, ratios, indices).detach()
         in_wf = x.unsqueeze(1)
         # select a random slice of self.n_samples
-        start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
-        x = x[:, start_idx[0]:start_idx[0] + self.n_samples]
+        start_idx = torch.randint(0, self.n_samples, (1,))
+        x = x[:, start_idx:start_idx + self.n_samples]
+        # add random phase flip
+        phase_flip = torch.rand(self.batch_size, 1, device=self.device)#.to(self.device)
+        phase_flip = torch.where(phase_flip > 0.5, 1, -1)
+        x = x * phase_flip
+        # add random noise
+        noise = torch.randn_like(x, device=self.device)#.to(self.device)
+        noise = (noise - noise.min()) / (noise.max() - noise.min())
+        noise = noise * 2 - 1
+        noise = noise * 0.01
+        x = x + noise
+        # rescale to -1 1
+        x = (x - x.min()) / (x.max() - x.min())
+        x = x * 2 - 1
         in_wf_slice = x.unsqueeze(1)
 
         # forward pass
         # get the mel spectrogram
-        in_spec = self.mel_spectrogram(in_wf_slice)
+        in_spec = self.mel_spectrogram(in_wf_slice.detach())
         # normalize it
         in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         # predict the params
@@ -1531,9 +1552,9 @@ class PlFMParamEstimator(LightningModule):
         # scale the predicted params
         predicted_params = self.scale_predicted_params(norm_predicted_params)
         # now repeat on the samples dimension
-        predicted_freqs = predicted_params[:, 0].unsqueeze(1).repeat(1, self.sr)
-        predicted_ratios = predicted_params[:, 1].unsqueeze(1).repeat(1, self.sr)
-        predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.sr)
+        predicted_freqs = predicted_params[:, 0].unsqueeze(1).repeat(1, self.n_samples * 2)
+        predicted_ratios = predicted_params[:, 1].unsqueeze(1).repeat(1, self.n_samples * 2)
+        predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.n_samples * 2)
 
         # generate the output
         y = self.output_synth(predicted_freqs, predicted_ratios, predicted_indices)
@@ -1543,7 +1564,7 @@ class PlFMParamEstimator(LightningModule):
         # param loss
         param_loss = F.mse_loss(norm_predicted_params, norm_params.detach())
         # mss loss
-        mss_loss = self.mss_loss(in_wf, out_wf)
+        mss_loss = self.mss_loss(out_wf, in_wf)
         # calculate current param loss weight
         current_epoch = self.trainer.current_epoch
         if current_epoch < self.param_loss_weight_ramp_start_epoch:
