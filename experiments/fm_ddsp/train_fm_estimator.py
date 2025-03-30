@@ -44,7 +44,7 @@ def main():
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
     parser.add_argument("--ckpt_name", type=str, default="nn_tilde_4")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
-    parser.add_argument("--comment", type=str, default="samps8192, kernels3_5, param_weight150, small noise, huber loss, no input_norm, more resolutions for mss loss, adaptive patience")
+    parser.add_argument("--comment", type=str, default="samps8192, kernels3_5, param_weight150, small noise, l1 loss, no input_norm, adaptive patience")
     
     args = parser.parse_args()
 

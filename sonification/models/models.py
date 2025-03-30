@@ -1449,9 +1449,9 @@ class PlFMParamEstimator(LightningModule):
         # mss loss
         # define the loss function
         self.mss_loss = MultiResolutionSTFTLoss(
-            fft_sizes=[1024, 2048, 512],
-            hop_sizes=[120, 240, 50],
-            win_lengths=[600, 1200, 240],
+            fft_sizes=[1024, 2048],
+            hop_sizes=[256, 512],
+            win_lengths=[1024, 2048],
             scale="mel",
             n_bins=128,
             sample_rate=self.sr,
@@ -1564,7 +1564,8 @@ class PlFMParamEstimator(LightningModule):
         # loss: MSS + param loss
         # param loss
         # param_loss = F.mse_loss(norm_predicted_params, norm_params.detach())
-        param_loss = F.huber_loss(norm_predicted_params, norm_params.detach(), delta=0.01)
+        # param_loss = F.huber_loss(norm_predicted_params, norm_params.detach(), delta=0.01)
+        param_loss = F.l1_loss(norm_predicted_params, norm_params.detach())
         # mss loss
         mss_loss = self.mss_loss(out_wf, in_wf)
         # calculate current param loss weight
@@ -1600,7 +1601,7 @@ class PlFMParamEstimator(LightningModule):
 
     def on_train_epoch_end(self):
         epoch = self.trainer.current_epoch
-        scheduler = self.trainer.lr_schedulers[0]['scheduler']
+        scheduler = self.lr_schedulers()
         # Check if this is a ReduceLROnPlateau scheduler
         if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
             if epoch == 500:
