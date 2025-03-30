@@ -1449,9 +1449,9 @@ class PlFMParamEstimator(LightningModule):
         # mss loss
         # define the loss function
         self.mss_loss = MultiResolutionSTFTLoss(
-            fft_sizes=[1024, 2048],
-            hop_sizes=[256, 512],
-            win_lengths=[1024, 2048],
+            fft_sizes=[1024, 2048, 512],
+            hop_sizes=[120, 240, 50],
+            win_lengths=[600, 1200, 240],
             scale="mel",
             n_bins=128,
             sample_rate=self.sr,
@@ -1469,11 +1469,11 @@ class PlFMParamEstimator(LightningModule):
         indices_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
         indices = indices_norm * self.max_mod_idx
         # stack norm params together
-        norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1)#.to(self.device)
+        norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1)
         # now repeat on the samples dimension
-        freqs = freqs.unsqueeze(1).repeat(1, self.n_samples * 2)#.to(self.device)
-        ratios = ratios.unsqueeze(1).repeat(1, self.n_samples * 2)#.to(self.device)
-        indices = indices.unsqueeze(1).repeat(1, self.n_samples * 2)#.to(self.device)
+        freqs = freqs.unsqueeze(1).repeat(1, self.sr)
+        ratios = ratios.unsqueeze(1).repeat(1, self.sr)
+        indices = indices.unsqueeze(1).repeat(1, self.sr)
         return norm_params, freqs, ratios, indices
     
 
@@ -1497,9 +1497,9 @@ class PlFMParamEstimator(LightningModule):
 
 
     def forward(self, x):
-        # scale input to -1 1
-        x = (x - x.min()) / (x.max() - x.min())
-        x = x * 2 - 1
+        # # scale input to -1 1
+        # x = (x - x.min()) / (x.max() - x.min())
+        # x = x * 2 - 1
         in_wf = x.unsqueeze(1)
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf)
@@ -1525,21 +1525,22 @@ class PlFMParamEstimator(LightningModule):
         x = self.input_synth(freqs, ratios, indices).detach()
         in_wf = x.unsqueeze(1)
         # select a random slice of self.n_samples
-        start_idx = torch.randint(0, self.n_samples, (1,))
+        start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
         x = x[:, start_idx:start_idx + self.n_samples]
         # add random phase flip
-        phase_flip = torch.rand(self.batch_size, 1, device=self.device)#.to(self.device)
+        phase_flip = torch.rand(self.batch_size, 1, device=self.device)
         phase_flip = torch.where(phase_flip > 0.5, 1, -1)
         x = x * phase_flip
         # add random noise
-        noise = torch.randn_like(x, device=self.device)#.to(self.device)
+        noise = torch.randn_like(x, device=self.device)
         noise = (noise - noise.min()) / (noise.max() - noise.min())
         noise = noise * 2 - 1
-        noise = noise * 0.01
+        noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
+        noise = noise * noise_coeff
         x = x + noise
-        # rescale to -1 1
-        x = (x - x.min()) / (x.max() - x.min())
-        x = x * 2 - 1
+        # # rescale to -1 1
+        # x = (x - x.min()) / (x.max() - x.min())
+        # x = x * 2 - 1
         in_wf_slice = x.unsqueeze(1)
 
         # forward pass
@@ -1552,9 +1553,9 @@ class PlFMParamEstimator(LightningModule):
         # scale the predicted params
         predicted_params = self.scale_predicted_params(norm_predicted_params)
         # now repeat on the samples dimension
-        predicted_freqs = predicted_params[:, 0].unsqueeze(1).repeat(1, self.n_samples * 2)
-        predicted_ratios = predicted_params[:, 1].unsqueeze(1).repeat(1, self.n_samples * 2)
-        predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.n_samples * 2)
+        predicted_freqs = predicted_params[:, 0].unsqueeze(1).repeat(1, self.sr)
+        predicted_ratios = predicted_params[:, 1].unsqueeze(1).repeat(1, self.sr)
+        predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.sr)
 
         # generate the output
         y = self.output_synth(predicted_freqs, predicted_ratios, predicted_indices)
@@ -1562,7 +1563,8 @@ class PlFMParamEstimator(LightningModule):
 
         # loss: MSS + param loss
         # param loss
-        param_loss = F.mse_loss(norm_predicted_params, norm_params.detach())
+        # param_loss = F.mse_loss(norm_predicted_params, norm_params.detach())
+        param_loss = F.huber_loss(norm_predicted_params, norm_params.detach(), delta=0.01)
         # mss loss
         mss_loss = self.mss_loss(out_wf, in_wf)
         # calculate current param loss weight
@@ -1596,22 +1598,24 @@ class PlFMParamEstimator(LightningModule):
         },
         prog_bar=True)
 
-    # def on_train_epoch_end(self):
-    #     return
-    #     epoch = self.trainer.current_epoch
-    #     interval = 100
-    #     if epoch < 500:
-    #         interval = 50
-    #     else:
-    #         interval = 100
-    #     interval = max(10, interval) 
-    #     if epoch % interval == 0:
-    #         logdir = os.path.join(self.logdir, "wandb")
-    #         logdir_items = os.listdir(logdir)
-    #         logdir_folder = [item for item in logdir_items if item.startswith("offline-run")][0]
-    #         logdir_folder = os.path.join(logdir, logdir_folder)
-    #         print(f"Syncing {logdir_folder}")
-    #         subprocess.run(["wandb", "sync", logdir_folder])
+    def on_train_epoch_end(self):
+        epoch = self.trainer.current_epoch
+        scheduler = self.trainer.lr_schedulers[0]['scheduler']
+        # Check if this is a ReduceLROnPlateau scheduler
+        if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            if epoch == 500:
+                # Dynamically increase patience at epoch 500
+                scheduler.patience = 60 * 1000
+                scheduler.num_bad_epochs = 0
+                print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+            if epoch == 700:
+                scheduler.patience = 70 * 1000
+                scheduler.num_bad_epochs = 0
+                print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+            if epoch == 900:
+                scheduler.patience = 80 * 1000
+                scheduler.num_bad_epochs = 0
+                print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
 
     def on_train_batch_start(self, batch, batch_idx):
         epoch = self.trainer.current_epoch

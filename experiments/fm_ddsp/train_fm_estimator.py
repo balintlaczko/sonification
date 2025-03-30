@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--max_mod_idx", type=int, default=6)
     # model params
     parser.add_argument("--latent_size", type=int, default=128)
-    parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[5, 2])
+    parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 5])
     parser.add_argument("--n_res_block", type=int, default=24)
     parser.add_argument("--n_res_channel", type=int, default=64)
     # training params
@@ -37,14 +37,14 @@ def main():
     parser.add_argument("--warmup_epochs", type=int, default=5)
     parser.add_argument("--train_epochs", type=int, default=10000)
     parser.add_argument("--steps_per_epoch", type=int, default=1000)
-    parser.add_argument("--param_loss_weight_start", type=int, default=100)
-    parser.add_argument("--param_loss_weight_end", type=int, default=100)
+    parser.add_argument("--param_loss_weight_start", type=int, default=150)
+    parser.add_argument("--param_loss_weight_end", type=int, default=150)
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
-    parser.add_argument("--ckpt_name", type=str, default="nn_tilde_3")
+    parser.add_argument("--ckpt_name", type=str, default="nn_tilde_4")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
-    parser.add_argument("--comment", type=str, default="samps8192, kernels5_2, noise_flip, additional horizontal stride in encoder")
+    parser.add_argument("--comment", type=str, default="samps8192, kernels3_5, param_weight150, small noise, huber loss, no input_norm, more resolutions for mss loss, adaptive patience")
     
     args = parser.parse_args()
 
