@@ -18,8 +18,8 @@ def main():
     parser.add_argument("--sr", type=int, default=48000)
     parser.add_argument("--length_samps", type=int, default=8192)
     parser.add_argument("--n_fft", type=int, default=4096)
-    parser.add_argument("--f_min", type=float, default=midi2frequency(38))
-    parser.add_argument("--f_max", type=float, default=midi2frequency(86))
+    parser.add_argument("--f_min", type=float, default=20)
+    parser.add_argument("--f_max", type=float, default=16000)
     parser.add_argument("--n_mels", type=int, default=512)
     parser.add_argument("--power", type=float, default=1)
     parser.add_argument("--normalized", type=int, default=1)
@@ -42,9 +42,9 @@ def main():
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_ddsp")
-    parser.add_argument("--ckpt_name", type=str, default="nn_tilde_4")
+    parser.add_argument("--ckpt_name", type=str, default="nn_tilde_5")
     parser.add_argument("--logdir", type=str, default="./logs/fm_ddsp")
-    parser.add_argument("--comment", type=str, default="samps8192, kernels3_5, param_weight150, small noise, l1 loss, no input_norm, adaptive patience")
+    parser.add_argument("--comment", type=str, default="extend spectrum f_min f_max")
     
     args = parser.parse_args()
 
