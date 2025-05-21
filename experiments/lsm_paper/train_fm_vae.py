@@ -56,7 +56,7 @@ def main():
     parser.add_argument("--lr_d", type=float, default=0.0001)
     parser.add_argument("--lr_decay_d", type=float, default=0.75)
     parser.add_argument("--train_epochs", type=int, default=10000)
-    parser.add_argument("--steps_per_epoch", type=int, default=1000)
+    parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
     parser.add_argument("--ckpt_name", type=str, default="init_test")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
@@ -84,9 +84,9 @@ def main():
     # checkpoint callbacks
     checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
     best_checkpoint_callback = ModelCheckpoint(
-        monitor="train_loss",
+        monitor="vae_loss",
         dirpath=checkpoint_path,
-        filename=args.ckpt_name + "_best_{epoch:02d}-{train_loss:.4f}",
+        filename=args.ckpt_name + "_best_{epoch:02d}-{vae_loss:.4f}",
         save_top_k=1,
         mode="min",
     )
@@ -116,7 +116,7 @@ def main():
         enable_checkpointing=True,
         callbacks=callbacks,
         logger=logger,
-        log_every_n_steps=50,
+        log_every_n_steps=20,
         limit_train_batches=args.steps_per_epoch,
     )
 

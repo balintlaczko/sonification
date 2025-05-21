@@ -1834,6 +1834,7 @@ class PlFMFactorVAE(LightningModule):
         self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
         self.max_harm_ratio = args.max_harm_ratio
         self.max_mod_idx = args.max_mod_idx
+        self.latent_size = args.latent_size
         self.logdir = args.logdir
         self.d_hidden_size = args.d_hidden_size
         self.d_num_layers = args.d_num_layers
@@ -1885,7 +1886,7 @@ class PlFMFactorVAE(LightningModule):
             decoder_features=args.decoder_features,
             decoder_n_res_block=args.decoder_n_res_block,
             decoder_n_res_features=args.decoder_n_res_features,
-            latent_size=args.latent_size,
+            latent_size=self.latent_size,
         )
         self.D = LinearDiscriminator(
             self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
@@ -2040,9 +2041,6 @@ class PlFMFactorVAE(LightningModule):
         vae_optimizer.zero_grad()
         self.manual_backward(vae_loss, retain_graph=True)
         self.clip_gradients(vae_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
-        # step
-        vae_optimizer.step()
-        vae_scheduler.step(vae_loss.item())
 
         # get another batch for D
         norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
@@ -2068,7 +2066,7 @@ class PlFMFactorVAE(LightningModule):
         # normalize it
         in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         # encode with the VAE
-        self.model.eval()
+        # self.model.eval()
         mu_2, logvar_2 = self.model.encode(in_spec)
         # reparameterize
         z_2 = self.model.reparameterize(mu_2, logvar_2)
@@ -2082,7 +2080,11 @@ class PlFMFactorVAE(LightningModule):
         d_optimizer.zero_grad()
         self.manual_backward(d_tc_loss)
         self.clip_gradients(d_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
-        # step
+
+        # VAE step
+        vae_optimizer.step()
+        vae_scheduler.step(vae_loss.item())
+        # D step
         d_optimizer.step()
         d_scheduler.step(d_tc_loss.item())
 
