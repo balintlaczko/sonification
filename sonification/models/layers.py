@@ -302,7 +302,25 @@ class ResBlock(nn.Module):
     def forward(self, input):
         out = self.conv(input)
         out += input  # skip connection
+        return out
 
+
+class LinearResBlock(nn.Module):
+    def __init__(self, in_features, features, feats_per_group=16):
+        super().__init__()
+
+        # this is the residual block
+        self.block = nn.Sequential(
+            nn.Linear(in_features, features),
+            nn.GroupNorm(features // feats_per_group, features),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(features, in_features),
+            nn.GroupNorm(in_features // feats_per_group, in_features),
+        )
+    
+    def forward(self, input):
+        out = self.block(input)
+        out += input
         return out
     
 

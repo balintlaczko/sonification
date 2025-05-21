@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import wandb.sync
-from .layers import LinearEncoder, LinearDecoder, MLP, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
+from .layers import LinearEncoder, LinearDecoder, LinearResBlock, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
 from .ddsp import FMSynth
 from torchaudio.transforms import MelSpectrogram
 from lightning.pytorch import LightningModule
@@ -1447,7 +1447,6 @@ class PlFMParamEstimator(LightningModule):
         self.output_synth = FMSynth(sr=self.sr)
 
         # mss loss
-        # define the loss function
         self.mss_loss = MultiResolutionSTFTLoss(
             fft_sizes=[1024, 2048],
             hop_sizes=[256, 512],
@@ -1631,3 +1630,522 @@ class PlFMParamEstimator(LightningModule):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=self.lr_decay, patience=50000)
         return [optimizer], [scheduler]
+    
+
+
+class MelSpecEncoder(nn.Module):
+    def __init__(
+            self,
+            encoder_channels=128,
+            encoder_kernels=[4, 4],
+            n_res_block=2,
+            n_res_channel=32,
+            stride=4,
+            latent_size=8,
+            ):
+        super().__init__()
+
+        self.chans_per_group = 16
+
+        self.encoder = MultiScaleEncoder(
+            in_channel=1,
+            channel=encoder_channels,
+            n_res_block=n_res_block,
+            n_res_channel=n_res_channel,
+            stride=stride,
+            kernels=encoder_kernels,
+            input_dim_h=0,
+            input_dim_w=0,
+        )
+        self.post_encoder = nn.Sequential(
+            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+            nn.LeakyReLU(0.2),
+        )
+
+        self.mlp = nn.Sequential(
+            nn.Linear(encoder_channels * (encoder_channels // 64), 128),
+            nn.GroupNorm(128 // self.chans_per_group, 128),
+            nn.LeakyReLU(0.2),
+            nn.Linear(128, 64),
+            nn.GroupNorm(64 // self.chans_per_group, 64),
+            nn.LeakyReLU(0.2),
+            nn.Linear(64, 32),
+            nn.GroupNorm(32 // self.chans_per_group, 32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, 16),
+            nn.GroupNorm(16 // self.chans_per_group, 16),
+            nn.LeakyReLU(0.2),
+        )
+
+        self.mu = nn.Linear(16, latent_size)
+        self.logvar = nn.Linear(16, latent_size)
+
+    def forward(self, x):
+        # print("x shape: ", x.shape)
+        x = self.encoder(x)
+        # print("encoder x shape: ", x.shape)
+        x = self.post_encoder(x)
+        # print("post_encoder x shape: ", x.shape)
+        x = x.view(x.size(0), -1)
+        # print("post_encoder x view shape: ", x.shape)
+        x = self.mlp(x)
+        # print("mlp x shape: ", x.shape)
+        mu = self.mu(x)
+        logvar = self.logvar(x)
+        # print("mu shape: ", mu.shape)
+        # print("logvar shape: ", logvar.shape)
+        return mu, logvar
+    
+
+class ParamDecoder(nn.Module):
+    def __init__(
+            self,
+            decoder_features=128,
+            n_res_block=2,
+            n_res_features=32,
+            latent_size=8,
+            n_params=3,
+            ):
+        super().__init__()
+
+        self.chans_per_group = 16
+
+        self.pre_decoder = nn.Sequential(
+            nn.Linear(latent_size, 16),
+            nn.GroupNorm(16 // self.chans_per_group, 16),
+            nn.LeakyReLU(0.2),
+            nn.Linear(16, 32),
+            nn.GroupNorm(32 // self.chans_per_group, 32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, 64),
+            nn.GroupNorm(64 // self.chans_per_group, 64),
+            nn.LeakyReLU(0.2),
+            nn.Linear(64, 128),
+            nn.GroupNorm(128 // self.chans_per_group, 128),
+            nn.LeakyReLU(0.2),
+        )
+
+        res_blocks = [LinearResBlock(decoder_features, n_res_features) for _ in range(n_res_block)]
+        self.res_blocks = nn.Sequential(*res_blocks)
+
+        self.post_decoder = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.GroupNorm(64 // self.chans_per_group, 64),
+            nn.LeakyReLU(0.2),
+            nn.Linear(64, 32),
+            nn.GroupNorm(32 // self.chans_per_group, 32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, 16),
+            nn.GroupNorm(16 // self.chans_per_group, 16),
+            nn.LeakyReLU(0.2),
+            nn.Linear(16, n_params),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        # print("x shape: ", x.shape)
+        x = self.pre_decoder(x)
+        # print("pre_decoder x shape: ", x.shape)
+        x = self.res_blocks(x)
+        # print("res_blocks x shape: ", x.shape)
+        x = self.post_decoder(x)
+        # print("post_decoder x shape: ", x.shape)
+        return x
+    
+
+class FMVAE(nn.Module):
+    def __init__(self,
+                 encoder_channels=128,
+                 encoder_kernels=[4, 4],
+                 encoder_n_res_block=2,
+                 encoder_n_res_channel=32,
+                 decoder_features=128,
+                 decoder_n_res_block=2,
+                 decoder_n_res_features=32,
+                 latent_size=8,
+                 ):
+        super().__init__()
+        self.encoder = MelSpecEncoder(
+            encoder_channels=encoder_channels,
+            encoder_kernels=encoder_kernels,
+            n_res_block=encoder_n_res_block,
+            n_res_channel=encoder_n_res_channel,
+            stride=4,
+            latent_size=latent_size,
+        )
+        self.decoder = ParamDecoder(
+            decoder_features=decoder_features,
+            n_res_block=decoder_n_res_block,
+            n_res_features=decoder_n_res_features,
+            latent_size=latent_size,
+            n_params=3
+        )
+    
+    def encode(self, x):
+        mu, logvar = self.encoder(x)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return eps.mul(std).add_(mu)
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        params = self.decoder(z)
+        return params, mu, logvar, z
+    
+
+class PlFMFactorVAE(LightningModule):
+    def __init__(self, args):
+        super().__init__()
+        # Important: This property activates manual optimization.
+        self.automatic_optimization = False
+        self.save_hyperparameters()
+        self.args = args
+
+        self.sr = args.sr
+        self.batch_size = args.batch_size
+        self.warmup_epochs = args.warmup_epochs
+        self.param_loss_weight_start = args.param_loss_weight_start
+        self.param_loss_weight = args.param_loss_weight_start # initialize to start
+        self.param_loss_weight_end = args.param_loss_weight_end
+        self.param_loss_weight_ramp_start_epoch = args.param_loss_weight_ramp_start_epoch
+        self.param_loss_weight_ramp_end_epoch = args.param_loss_weight_ramp_end_epoch
+        self.n_samples = args.length_samps
+        self.n_fft = args.n_fft
+        self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
+        self.max_harm_ratio = args.max_harm_ratio
+        self.max_mod_idx = args.max_mod_idx
+        self.logdir = args.logdir
+        self.d_hidden_size = args.d_hidden_size
+        self.d_num_layers = args.d_num_layers
+
+        # losses
+        self.mss_loss = MultiResolutionSTFTLoss(
+            fft_sizes=[1024, 2048],
+            hop_sizes=[256, 512],
+            win_lengths=[1024, 2048],
+            scale="mel",
+            n_bins=128,
+            sample_rate=self.sr,
+            perceptual_weighting=True,
+        )
+        self.mss_loss.eval()
+        self.kld = kld_loss
+        self.recon_weight = args.recon_weight
+        self.kld_weight_max = args.kld_weight_max
+        self.kld_weight_min = args.kld_weight_min
+        self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        self.kld_start_epoch = args.kld_start_epoch
+        self.kld_warmup_epochs = args.kld_warmup_epochs
+        self.tc_weight = args.tc_weight
+
+        # learning rates
+        self.lr_vae = args.lr_vae
+        self.lr_decay_vae = args.lr_decay_vae
+        self.lr_d = args.lr_d
+        self.lr_decay_d = args.lr_decay_d
+
+        # models
+        self.input_synth = FMSynth(sr=self.sr)
+        self.output_synth = FMSynth(sr=self.sr)
+        self.input_synth.eval()
+        self.mel_spectrogram = MelSpectrogram(
+            sample_rate=self.sr,
+            n_fft=self.n_fft,
+            f_min=args.f_min,
+            f_max=args.f_max,
+            n_mels=args.n_mels,
+            power=args.power,
+            normalized=args.normalized > 0,
+        )
+        self.model = FMVAE(
+            encoder_channels=args.encoder_channels,
+            encoder_kernels=args.encoder_kernels,
+            encoder_n_res_block=args.encoder_n_res_block,
+            encoder_n_res_channel=args.encoder_n_res_channel,
+            decoder_features=args.decoder_features,
+            decoder_n_res_block=args.decoder_n_res_block,
+            decoder_n_res_features=args.decoder_n_res_features,
+            latent_size=args.latent_size,
+        )
+        self.D = LinearDiscriminator(
+            self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+
+
+        def init_weights_kaiming(m):
+            if isinstance(m, (nn.Conv2d, nn.Linear)):  # Apply to conv and linear layers
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
+        self.model.apply(init_weights_kaiming)
+        self.D.apply(init_weights_kaiming)
+
+
+    def sample_fm_params(self, batch_size):
+        pitches_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
+        pitches = scale(pitches_norm, 0, 1, 38, 86)
+        freqs = midi2frequency(pitches)
+        ratios_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
+        ratios = ratios_norm * self.max_harm_ratio
+        indices_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
+        indices = indices_norm * self.max_mod_idx
+        # stack norm params together
+        norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1)
+        # now repeat on the samples dimension
+        freqs = freqs.unsqueeze(1).repeat(1, self.sr)
+        ratios = ratios.unsqueeze(1).repeat(1, self.sr)
+        indices = indices.unsqueeze(1).repeat(1, self.sr)
+        return norm_params, freqs, ratios, indices
+    
+
+    def scale_predicted_params(self, predicted_params):
+        # separate the param dim
+        pitches = predicted_params[:, 0]
+        ratios = predicted_params[:, 1]
+        indices = predicted_params[:, 2]
+        # clamp everything to 0..1
+        pitches = torch.clamp(pitches, 0, 1)
+        ratios = torch.clamp(ratios, 0, 1)
+        indices = torch.clamp(indices, 0, 1)
+        # scale to the correct range
+        pitches = scale(pitches, 0, 1, 38, 86)
+        freqs = midi2frequency(pitches)
+        ratios = scale(ratios, 0, 1, 0, self.max_harm_ratio)
+        indices = scale(indices, 0, 1, 0, self.max_mod_idx)
+        # re-stack them
+        out = torch.cat([freqs.unsqueeze(1), ratios.unsqueeze(1), indices.unsqueeze(1)], dim=1)
+        return out
+    
+
+    def forward(self, x):
+        in_wf = x.unsqueeze(1)
+        # get the mel spectrogram
+        in_spec = self.mel_spectrogram(in_wf)
+        # normalize it
+        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # predict the params
+        norm_predicted_params, mu, logvar, z = self.model(in_spec)
+        # scale the predicted params
+        predicted_params = self.scale_predicted_params(norm_predicted_params)
+        return predicted_params, norm_predicted_params, mu, logvar, z
+    
+
+    def training_step(self, batch, batch_idx):
+        self.model.train()
+        self.D.train()
+
+        # get the optimizers and schedulers
+        vae_optimizer, d_optimizer = self.optimizers()
+        vae_scheduler, d_scheduler = self.lr_schedulers()
+
+        # create a batch of ones and zeros for the discriminator
+        ones = torch.ones(self.batch_size, dtype=torch.long, device=self.device)
+        zeros = torch.zeros(self.batch_size, dtype=torch.long, device=self.device)
+
+        # get the batch
+        epoch_idx = self.trainer.current_epoch
+
+        norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
+        x = self.input_synth(freqs, ratios, indices).detach()
+        in_wf = x.unsqueeze(1)
+        # select a random slice of self.n_samples
+        start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
+        x = x[:, start_idx:start_idx + self.n_samples]
+        # add random phase flip
+        phase_flip = torch.rand(self.batch_size, 1, device=self.device)
+        phase_flip = torch.where(phase_flip > 0.5, 1, -1)
+        x = x * phase_flip
+        # add random noise
+        noise = torch.randn_like(x, device=self.device)
+        noise = (noise - noise.min()) / (noise.max() - noise.min())
+        noise = noise * 2 - 1
+        noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
+        noise = noise * noise_coeff
+        x = x + noise
+        in_wf_slice = x.unsqueeze(1)
+
+        # forward pass
+        # get the mel spectrogram
+        in_spec = self.mel_spectrogram(in_wf_slice.detach())
+        # normalize it
+        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # predict the params
+        norm_predicted_params, mu, logvar, z = self.model(in_spec)
+        # scale the predicted params
+        predicted_params = self.scale_predicted_params(norm_predicted_params)
+        # now repeat on the samples dimension
+        predicted_freqs = predicted_params[:, 0].unsqueeze(1).repeat(1, self.sr)
+        predicted_ratios = predicted_params[:, 1].unsqueeze(1).repeat(1, self.sr)
+        predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.sr)
+
+        # generate the output
+        y = self.output_synth(predicted_freqs, predicted_ratios, predicted_indices)
+        out_wf = y.unsqueeze(1)
+
+        # VAE recon_loss: MSS + param loss
+        # param loss
+        param_loss = F.l1_loss(norm_predicted_params, norm_params.detach())
+        # mss loss
+        mss_loss = self.mss_loss(out_wf, in_wf)
+        # calculate current param loss weight
+        current_epoch = self.trainer.current_epoch
+        if current_epoch < self.param_loss_weight_ramp_start_epoch:
+            param_loss_weight = self.param_loss_weight_start
+        elif current_epoch > self.param_loss_weight_ramp_end_epoch:
+            param_loss_weight = self.param_loss_weight_end
+        else:
+            param_loss_weight = self.param_loss_weight_start + (self.param_loss_weight_end - self.param_loss_weight_start) * \
+                (current_epoch - self.param_loss_weight_ramp_start_epoch) / \
+                (self.param_loss_weight_ramp_end_epoch - self.param_loss_weight_ramp_start_epoch)
+        self.param_loss_weight = param_loss_weight
+        vae_recon_loss = (param_loss * self.param_loss_weight) + mss_loss
+        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
+
+        # VAE KLD loss
+        if self.args.dynamic_kld > 0:
+            kld_scale = self.kld_weight_dynamic
+        else:
+            kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
+                min(1.0, (epoch_idx - self.kld_start_epoch) /
+                    self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
+        kld_loss = self.kld(mu, logvar)
+        scaled_kld_loss = kld_loss * kld_scale
+
+        # VAE TC loss
+        d_z = self.D(z)
+        vae_tc_loss = F.cross_entropy(d_z, ones)
+        scaled_vae_tc_loss = vae_tc_loss * self.tc_weight
+
+        # VAE loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
+
+        # VAE backward pass
+        vae_optimizer.zero_grad()
+        self.manual_backward(vae_loss, retain_graph=True)
+        self.clip_gradients(vae_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+        # step
+        vae_optimizer.step()
+        vae_scheduler.step(vae_loss.item())
+
+        # get another batch for D
+        norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
+        x = self.input_synth(freqs, ratios, indices).detach()
+        in_wf = x.unsqueeze(1)
+        # select a random slice of self.n_samples
+        start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
+        x = x[:, start_idx:start_idx + self.n_samples]
+        # add random phase flip
+        phase_flip = torch.rand(self.batch_size, 1, device=self.device)
+        phase_flip = torch.where(phase_flip > 0.5, 1, -1)
+        x = x * phase_flip
+        # add random noise
+        noise = torch.randn_like(x, device=self.device)
+        noise = (noise - noise.min()) / (noise.max() - noise.min())
+        noise = noise * 2 - 1
+        noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
+        noise = noise * noise_coeff
+        x = x + noise
+        in_wf_slice = x.unsqueeze(1)
+        # get the mel spectrogram
+        in_spec = self.mel_spectrogram(in_wf_slice.detach())
+        # normalize it
+        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # encode with the VAE
+        self.model.eval()
+        mu_2, logvar_2 = self.model.encode(in_spec)
+        # reparameterize
+        z_2 = self.model.reparameterize(mu_2, logvar_2)
+        z_2_perm = permute_dims(z_2)
+        # get the discriminator output
+        d_z_2_perm = self.D(z_2_perm.detach())
+        d_tc_loss = 0.5 * (F.cross_entropy(d_z, zeros) +
+                           F.cross_entropy(d_z_2_perm, ones))
+
+        # Discriminator backward pass
+        d_optimizer.zero_grad()
+        self.manual_backward(d_tc_loss)
+        self.clip_gradients(d_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+        # step
+        d_optimizer.step()
+        d_scheduler.step(d_tc_loss.item())
+
+        # log losses
+        self.last_recon_loss = vae_recon_loss
+        self.log_dict({
+            "vae_loss": vae_loss,
+            "vae_param_loss": param_loss,
+            "vae_mss_loss": mss_loss,
+            "vae_kld_loss": kld_loss,
+            "vae_tc_loss": vae_tc_loss,
+            "d_tc_loss": d_tc_loss,
+            "lr_vae": vae_scheduler.get_last_lr()[0],
+            "lr_d": d_scheduler.get_last_lr()[0],
+            "vae_param_loss_weight": self.param_loss_weight,
+            "vae_kld_scale": kld_scale,
+        },
+        prog_bar=True)
+
+
+    def on_train_epoch_end(self):
+        epoch = self.trainer.current_epoch
+        vae_scheduler, d_scheduler = self.lr_schedulers()
+        for scheduler in [vae_scheduler, d_scheduler]:
+            # Check if this is a ReduceLROnPlateau scheduler
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                if epoch == 500:
+                    # Dynamically increase patience at epoch 500
+                    scheduler.patience = 60 * 1000
+                    scheduler.num_bad_epochs = 0
+                    print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+                if epoch == 700:
+                    scheduler.patience = 70 * 1000
+                    scheduler.num_bad_epochs = 0
+                    print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+                if epoch == 900:
+                    scheduler.patience = 80 * 1000
+                    scheduler.num_bad_epochs = 0
+                    print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+        # update the kld weight
+        if self.args.dynamic_kld > 0:
+            if self.last_recon_loss < self.args.target_recon_loss:
+                self.kld_weight_dynamic *= 1.01
+
+
+    def on_train_batch_start(self, batch, batch_idx):
+        epoch = self.trainer.current_epoch
+        if epoch < self.warmup_epochs:
+            lr_scale = min(1.0, (epoch + 1) / self.warmup_epochs)
+            for pg in self.trainer.optimizers[0].param_groups:
+                pg["lr"] = self.lr_vae * lr_scale
+            for pg in self.trainer.optimizers[1].param_groups:
+                pg["lr"] = self.lr_d * lr_scale
+
+
+    def configure_optimizers(self):
+        vae_optimizer = torch.optim.AdamW(
+            self.model.parameters(), lr=self.lr_vae)
+        d_optimizer = torch.optim.AdamW(
+            self.D.parameters(), lr=self.lr_d)
+        vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=50000)
+        d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=50000)
+        # return the optimizers and schedulers
+        return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
