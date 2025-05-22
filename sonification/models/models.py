@@ -2089,7 +2089,8 @@ class PlFMFactorVAE(LightningModule):
         d_scheduler.step(d_tc_loss.item())
 
         # log losses
-        self.last_recon_loss = vae_recon_loss
+        # self.last_recon_loss = vae_recon_loss
+        self.last_recon_loss = param_loss # using it for dynamic kld threshold
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_param_loss": param_loss,
@@ -2106,24 +2107,26 @@ class PlFMFactorVAE(LightningModule):
 
 
     def on_train_epoch_end(self):
-        epoch = self.trainer.current_epoch
-        vae_scheduler, d_scheduler = self.lr_schedulers()
-        for scheduler in [vae_scheduler, d_scheduler]:
-            # Check if this is a ReduceLROnPlateau scheduler
-            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                if epoch == 500:
-                    # Dynamically increase patience at epoch 500
-                    scheduler.patience = 60 * 1000
-                    scheduler.num_bad_epochs = 0
-                    print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
-                if epoch == 700:
-                    scheduler.patience = 70 * 1000
-                    scheduler.num_bad_epochs = 0
-                    print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
-                if epoch == 900:
-                    scheduler.patience = 80 * 1000
-                    scheduler.num_bad_epochs = 0
-                    print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+        change_patience = False
+        if change_patience:
+            epoch = self.trainer.current_epoch
+            vae_scheduler, d_scheduler = self.lr_schedulers()
+            for scheduler in [vae_scheduler, d_scheduler]:
+                # Check if this is a ReduceLROnPlateau scheduler
+                if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    if epoch == 500:
+                        # Dynamically increase patience at epoch 500
+                        scheduler.patience = 60 * 1000
+                        scheduler.num_bad_epochs = 0
+                        print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+                    if epoch == 700:
+                        scheduler.patience = 70 * 1000
+                        scheduler.num_bad_epochs = 0
+                        print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+                    if epoch == 900:
+                        scheduler.patience = 80 * 1000
+                        scheduler.num_bad_epochs = 0
+                        print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
         # update the kld weight
         if self.args.dynamic_kld > 0:
             if self.last_recon_loss < self.args.target_recon_loss:
