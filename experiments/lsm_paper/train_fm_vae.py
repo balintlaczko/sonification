@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 5])
     parser.add_argument("--encoder_n_res_block", type=int, default=24)
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
-    parser.add_argument("--decoder_features", type=int, default=256)
+    parser.add_argument("--decoder_features", type=int, default=128)
     parser.add_argument("--decoder_n_res_block", type=int, default=4)
     parser.add_argument("--decoder_n_res_features", type=int, default=64)
     parser.add_argument("--d_hidden_size", type=int, default=64)
@@ -60,7 +60,7 @@ def main():
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
     parser.add_argument("--ckpt_name", type=str, default="imv_v1.1")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="like v1 but weaker d, 2x kld, shallower and wider decoder")
+    parser.add_argument("--comment", type=str, default="like v1 but weaker d, 2x kld, shallower decoder")
     
     args = parser.parse_args()
 
