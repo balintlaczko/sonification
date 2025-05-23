@@ -49,7 +49,7 @@ def main():
     parser.add_argument('--kld_weight_max', type=float, default=2, help='kld weight at the end of the warmup')
     parser.add_argument('--kld_weight_min', type=float, default=0.1, help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0, help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
-    parser.add_argument('--kld_warmup_epochs', type=int, default=100, help='the number of epochs to warmup the kld weight')
+    parser.add_argument('--kld_warmup_epochs', type=int, default=200, help='the number of epochs to warmup the kld weight')
     parser.add_argument('--tc_weight', type=float, default=10, help='tc weight')
     parser.add_argument("--lr_vae", type=float, default=0.0001)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
