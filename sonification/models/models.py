@@ -1857,7 +1857,10 @@ class PlFMFactorVAE(LightningModule):
         self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
         self.kld_start_epoch = args.kld_start_epoch
         self.kld_warmup_epochs = args.kld_warmup_epochs
-        self.tc_weight = args.tc_weight
+        self.tc_weight_max = args.tc_weight_max
+        self.tc_weight_min = args.tc_weight_min
+        self.tc_start_epoch = args.tc_start_epoch
+        self.tc_warmup_epochs = args.tc_warmup_epochs
 
         # learning rates
         self.lr_vae = args.lr_vae
@@ -2032,7 +2035,10 @@ class PlFMFactorVAE(LightningModule):
         # VAE TC loss
         d_z = self.D(z)
         vae_tc_loss = F.cross_entropy(d_z, ones)
-        scaled_vae_tc_loss = vae_tc_loss * self.tc_weight
+        tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
+            min(1.0, (epoch_idx - self.tc_start_epoch) /
+            self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
+        scaled_vae_tc_loss = vae_tc_loss * tc_scale
 
         # VAE loss
         vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
@@ -2102,6 +2108,7 @@ class PlFMFactorVAE(LightningModule):
             "lr_d": d_scheduler.get_last_lr()[0],
             "vae_param_loss_weight": self.param_loss_weight,
             "vae_kld_scale": kld_scale,
+            "vae_tc_scale": tc_scale,
         },
         prog_bar=True)
 

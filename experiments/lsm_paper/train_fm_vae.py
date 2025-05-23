@@ -50,7 +50,10 @@ def main():
     parser.add_argument('--kld_weight_min', type=float, default=0.1, help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0, help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=1000, help='the number of epochs to warmup the kld weight')
-    parser.add_argument('--tc_weight', type=float, default=10, help='tc weight')
+    parser.add_argument('--tc_weight_max', type=float, default=10, help='tc weight at the end of the warmup')
+    parser.add_argument('--tc_weight_min', type=float, default=0, help='tc weight at the start of the warmup')
+    parser.add_argument('--tc_start_epoch', type=int, default=1000, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
+    parser.add_argument('--tc_warmup_epochs', type=int, default=1000, help='the number of epochs to warmup the tc weight')
     parser.add_argument("--lr_vae", type=float, default=0.0001)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
     parser.add_argument("--lr_d", type=float, default=0.00001)
@@ -58,9 +61,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=20000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v1.5")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v1.6")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="much longer kld fade-in, even stronger decoder, weaker D")
+    parser.add_argument("--comment", type=str, default="with tc fade-in after kld fade-in")
     
     args = parser.parse_args()
 
@@ -155,7 +158,10 @@ def main():
         kld_weight_min=args.kld_weight_min,
         kld_start_epoch=args.kld_start_epoch,
         kld_warmup_epochs=args.kld_warmup_epochs,
-        tc_weight=args.tc_weight,
+        tc_weight_max=args.tc_weight_max,
+        tc_weight_min=args.tc_weight_min,
+        tc_start_epoch=args.tc_start_epoch,
+        tc_warmup_epochs=args.tc_warmup_epochs,
         lr_vae=args.lr_vae,
         lr_decay_vae=args.lr_decay_vae,
         lr_d=args.lr_d,
