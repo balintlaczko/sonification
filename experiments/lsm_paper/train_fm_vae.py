@@ -32,10 +32,10 @@ def main():
     parser.add_argument("--encoder_n_res_block", type=int, default=24)
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
     parser.add_argument("--decoder_features", type=int, default=128)
-    parser.add_argument("--decoder_n_res_block", type=int, default=24)
+    parser.add_argument("--decoder_n_res_block", type=int, default=32)
     parser.add_argument("--decoder_n_res_features", type=int, default=64)
     parser.add_argument("--d_hidden_size", type=int, default=64)
-    parser.add_argument("--d_num_layers", type=int, default=3)
+    parser.add_argument("--d_num_layers", type=int, default=2)
     # training params
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--warmup_epochs", type=int, default=10)
@@ -49,7 +49,7 @@ def main():
     parser.add_argument('--kld_weight_max', type=float, default=2, help='kld weight at the end of the warmup')
     parser.add_argument('--kld_weight_min', type=float, default=0.1, help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0, help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
-    parser.add_argument('--kld_warmup_epochs', type=int, default=200, help='the number of epochs to warmup the kld weight')
+    parser.add_argument('--kld_warmup_epochs', type=int, default=1000, help='the number of epochs to warmup the kld weight')
     parser.add_argument('--tc_weight', type=float, default=10, help='tc weight')
     parser.add_argument("--lr_vae", type=float, default=0.0001)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
@@ -58,9 +58,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=20000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v1.4")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v1.5")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="like 1.3 but stronger decoder, and longer kld fade-in")
+    parser.add_argument("--comment", type=str, default="much longer kld fade-in, even stronger decoder, weaker D")
     
     args = parser.parse_args()
 
