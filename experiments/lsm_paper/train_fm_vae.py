@@ -58,7 +58,7 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=20000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v1.3")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v1.4")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
     parser.add_argument("--comment", type=str, default="like 1.3 but stronger decoder, and longer kld fade-in")
     
