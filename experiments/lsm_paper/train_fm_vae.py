@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--encoder_n_res_block", type=int, default=24)
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
     parser.add_argument("--decoder_features", type=int, default=128)
-    parser.add_argument("--decoder_n_res_block", type=int, default=4)
+    parser.add_argument("--decoder_n_res_block", type=int, default=24)
     parser.add_argument("--decoder_n_res_features", type=int, default=64)
     parser.add_argument("--d_hidden_size", type=int, default=64)
     parser.add_argument("--d_num_layers", type=int, default=3)
@@ -58,9 +58,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=20000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v1.2")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v1.3")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="like 1.1 but with kld fade-in, and weaker D")
+    parser.add_argument("--comment", type=str, default="like 1.3 but stronger decoder, and longer kld fade-in")
     
     args = parser.parse_args()
 
