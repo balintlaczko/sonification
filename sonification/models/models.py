@@ -1636,12 +1636,14 @@ class PlFMParamEstimator(LightningModule):
 class MelSpecEncoder(nn.Module):
     def __init__(
             self,
+            input_width=512,
             encoder_channels=128,
             encoder_kernels=[4, 4],
             n_res_block=2,
             n_res_channel=32,
             stride=4,
             latent_size=8,
+            dropout=0.2,
             ):
         super().__init__()
 
@@ -1657,44 +1659,76 @@ class MelSpecEncoder(nn.Module):
             input_dim_h=0,
             input_dim_w=0,
         )
-        self.post_encoder = nn.Sequential(
-            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
-            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
-            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
-            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
-            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
-            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
-            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
-            nn.LeakyReLU(0.2),
-        )
 
-        self.mlp = nn.Sequential(
-            nn.Linear(encoder_channels * (encoder_channels // 64), 128),
-            nn.GroupNorm(128 // self.chans_per_group, 128),
-            nn.LeakyReLU(0.2),
-            nn.Linear(128, 64),
-            nn.GroupNorm(64 // self.chans_per_group, 64),
-            nn.LeakyReLU(0.2),
-            nn.Linear(64, 32),
-            nn.GroupNorm(32 // self.chans_per_group, 32),
-            nn.LeakyReLU(0.2),
-            nn.Linear(32, 16),
-            nn.GroupNorm(16 // self.chans_per_group, 16),
-            nn.LeakyReLU(0.2),
-        )
+        encoded_width = input_width // stride # 128
+        target_width = 2
+        num_blocks = int(np.log2(encoded_width)) - int(np.log2(target_width)) # 7 - 1 = 6
 
-        self.mu = nn.Linear(16, latent_size)
-        self.logvar = nn.Linear(16, latent_size)
+        post_encoder_blocks = []
+        post_encoder_block = [
+            nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+            nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+            nn.LeakyReLU(0.2),
+        ]
+        for _ in range(num_blocks):
+            post_encoder_blocks.extend(post_encoder_block)
+
+        self.post_encoder = nn.Sequential(*post_encoder_blocks)
+
+        # self.post_encoder = nn.Sequential(
+        #     nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+        #     nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+        #     nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+        #     nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+        #     nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+        #     nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Conv2d(encoder_channels, encoder_channels, 3, 2, 1),
+        #     nn.GroupNorm(encoder_channels // self.chans_per_group, encoder_channels),
+        #     nn.LeakyReLU(0.2),
+        # )
+
+        post_encoder_n_features = encoder_channels * target_width # 256
+        target_n_features = 16
+        mlp_layers = []
+        num_mlp_blocks = int(np.log2(post_encoder_n_features) - np.log2(target_n_features)) # 256 -> 16 = 4 blocks
+        mlp_layers_features = [post_encoder_n_features // (2 ** i) for i in range(num_mlp_blocks + 1)]
+        for i in range(num_mlp_blocks):
+            block = [
+                nn.Linear(mlp_layers_features[i], mlp_layers_features[i + 1]),
+                nn.GroupNorm(mlp_layers_features[i + 1] // self.chans_per_group, mlp_layers_features[i + 1]),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(dropout)
+            ]
+            mlp_layers.extend(block)
+
+        self.mlp = nn.Sequential(*mlp_layers)
+
+        # self.mlp = nn.Sequential(
+        #     nn.Linear(encoder_channels * (encoder_channels // 64), 128),
+        #     nn.GroupNorm(128 // self.chans_per_group, 128),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(128, 64),
+        #     nn.GroupNorm(64 // self.chans_per_group, 64),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(64, 32),
+        #     nn.GroupNorm(32 // self.chans_per_group, 32),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(32, 16),
+        #     nn.GroupNorm(16 // self.chans_per_group, 16),
+        #     nn.LeakyReLU(0.2),
+        # )
+
+        self.mu = nn.Linear(target_n_features, latent_size)
+        self.logvar = nn.Linear(target_n_features, latent_size)
 
     def forward(self, x):
         # print("x shape: ", x.shape)
@@ -1721,42 +1755,76 @@ class ParamDecoder(nn.Module):
             n_res_features=32,
             latent_size=8,
             n_params=3,
+            dropout=0.2,
             ):
         super().__init__()
 
         self.chans_per_group = 16
 
-        self.pre_decoder = nn.Sequential(
-            nn.Linear(latent_size, 16),
-            nn.GroupNorm(16 // self.chans_per_group, 16),
-            nn.LeakyReLU(0.2),
-            nn.Linear(16, 32),
-            nn.GroupNorm(32 // self.chans_per_group, 32),
-            nn.LeakyReLU(0.2),
-            nn.Linear(32, 64),
-            nn.GroupNorm(64 // self.chans_per_group, 64),
-            nn.LeakyReLU(0.2),
-            nn.Linear(64, 128),
-            nn.GroupNorm(128 // self.chans_per_group, 128),
-            nn.LeakyReLU(0.2),
-        )
+        pre_decoder_num_blocks = int(np.log2(decoder_features) - np.log2(latent_size))
+        pre_decoder_blocks = []
+        pre_decoder_layers_features = [latent_size * (2 ** i) for i in range(pre_decoder_num_blocks + 1)]
+        for i in range(pre_decoder_num_blocks):
+            block = [
+                nn.Linear(pre_decoder_layers_features[i], pre_decoder_layers_features[i + 1]),
+                nn.GroupNorm(pre_decoder_layers_features[i + 1] // self.chans_per_group, pre_decoder_layers_features[i + 1]),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(dropout)
+            ]
+            pre_decoder_blocks.extend(block)
+
+        self.pre_decoder = nn.Sequential(*pre_decoder_blocks)
+
+        # self.pre_decoder = nn.Sequential(
+        #     nn.Linear(latent_size, 16),
+        #     nn.GroupNorm(16 // self.chans_per_group, 16),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(16, 32),
+        #     nn.GroupNorm(32 // self.chans_per_group, 32),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(32, 64),
+        #     nn.GroupNorm(64 // self.chans_per_group, 64),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(64, 128),
+        #     nn.GroupNorm(128 // self.chans_per_group, 128),
+        #     nn.LeakyReLU(0.2),
+        # )
 
         res_blocks = [LinearResBlock(decoder_features, n_res_features) for _ in range(n_res_block)]
         self.res_blocks = nn.Sequential(*res_blocks)
 
-        self.post_decoder = nn.Sequential(
-            nn.Linear(128, 64),
-            nn.GroupNorm(64 // self.chans_per_group, 64),
-            nn.LeakyReLU(0.2),
-            nn.Linear(64, 32),
-            nn.GroupNorm(32 // self.chans_per_group, 32),
-            nn.LeakyReLU(0.2),
-            nn.Linear(32, 16),
-            nn.GroupNorm(16 // self.chans_per_group, 16),
-            nn.LeakyReLU(0.2),
-            nn.Linear(16, n_params),
+        post_decoder_target_n_features = 16
+        post_decoder_num_blocks = int(np.log2(decoder_features) - np.log2(post_decoder_target_n_features))
+        post_decoder_blocks = []
+        post_decoder_layers_features = [decoder_features // (2 ** i) for i in range(post_decoder_num_blocks + 1)]
+        for i in range(post_decoder_num_blocks):
+            block = [
+                nn.Linear(post_decoder_layers_features[i], post_decoder_layers_features[i + 1]),
+                nn.GroupNorm(post_decoder_layers_features[i + 1] // self.chans_per_group, post_decoder_layers_features[i + 1]),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(dropout)
+            ]
+            post_decoder_blocks.extend(block)
+        post_decoder_blocks.extend([
+            nn.Linear(post_decoder_target_n_features, n_params),
             nn.Sigmoid()
-        )
+        ])
+
+        self.post_decoder = nn.Sequential(*post_decoder_blocks)
+
+        # self.post_decoder = nn.Sequential(
+        #     nn.Linear(128, 64),
+        #     nn.GroupNorm(64 // self.chans_per_group, 64),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(64, 32),
+        #     nn.GroupNorm(32 // self.chans_per_group, 32),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(32, 16),
+        #     nn.GroupNorm(16 // self.chans_per_group, 16),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(16, n_params),
+        #     nn.Sigmoid()
+        # )
 
     def forward(self, x):
         # print("x shape: ", x.shape)
@@ -1771,6 +1839,7 @@ class ParamDecoder(nn.Module):
 
 class FMVAE(nn.Module):
     def __init__(self,
+                 input_width=512,
                  encoder_channels=128,
                  encoder_kernels=[4, 4],
                  encoder_n_res_block=2,
@@ -1779,22 +1848,26 @@ class FMVAE(nn.Module):
                  decoder_n_res_block=2,
                  decoder_n_res_features=32,
                  latent_size=8,
+                 dropout=0.2
                  ):
         super().__init__()
         self.encoder = MelSpecEncoder(
+            input_width=input_width,
             encoder_channels=encoder_channels,
             encoder_kernels=encoder_kernels,
             n_res_block=encoder_n_res_block,
             n_res_channel=encoder_n_res_channel,
             stride=4,
             latent_size=latent_size,
+            dropout=dropout
         )
         self.decoder = ParamDecoder(
             decoder_features=decoder_features,
             n_res_block=decoder_n_res_block,
             n_res_features=decoder_n_res_features,
             latent_size=latent_size,
-            n_params=3
+            n_params=3,
+            dropout=dropout
         )
     
     def encode(self, x):
@@ -1882,6 +1955,7 @@ class PlFMFactorVAE(LightningModule):
             normalized=args.normalized > 0,
         )
         self.model = FMVAE(
+            input_width=self.args.n_mels,
             encoder_channels=args.encoder_channels,
             encoder_kernels=args.encoder_kernels,
             encoder_n_res_block=args.encoder_n_res_block,
@@ -1890,6 +1964,7 @@ class PlFMFactorVAE(LightningModule):
             decoder_n_res_block=args.decoder_n_res_block,
             decoder_n_res_features=args.decoder_n_res_features,
             latent_size=self.latent_size,
+            dropout=self.args.dropout,
         )
         self.D = LinearDiscriminator(
             self.latent_size, self.d_hidden_size, 2, self.d_num_layers)

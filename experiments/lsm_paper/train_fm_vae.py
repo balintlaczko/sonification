@@ -27,15 +27,16 @@ def main():
     parser.add_argument("--max_mod_idx", type=int, default=6)
     # model params
     parser.add_argument("--latent_size", type=int, default=8)
-    parser.add_argument("--encoder_channels", type=int, default=128)
+    parser.add_argument("--encoder_channels", type=int, default=256)
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 5])
     parser.add_argument("--encoder_n_res_block", type=int, default=24)
-    parser.add_argument("--encoder_n_res_channel", type=int, default=64)
-    parser.add_argument("--decoder_features", type=int, default=128)
+    parser.add_argument("--encoder_n_res_channel", type=int, default=128)
+    parser.add_argument("--decoder_features", type=int, default=256)
     parser.add_argument("--decoder_n_res_block", type=int, default=24)
-    parser.add_argument("--decoder_n_res_features", type=int, default=64)
-    parser.add_argument("--d_hidden_size", type=int, default=128)
-    parser.add_argument("--d_num_layers", type=int, default=5)
+    parser.add_argument("--decoder_n_res_features", type=int, default=128)
+    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--d_hidden_size", type=int, default=64)
+    parser.add_argument("--d_num_layers", type=int, default=4)
     # training params
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--warmup_epochs", type=int, default=10)
@@ -58,12 +59,12 @@ def main():
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
     parser.add_argument("--lr_d", type=float, default=0.00001)
     parser.add_argument("--lr_decay_d", type=float, default=0.75)
-    parser.add_argument("--train_epochs", type=int, default=20000)
+    parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v1")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v2")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="v1 cont")
+    parser.add_argument("--comment", type=str, default="huge model, after refactor")
     
     args = parser.parse_args()
 
@@ -143,6 +144,7 @@ def main():
         decoder_features=args.decoder_features,
         decoder_n_res_block=args.decoder_n_res_block,
         decoder_n_res_features=args.decoder_n_res_features,
+        dropout=args.dropout,
         d_hidden_size=args.d_hidden_size,
         d_num_layers=args.d_num_layers,
         batch_size=args.batch_size,
