@@ -1697,7 +1697,7 @@ class MelSpecEncoder(nn.Module):
         # )
 
         post_encoder_n_features = encoder_channels * target_width # 256
-        target_n_features = 16
+        target_n_features = latent_size * 2 # 16
         mlp_layers = []
         num_mlp_blocks = int(np.log2(post_encoder_n_features) - np.log2(target_n_features)) # 256 -> 16 = 4 blocks
         mlp_layers_features = [post_encoder_n_features // (2 ** i) for i in range(num_mlp_blocks + 1)]
