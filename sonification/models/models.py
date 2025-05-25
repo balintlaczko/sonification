@@ -2088,8 +2088,9 @@ class PlFMFactorVAE(LightningModule):
         z_2 = self.model.reparameterize(mu_2, logvar_2)
         z_2_perm = permute_dims(z_2)
         # get the discriminator output
+        d_z_detached = self.D(z.detach())
         d_z_2_perm = self.D(z_2_perm.detach())
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z.detach(), zeros) +
+        d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
                            F.cross_entropy(d_z_2_perm, ones))
 
         # Discriminator backward pass

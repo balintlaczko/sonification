@@ -49,11 +49,11 @@ def main():
     parser.add_argument('--dynamic_kld', type=int, default=0, help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float, default=1, help='kld weight at the end of the warmup')
     parser.add_argument('--kld_weight_min', type=float, default=0.1, help='kld weight at the start of the warmup')
-    parser.add_argument('--kld_start_epoch', type=int, default=2000, help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
+    parser.add_argument('--kld_start_epoch', type=int, default=1000, help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=5000, help='the number of epochs to warmup the kld weight')
     parser.add_argument('--tc_weight_max', type=float, default=10, help='tc weight at the end of the warmup')
     parser.add_argument('--tc_weight_min', type=float, default=0, help='tc weight at the start of the warmup')
-    parser.add_argument('--tc_start_epoch', type=int, default=2000, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
+    parser.add_argument('--tc_start_epoch', type=int, default=1000, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
     parser.add_argument('--tc_warmup_epochs', type=int, default=5000, help='the number of epochs to warmup the tc weight')
     parser.add_argument("--lr_vae", type=float, default=0.001)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
@@ -64,7 +64,7 @@ def main():
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
     parser.add_argument("--ckpt_name", type=str, default="imv_v3.1")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="")
+    parser.add_argument("--comment", type=str, default="v3.1 cont with fixed D backprop, and earlier fade-in for kld and tc")
     
     args = parser.parse_args()
 
