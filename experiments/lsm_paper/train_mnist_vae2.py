@@ -29,7 +29,7 @@ def main():
     parser.add_argument("--d_num_layers", type=int, default=5)
     # training params
     parser.add_argument("--batch_size", type=int, default=128)
-    parser.add_argument("--warmup_epochs", type=int, default=10)
+    parser.add_argument("--warmup_epochs", type=int, default=5)
     parser.add_argument('--target_recon_loss', type=float, default=0.01, help='target recon loss to keep in case of dynamic kld')
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float, default=1, help='kld weight at the end of the warmup')
@@ -47,9 +47,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=100000)
     # parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/mnist_vae")
-    parser.add_argument("--ckpt_name", type=str, default="testparams")
+    parser.add_argument("--ckpt_name", type=str, default="v1")
     parser.add_argument("--logdir", type=str, default="./logs/mnis_vae")
-    parser.add_argument("--comment", type=str, default="")
+    parser.add_argument("--comment", type=str, default="use l1 loss for recon")
     
     args = parser.parse_args()
 

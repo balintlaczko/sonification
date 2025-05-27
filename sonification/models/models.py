@@ -2406,7 +2406,7 @@ class PlImgFactorVAE(LightningModule):
         predicted_img, mu, logvar, z = self.model(x_vae)
 
         # VAE recon_loss
-        vae_recon_loss = F.mse_loss(predicted_img, x_vae)
+        vae_recon_loss = F.l1_loss(predicted_img, x_vae)
 
         # VAE KLD loss
         if self.args.dynamic_kld > 0:
@@ -2508,7 +2508,7 @@ class PlImgFactorVAE(LightningModule):
         predicted_img, mu, logvar, z = self.model(x_vae)
 
         # VAE recon_loss
-        vae_recon_loss = F.mse_loss(predicted_img, x_vae)
+        vae_recon_loss = F.l1_loss(predicted_img, x_vae)
 
         # VAE KLD loss
         kld_loss = self.kld(mu, logvar)
