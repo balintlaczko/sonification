@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import wandb.sync
-from .layers import LinearEncoder, LinearDecoder, LinearResBlock, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
+from .layers import LinearEncoder, LinearDecoder, ResBlock, LinearResBlock, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
 from .ddsp import FMSynth
 from torchaudio.transforms import MelSpectrogram
 from lightning.pytorch import LightningModule
@@ -1767,7 +1767,138 @@ class ParamDecoder(nn.Module):
         x = self.post_decoder(x)
         # print("post_decoder x shape: ", x.shape)
         return x
+
+
+class ImageDecoder(nn.Module):
+    def __init__(
+            self,
+            output_width=512,
+            output_channels=1,
+            decoder_channels=128,
+            n_res_block=2,
+            n_res_channel=64,
+            latent_size=16,
+            ):
+        super().__init__()
+
+        self.chans_per_group = 16
+
+        # mlp it up to 64, then reshape to 8x8, convtranspose to output_width, do resblocks, predict
+        target_n_features = 64
+        num_mlp_blocks = int(np.log2(target_n_features) - np.log2(latent_size))  # 64 -> 16 = 3 blocks
+        mlp_layers = []
+        mlp_layers_features = [latent_size * (2 ** i) for i in range(num_mlp_blocks + 1)]
+        for i in range(num_mlp_blocks):
+            block = [
+                nn.Linear(mlp_layers_features[i], mlp_layers_features[i + 1]),
+                nn.GroupNorm(mlp_layers_features[i + 1] // self.chans_per_group, mlp_layers_features[i + 1]),
+                nn.LeakyReLU(0.2),
+            ]
+            mlp_layers.extend(block)
+
+        self.mlp = nn.Sequential(*mlp_layers)
+
+        reshaped_width = int(np.sqrt(target_n_features))  # 8
+        self.reshape = nn.Sequential(
+            nn.Unflatten(1, (1, reshaped_width, reshaped_width)),
+            nn.Conv2d(1, decoder_channels, 3, 1, 1),
+            nn.GroupNorm(decoder_channels // self.chans_per_group, decoder_channels),
+            nn.LeakyReLU(0.2),
+        )
+        # now we have a 8x8 feature map with decoder_channels channels
+
+        reshaped_width = int(np.sqrt(target_n_features))  # 8
+        num_convtranspose_blocks = int(np.log2(output_width) - np.log2(reshaped_width))  # 512 -> 8 = 6 blocks
+        convtranspose_blocks = []
+        convtranspose_block = [
+            nn.ConvTranspose2d(decoder_channels, decoder_channels, 3, stride=2, padding=1, output_padding=1),
+            nn.GroupNorm(decoder_channels // self.chans_per_group, decoder_channels),
+            nn.LeakyReLU(0.2),
+        ]
+        for _ in range(num_convtranspose_blocks - 1):
+            convtranspose_blocks.extend(convtranspose_block)
+        # last block has no activation
+        convtranspose_blocks.extend([
+            nn.ConvTranspose2d(decoder_channels, decoder_channels, 3, stride=2, padding=1, output_padding=1),
+            nn.GroupNorm(decoder_channels // self.chans_per_group, decoder_channels),
+        ])
+        self.upscaler = nn.Sequential(*convtranspose_blocks)
+        # now we have a 512x512 feature map with decoder_channels channels
+
+        resblocks = [ResBlock(decoder_channels, n_res_channel) for _ in range(n_res_block)]
+        resblocks.append(
+            nn.LeakyReLU(0.2)  # last resblock has no activation
+        )
+        self.res_blocks = nn.Sequential(*resblocks)
+
+        self.head = nn.Sequential(
+            nn.Conv2d(decoder_channels, output_channels, 3, 1, 1),
+            # nn.Tanh()  # output is in range [-1, 1]
+            nn.Sigmoid()  # output is in range [0, 1]
+        )
+
+    def forward(self, x):
+        # print("x shape: ", x.shape)
+        x = self.mlp(x)
+        # print("mlp x shape: ", x.shape)
+        x = self.reshape(x)
+        # print("reshape x shape: ", x.shape)
+        x = self.upscaler(x)
+        # print("upscaler x shape: ", x.shape)
+        x = self.res_blocks(x)
+        # print("res_blocks x shape: ", x.shape)
+        x = self.head(x)
+        # print("head x shape: ", x.shape)
+        return x
+
+
+class ImageVAE(nn.Module):
+    def __init__(self,
+                 input_width=512,
+                 output_channels=1,
+                 encoder_channels=128,
+                 encoder_kernels=[4, 4],
+                 encoder_n_res_block=2,
+                 encoder_n_res_channel=64,
+                 decoder_channels=128,
+                 decoder_n_res_block=2,
+                 decoder_n_res_channel=64,
+                 latent_size=16,
+                 ):
+        super().__init__()
+        self.encoder = MelSpecEncoder(
+            input_width=input_width,
+            encoder_channels=encoder_channels,
+            encoder_kernels=encoder_kernels,
+            n_res_block=encoder_n_res_block,
+            n_res_channel=encoder_n_res_channel,
+            stride=4,
+            latent_size=latent_size,
+        )
+        self.decoder = ImageDecoder(
+            output_width=input_width,
+            output_channels=output_channels,
+            decoder_channels=decoder_channels,
+            n_res_block=decoder_n_res_block,
+            n_res_channel=decoder_n_res_channel,
+            latent_size=latent_size
+        )
     
+    def encode(self, x):
+        mu, logvar = self.encoder(x)
+        return mu, logvar
+    
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return eps.mul(std).add_(mu)
+    
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        decoded_img = self.decoder(z)
+        return decoded_img, mu, logvar, z
+
 
 class FMVAE(nn.Module):
     def __init__(self,
@@ -2120,6 +2251,291 @@ class PlFMFactorVAE(LightningModule):
             "vae_param_loss_weight": self.param_loss_weight,
             "vae_kld_scale": kld_scale,
             "vae_tc_scale": tc_scale,
+        },
+        prog_bar=True)
+
+
+    def on_train_epoch_end(self):
+        change_patience = False
+        if change_patience:
+            epoch = self.trainer.current_epoch
+            vae_scheduler, d_scheduler = self.lr_schedulers()
+            for scheduler in [vae_scheduler, d_scheduler]:
+                # Check if this is a ReduceLROnPlateau scheduler
+                if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    if epoch == 500:
+                        # Dynamically increase patience at epoch 500
+                        scheduler.patience = 60 * 1000
+                        scheduler.num_bad_epochs = 0
+                        print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+                    if epoch == 700:
+                        scheduler.patience = 70 * 1000
+                        scheduler.num_bad_epochs = 0
+                        print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+                    if epoch == 900:
+                        scheduler.patience = 80 * 1000
+                        scheduler.num_bad_epochs = 0
+                        print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
+        # update the kld weight
+        if self.args.dynamic_kld > 0:
+            if self.last_recon_loss < self.args.target_recon_loss:
+                self.kld_weight_dynamic *= 1.01
+
+
+    def on_train_batch_start(self, batch, batch_idx):
+        epoch = self.trainer.current_epoch
+        if epoch < self.warmup_epochs:
+            lr_scale = min(1.0, (epoch + 1) / self.warmup_epochs)
+            for pg in self.trainer.optimizers[0].param_groups:
+                pg["lr"] = self.lr_vae * lr_scale
+            for pg in self.trainer.optimizers[1].param_groups:
+                pg["lr"] = self.lr_d * lr_scale
+
+
+    def configure_optimizers(self):
+        vae_optimizer = torch.optim.AdamW(
+            self.model.parameters(), lr=self.lr_vae)
+        d_optimizer = torch.optim.AdamW(
+            self.D.parameters(), lr=self.lr_d)
+        vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=50000)
+        d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=50000)
+        # return the optimizers and schedulers
+        return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
+    
+
+class PlImgFactorVAE(LightningModule):
+    def __init__(self, args):
+        super().__init__()
+        # Important: This property activates manual optimization.
+        self.automatic_optimization = False
+        self.save_hyperparameters()
+        self.args = args
+
+        self.batch_size = args.batch_size
+        self.warmup_epochs = args.warmup_epochs
+        self.latent_size = args.latent_size
+        self.logdir = args.logdir
+        self.d_hidden_size = args.d_hidden_size
+        self.d_num_layers = args.d_num_layers
+
+        # losses
+        self.kld = kld_loss
+        self.kld_weight_max = args.kld_weight_max
+        self.kld_weight_min = args.kld_weight_min
+        self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        self.kld_start_epoch = args.kld_start_epoch
+        self.kld_warmup_epochs = args.kld_warmup_epochs
+        self.tc_weight_max = args.tc_weight_max
+        self.tc_weight_min = args.tc_weight_min
+        self.tc_start_epoch = args.tc_start_epoch
+        self.tc_warmup_epochs = args.tc_warmup_epochs
+
+        # learning rates
+        self.lr_vae = args.lr_vae
+        self.lr_decay_vae = args.lr_decay_vae
+        self.lr_d = args.lr_d
+        self.lr_decay_d = args.lr_decay_d
+
+        # models
+        self.model = ImageVAE(
+            input_width=args.input_width,
+            output_channels=args.output_channels,
+            encoder_channels=args.encoder_channels,
+            encoder_kernels=args.encoder_kernels,
+            encoder_n_res_block=args.encoder_n_res_block,
+            encoder_n_res_channel=args.encoder_n_res_channel,
+            decoder_channels=args.decoder_channels,
+            decoder_n_res_block=args.decoder_n_res_block,
+            decoder_n_res_channel=args.decoder_n_res_channel,
+            latent_size=self.latent_size
+        )
+        self.D = LinearDiscriminator(
+            self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+
+
+        def init_weights_kaiming(m):
+            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):  # Apply to conv and linear layers
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
+        self.model.apply(init_weights_kaiming)
+        self.D.apply(init_weights_kaiming)
+    
+
+    def forward(self, x):
+        # predict the image
+        predicted_img, mu, logvar, z = self.model(x)
+        return predicted_img, mu, logvar, z
+    
+
+    def on_train_epoch_start(self):
+        # Reinitialize the Discriminator batch iterator at the start of every epoch
+        train_loader = self.trainer.train_dataloader
+        self.disc_iter = iter(train_loader)
+    
+
+    def training_step(self, batch, batch_idx):
+        self.model.train()
+        self.D.train()
+
+        # get the optimizers and schedulers
+        vae_optimizer, d_optimizer = self.optimizers()
+        vae_scheduler, d_scheduler = self.lr_schedulers()
+
+        # create a batch of ones and zeros for the discriminator
+        ones = torch.ones(self.batch_size, dtype=torch.long, device=self.device)
+        zeros = torch.zeros(self.batch_size, dtype=torch.long, device=self.device)
+
+        # get the batch
+        epoch_idx = self.trainer.current_epoch
+        # batch is the main VAE batch
+        x_vae, _ = batch  # assuming MNIST (x, label)
+
+        # Get discriminator batch
+        try:
+            x_disc, _ = next(self.disc_iter)
+        except StopIteration:
+            self.disc_iter = iter(self.trainer.train_dataloader)
+            x_disc, _ = next(self.disc_iter)
+
+        x_vae = x_vae.to(self.device)
+        x_disc = x_disc.to(self.device)
+
+        # forward pass
+        # predict the image
+        predicted_img, mu, logvar, z = self.model(x_vae)
+
+        # VAE recon_loss
+        vae_recon_loss = F.mse_loss(predicted_img, x_vae)
+
+        # VAE KLD loss
+        if self.args.dynamic_kld > 0:
+            kld_scale = self.kld_weight_dynamic
+        else:
+            kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
+                min(1.0, (epoch_idx - self.kld_start_epoch) /
+                    self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
+        kld_loss = self.kld(mu, logvar)
+        scaled_kld_loss = kld_loss * kld_scale
+
+        # VAE TC loss
+        d_z = self.D(z)
+        vae_tc_loss = F.cross_entropy(d_z, ones)
+        tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
+            min(1.0, (epoch_idx - self.tc_start_epoch) /
+            self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
+        scaled_vae_tc_loss = vae_tc_loss * tc_scale
+
+        # VAE loss
+        vae_loss = vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
+
+        # VAE backward pass
+        vae_optimizer.zero_grad()
+        self.manual_backward(vae_loss, retain_graph=True)
+        self.clip_gradients(vae_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+
+        vae_optimizer.step()
+        vae_scheduler.step(vae_loss.item())
+
+        # Discriminator forward pass
+        # encode with the VAE
+        self.model.eval()
+        mu_2, logvar_2 = self.model.encode(x_disc)
+        # reparameterize
+        z_2 = self.model.reparameterize(mu_2, logvar_2)
+        z_2_perm = permute_dims(z_2)
+        # get the discriminator output
+        d_z_detached = self.D(z.detach())
+        d_z_2_perm = self.D(z_2_perm.detach())
+        d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
+                           F.cross_entropy(d_z_2_perm, ones))
+
+        # Discriminator backward pass
+        d_optimizer.zero_grad()
+        self.manual_backward(d_tc_loss)
+        self.clip_gradients(d_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+
+        # D step
+        d_optimizer.step()
+        d_scheduler.step(d_tc_loss.item())
+
+        # log losses
+        self.last_recon_loss = vae_recon_loss
+        self.log_dict({
+            "vae_loss": vae_loss,
+            "vae_recon_loss": vae_recon_loss,
+            "vae_kld_loss": kld_loss,
+            "vae_tc_loss": vae_tc_loss,
+            "d_tc_loss": d_tc_loss,
+            "lr_vae": vae_scheduler.get_last_lr()[0],
+            "lr_d": d_scheduler.get_last_lr()[0],
+            "vae_kld_scale": kld_scale,
+            "vae_tc_scale": tc_scale,
+        },
+        prog_bar=True)
+
+
+    def on_validation_epoch_start(self):
+        # Reinitialize the Discriminator batch iterator at the start of every validation epoch
+        val_loader = self.trainer.val_dataloaders
+        self.disc_iter = iter(val_loader)
+
+    def validation_step(self, batch, batch_idx):
+        self.model.eval()
+        self.D.eval()
+
+        # create a batch of ones and zeros for the discriminator
+        ones = torch.ones(self.batch_size, dtype=torch.long, device=self.device)
+        zeros = torch.zeros(self.batch_size, dtype=torch.long, device=self.device)
+
+        # get the batch
+        epoch_idx = self.trainer.current_epoch
+        # batch is the main VAE batch
+        x_vae, _ = batch  # assuming MNIST (x, label)
+
+        # Get discriminator batch
+        try:
+            x_disc, _ = next(self.disc_iter)
+        except StopIteration:
+            self.disc_iter = iter(self.trainer.val_dataloaders)
+            x_disc, _ = next(self.disc_iter)
+
+        x_vae = x_vae.to(self.device)
+        x_disc = x_disc.to(self.device)
+
+        # forward pass
+        # predict the image
+        predicted_img, mu, logvar, z = self.model(x_vae)
+
+        # VAE recon_loss
+        vae_recon_loss = F.mse_loss(predicted_img, x_vae)
+
+        # VAE KLD loss
+        kld_loss = self.kld(mu, logvar)
+
+        # VAE TC loss
+        d_z = self.D(z)
+        vae_tc_loss = F.cross_entropy(d_z, ones)
+
+        # Discriminator forward pass
+        # encode with the VAE
+        mu_2, logvar_2 = self.model.encode(x_disc)
+        # reparameterize
+        z_2 = self.model.reparameterize(mu_2, logvar_2)
+        z_2_perm = permute_dims(z_2)
+        # get the discriminator output
+        d_z_detached = self.D(z.detach())
+        d_z_2_perm = self.D(z_2_perm.detach())
+        d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
+                           F.cross_entropy(d_z_2_perm, ones))
+        
+        # log losses
+        self.log_dict({
+            "val_vae_loss": vae_recon_loss + kld_loss + vae_tc_loss,
+            "val_vae_recon_loss": vae_recon_loss,
+            "val_vae_kld_loss": kld_loss,
+            "val_vae_tc_loss": vae_tc_loss,
+            "val_d_tc_loss": d_tc_loss,
         },
         prog_bar=True)
 
