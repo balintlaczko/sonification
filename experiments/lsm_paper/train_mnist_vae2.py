@@ -22,9 +22,9 @@ def main():
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 3])
     parser.add_argument("--encoder_n_res_block", type=int, default=24)
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
-    parser.add_argument("--decoder_channels", type=int, default=256)
+    parser.add_argument("--decoder_channels", type=int, default=128)
     parser.add_argument("--decoder_n_res_block", type=int, default=8)
-    parser.add_argument("--decoder_n_res_channel", type=int, default=128)
+    parser.add_argument("--decoder_n_res_channel", type=int, default=64)
     parser.add_argument("--d_hidden_size", type=int, default=128)
     parser.add_argument("--d_num_layers", type=int, default=5)
     # training params
