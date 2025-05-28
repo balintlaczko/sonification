@@ -1799,12 +1799,18 @@ class ImageDecoder(nn.Module):
         self.mlp = nn.Sequential(*mlp_layers)
 
         reshaped_width = int(np.sqrt(target_n_features))  # 8
-        self.reshape = nn.Sequential(
-            nn.Unflatten(1, (1, reshaped_width, reshaped_width)),
-            nn.Conv2d(1, decoder_channels, 3, 1, 1),
-            nn.GroupNorm(decoder_channels // self.chans_per_group, decoder_channels),
-            nn.LeakyReLU(0.2),
-        )
+        reshape_layers = [nn.Unflatten(1, (1, reshaped_width, reshaped_width))]
+        reshape_num_blocks = int(np.log2(decoder_channels))
+        for i in range(reshape_num_blocks):
+            in_channels = 2 ** i
+            out_channels = 2 ** (i + 1)
+            num_groups = out_channels // self.chans_per_group if out_channels // self.chans_per_group >= 2 else out_channels // 2
+            reshape_layers.extend([
+                nn.Conv2d(in_channels, out_channels, 3, 1, 1),
+                nn.GroupNorm(num_groups, out_channels),
+                nn.LeakyReLU(0.2),
+            ])
+        self.reshape = nn.Sequential(*reshape_layers)
         # now we have a 8x8 feature map with decoder_channels channels
 
         reshaped_width = int(np.sqrt(target_n_features))  # 8
