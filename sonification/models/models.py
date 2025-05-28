@@ -1837,11 +1837,32 @@ class ImageDecoder(nn.Module):
         )
         self.res_blocks = nn.Sequential(*resblocks)
 
-        self.head = nn.Sequential(
-            nn.Conv2d(decoder_channels, output_channels, 3, 1, 1),
-            # nn.Tanh()  # output is in range [-1, 1]
-            nn.Sigmoid()  # output is in range [0, 1]
-        )
+        # round up output_channels to next power of 2
+        output_channels_p2 = 2 ** int(max(1, np.ceil(np.log2(output_channels))))
+        # print(f"\nOutput channels: {output_channels}, output_channels_p2: {output_channels_p2}")
+        num_head_blocks = int(np.log2(decoder_channels) - np.log2(output_channels_p2))
+        # print("\nNum_head_blocks:", num_head_blocks)
+        head_layers = []
+        for i in range(num_head_blocks):
+            in_channels = 2 ** int(np.log2(decoder_channels) - i)
+            out_channels = 2 ** int(np.log2(decoder_channels) - i - 1)
+            if i < num_head_blocks - 1:
+                num_groups = out_channels // self.chans_per_group if out_channels // self.chans_per_group >= 2 else out_channels // 2
+                head_layers.extend([
+                    nn.Conv2d(in_channels, out_channels, 3, 1, 1),
+                    nn.GroupNorm(num_groups, out_channels),
+                    nn.LeakyReLU(0.2)
+                ])
+            else:
+                out_channels = output_channels
+                head_layers.extend([
+                    nn.Conv2d(in_channels, out_channels, 3, 1, 1),
+                    # nn.Tanh()  # output is in range [-1, 1]
+                    nn.Sigmoid()  # output is in range [0, 1]
+                ])
+            # print(f"block {i+1}/{num_head_blocks}: {in_channels} --> {out_channels}")
+
+        self.head = nn.Sequential(*head_layers)
 
     def forward(self, x):
         # print("x shape: ", x.shape)
