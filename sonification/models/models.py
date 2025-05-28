@@ -1781,7 +1781,7 @@ class ImageDecoder(nn.Module):
             ):
         super().__init__()
 
-        self.chans_per_group = 16
+        self.chans_per_group = 16 if decoder_channels >= 32 else decoder_channels // 2
 
         # mlp it up to 64, then reshape to 8x8, convtranspose to output_width, do resblocks, predict
         target_n_features = 64
@@ -1825,7 +1825,7 @@ class ImageDecoder(nn.Module):
         self.upscaler = nn.Sequential(*convtranspose_blocks)
         # now we have a 512x512 feature map with decoder_channels channels
 
-        resblocks = [ResBlock(decoder_channels, n_res_channel) for _ in range(n_res_block)]
+        resblocks = [ResBlock(decoder_channels, n_res_channel, self.chans_per_group) for _ in range(n_res_block)]
         resblocks.append(
             nn.LeakyReLU(0.2)  # last resblock has no activation
         )
@@ -2321,6 +2321,7 @@ class PlImgFactorVAE(LightningModule):
         self.d_num_layers = args.d_num_layers
 
         # losses
+        self.recon_weight = args.recon_weight
         self.kld = kld_loss
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
@@ -2407,6 +2408,7 @@ class PlImgFactorVAE(LightningModule):
 
         # VAE recon_loss
         vae_recon_loss = F.l1_loss(predicted_img, x_vae)
+        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
 
         # VAE KLD loss
         if self.args.dynamic_kld > 0:
@@ -2427,7 +2429,7 @@ class PlImgFactorVAE(LightningModule):
         scaled_vae_tc_loss = vae_tc_loss * tc_scale
 
         # VAE loss
-        vae_loss = vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
 
         # VAE backward pass
         vae_optimizer.zero_grad()
