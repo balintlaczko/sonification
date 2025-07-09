@@ -2073,8 +2073,10 @@ class PlFMFactorVAE(LightningModule):
         freqs = midi2frequency(pitches)
         ratios_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
         ratios = ratios_norm * self.max_harm_ratio
+        ratios = torch.clip(ratios, 0.1, self.max_harm_ratio) # avoid zero ratios
         indices_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
         indices = indices_norm * self.max_mod_idx
+        indices = torch.clip(indices, 0.1, self.max_mod_idx) # avoid zero indices
         # stack norm params together
         norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1)
         # now repeat on the samples dimension
