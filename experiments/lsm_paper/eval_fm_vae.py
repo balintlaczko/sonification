@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 # %%
 ckpt_path = '../../ckpt/fm_vae'
-ckpt_name = 'imv_v3.2'
+ckpt_name = 'imv_v3.5'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -308,5 +308,5 @@ model_to_export.load_state_dict(ckpt['state_dict'])
 model_to_export.eval()
 export_fm_model = ExportFMModelNNTilde(model_to_export)
 dummy_input = torch.randn(1, 1, 8192)
-export_fm_model.export_to_ts("fm_vae.ts", None)
+export_fm_model.export_to_ts("fm_vae3.ts", None)
 # %%
