@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FM Synth Perceptual Similarity Study</title>
+    
+    <!-- ML-Matrix library for proper MDS -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/ml-matrix@6.12.1/matrix.umd.min.js"></script> -->
+    <script src="libs/matrix.umd.min.js"></script>
+    
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -94,6 +99,14 @@
         
         .secondary-btn:hover {
             background-color: #1976D2;
+        }
+        
+        .danger-btn {
+            background-color: #f44336;
+        }
+        
+        .danger-btn:hover {
+            background-color: #d32f2f;
         }
         
         .study-section {
@@ -391,6 +404,7 @@
                 <button onclick="exportData()" class="secondary-btn">Export Data</button>
                 <button onclick="importData()" class="secondary-btn">Import Data</button>
                 <button onclick="showDataInConsole()" class="secondary-btn">View in Console</button>
+                <button onclick="clearAllData()" class="secondary-btn danger-btn">Clear All Data</button>
                 <input type="file" id="file-input" style="display: none;" accept=".json">
             </div>
             
@@ -704,102 +718,147 @@
             return { sounds: soundsList, distanceMatrix };
         }
         
-        // Simple MDS implementation
+        // Proper MDS implementation using ML-Matrix library
         function classicalMDS(distanceMatrix) {
             const n = distanceMatrix.length;
             
-            // Double centering
-            const D2 = distanceMatrix.map(row => row.map(d => d * d));
-            const rowMeans = D2.map(row => row.reduce((a, b) => a + b) / n);
-            const totalMean = rowMeans.reduce((a, b) => a + b) / n;
-            
-            const B = Array(n).fill(0).map(() => Array(n).fill(0));
-            for (let i = 0; i < n; i++) {
-                for (let j = 0; j < n; j++) {
-                    B[i][j] = -0.5 * (D2[i][j] - rowMeans[i] - rowMeans[j] + totalMean);
-                }
+            if (n < 2) {
+                return [[0, 0]];
             }
             
-            // Simple power iteration for eigendecomposition (for 2D)
-            // This is a simplified version - in production, use a proper library
-            const coords = Array(n).fill(0).map(() => [Math.random(), Math.random()]);
+            // Check for ML-Matrix library with multiple possible global names
+            const MLLib = window.MLMatrix || window.mlMatrix || window.ML;
             
-            // Normalize by largest eigenvalues (simplified)
-            for (let iter = 0; iter < 50; iter++) {
-                const newCoords = Array(n).fill(0).map(() => [0, 0]);
+            if (!MLLib) {
+                console.warn('ML-Matrix library not available');
+                console.warn('Checked for: MLMatrix, mlMatrix, ML');
+                console.warn('Available globals:', Object.keys(window).filter(k => k.toLowerCase().includes('matrix')));
+                console.warn('Using fallback MDS implementation...');
+                return fallbackMDS(distanceMatrix);
+            }
+            
+            try {
+                console.log('✅ Using ML-Matrix library for MDS calculation');
+                console.log('Library object:', MLLib);
+                console.log('Available components:', Object.keys(MLLib));
                 
+                // Try to access Matrix and EigenvalueDecomposition
+                const Matrix = MLLib.Matrix || MLLib.default?.Matrix;
+                const EigenvalueDecomposition = MLLib.EigenvalueDecomposition || MLLib.EVD || MLLib.default?.EigenvalueDecomposition;
+                
+                if (!Matrix) {
+                    throw new Error('Matrix class not found in ML library');
+                }
+                if (!EigenvalueDecomposition) {
+                    throw new Error('EigenvalueDecomposition class not found in ML library');
+                }
+                
+                console.log('✅ Found Matrix and EigenvalueDecomposition classes');
+                
+                // Create squared distance matrix
+                const D2 = new Matrix(n, n);
                 for (let i = 0; i < n; i++) {
                     for (let j = 0; j < n; j++) {
-                        newCoords[i][0] += B[i][j] * coords[j][0];
-                        newCoords[i][1] += B[i][j] * coords[j][1];
+                        D2.set(i, j, distanceMatrix[i][j] * distanceMatrix[i][j]);
                     }
                 }
                 
-                // Normalize
-                const max0 = Math.max(...newCoords.map(c => Math.abs(c[0])));
-                const max1 = Math.max(...newCoords.map(c => Math.abs(c[1])));
+                // Double centering matrix
+                const rowMeans = new Array(n);
+                let grandMean = 0;
+                
+                // Calculate row means
+                for (let i = 0; i < n; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < n; j++) {
+                        sum += D2.get(i, j);
+                    }
+                    rowMeans[i] = sum / n;
+                    grandMean += rowMeans[i];
+                }
+                grandMean /= n;
+                
+                // Create centered matrix B
+                const B = new Matrix(n, n);
+                for (let i = 0; i < n; i++) {
+                    for (let j = 0; j < n; j++) {
+                        B.set(i, j, -0.5 * (D2.get(i, j) - rowMeans[i] - rowMeans[j] + grandMean));
+                    }
+                }
+                
+                // Eigenvalue decomposition
+                const evd = new EigenvalueDecomposition(B);
+                const eigenVectors = evd.eigenvectorMatrix;
+                const eigenValues = evd.realEigenvalues;
+                
+                // Sort eigenvalues and eigenvectors in descending order
+                const sortedIndices = eigenValues
+                    .map((val, idx) => ({ val, idx }))
+                    .sort((a, b) => b.val - a.val)
+                    .map(item => item.idx);
+                
+                // Take the first 2 eigenvectors (corresponding to largest eigenvalues)
+                const coords = [];
+                for (let i = 0; i < n; i++) {
+                    const x = eigenVectors.get(i, sortedIndices[0]) * Math.sqrt(Math.max(0, eigenValues[sortedIndices[0]]));
+                    const y = eigenVectors.get(i, sortedIndices[1]) * Math.sqrt(Math.max(0, eigenValues[sortedIndices[1]]));
+                    coords.push([x, y]);
+                }
+                
+                console.log('✅ MDS calculation successful using ML-Matrix');
+                return coords;
+                
+            } catch (error) {
+                console.warn('❌ MDS calculation failed with ML-Matrix:', error.message);
+                console.warn('Error details:', error);
+                console.warn('Falling back to simple force-directed layout');
+                return fallbackMDS(distanceMatrix);
+            }
+        }
+        
+        // Fallback MDS implementation when ML-Matrix is not available
+        function fallbackMDS(distanceMatrix) {
+            const n = distanceMatrix.length;
+            
+            // Use a simple force-directed layout as fallback
+            // Initialize random positions
+            const coords = [];
+            for (let i = 0; i < n; i++) {
+                coords.push([Math.random() - 0.5, Math.random() - 0.5]);
+            }
+            
+            // Simple iterative improvement
+            for (let iter = 0; iter < 100; iter++) {
+                const forces = coords.map(() => [0, 0]);
                 
                 for (let i = 0; i < n; i++) {
-                    coords[i][0] = newCoords[i][0] / (max0 || 1);
-                    coords[i][1] = newCoords[i][1] / (max1 || 1);
+                    for (let j = i + 1; j < n; j++) {
+                        const dx = coords[i][0] - coords[j][0];
+                        const dy = coords[i][1] - coords[j][1];
+                        const currentDist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+                        const targetDist = distanceMatrix[i][j];
+                        
+                        const error = (currentDist - targetDist) / targetDist;
+                        const force = error * 0.1;
+                        
+                        const fx = (dx / currentDist) * force;
+                        const fy = (dy / currentDist) * force;
+                        
+                        forces[i][0] -= fx;
+                        forces[i][1] -= fy;
+                        forces[j][0] += fx;
+                        forces[j][1] += fy;
+                    }
+                }
+                
+                // Apply forces
+                for (let i = 0; i < n; i++) {
+                    coords[i][0] += forces[i][0];
+                    coords[i][1] += forces[i][1];
                 }
             }
             
             return coords;
-        }
-        
-        // Simple PCA implementation for 2D projection
-        function pca2D(data) {
-            const n = data.length;
-            if (n === 0) return [];
-            
-            // Calculate means
-            const mean = [
-                data.reduce((sum, p) => sum + p[0], 0) / n,
-                data.reduce((sum, p) => sum + p[1], 0) / n
-            ];
-            
-            // Center the data
-            const centered = data.map(p => [p[0] - mean[0], p[1] - mean[1]]);
-            
-            // Calculate covariance matrix
-            let cov00 = 0, cov01 = 0, cov11 = 0;
-            for (const p of centered) {
-                cov00 += p[0] * p[0];
-                cov01 += p[0] * p[1];
-                cov11 += p[1] * p[1];
-            }
-            cov00 /= n - 1;
-            cov01 /= n - 1;
-            cov11 /= n - 1;
-            
-            // Find eigenvalues and eigenvectors (2x2 case)
-            const trace = cov00 + cov11;
-            const det = cov00 * cov11 - cov01 * cov01;
-            const lambda1 = trace / 2 + Math.sqrt(trace * trace / 4 - det);
-            const lambda2 = trace / 2 - Math.sqrt(trace * trace / 4 - det);
-            
-            // Eigenvectors
-            const v1 = [cov01, lambda1 - cov00];
-            const v2 = [cov01, lambda2 - cov00];
-            
-            // Normalize eigenvectors
-            const norm1 = Math.sqrt(v1[0] ** 2 + v1[1] ** 2);
-            const norm2 = Math.sqrt(v2[0] ** 2 + v2[1] ** 2);
-            if (norm1 > 0) {
-                v1[0] /= norm1;
-                v1[1] /= norm1;
-            }
-            if (norm2 > 0) {
-                v2[0] /= norm2;
-                v2[1] /= norm2;
-            }
-            
-            // Project data onto principal components
-            return centered.map(p => [
-                p[0] * v1[0] + p[1] * v1[1],
-                p[0] * v2[0] + p[1] * v2[1]
-            ]);
         }
         
         function resizeCanvas() {
@@ -890,19 +949,16 @@
             // Apply MDS to get 2D coordinates
             const mdsCoords = classicalMDS(distanceMatrix);
             
-            // Apply PCA to the MDS results for better visualization
-            const pcaCoords = pca2D(mdsCoords);
-            
             // Normalize coordinates to 0-1 range and store them
-            const xCoords = pcaCoords.map(p => p[0]);
-            const yCoords = pcaCoords.map(p => p[1]);
+            const xCoords = mdsCoords.map(p => p[0]);
+            const yCoords = mdsCoords.map(p => p[1]);
             const xMin = Math.min(...xCoords);
             const xMax = Math.max(...xCoords);
             const yMin = Math.min(...yCoords);
             const yMax = Math.max(...yCoords);
             
             // Store normalized points (0-1 range) for future resizing
-            normalizedPoints = pcaCoords.map((coord, i) => {
+            normalizedPoints = mdsCoords.map((coord, i) => {
                 const normalizedX = (coord[0] - xMin) / (xMax - xMin || 1);
                 const normalizedY = (coord[1] - yMin) / (yMax - yMin || 1);
                 
@@ -974,19 +1030,19 @@
             ctx.fillStyle = '#666';
             ctx.font = `${fontSize}px Arial`;
             ctx.textAlign = 'center';
-            ctx.fillText('PC1', canvas.width / 2, canvas.height - margin/2);
+            ctx.fillText('MDS1', canvas.width / 2, canvas.height - margin/2);
             
             ctx.save();
             ctx.translate(margin/2, canvas.height / 2);
             ctx.rotate(-Math.PI / 2);
-            ctx.fillText('PC2', 0, 0);
+            ctx.fillText('MDS2', 0, 0);
             ctx.restore();
             
             // Title
             ctx.fillStyle = '#333';
             ctx.font = `${titleFontSize}px Arial`;
             ctx.textAlign = 'center';
-            ctx.fillText('Perceptual Timbre Space (MDS + PCA)', canvas.width / 2, margin);
+            ctx.fillText('Perceptual Timbre Space (Classical MDS)', canvas.width / 2, margin);
         }
         
         // Interactive canvas functions
@@ -1155,6 +1211,52 @@
         }
         
         // Data management
+        function clearAllData() {
+            // Show confirmation dialog
+            const confirmed = confirm(
+                'Are you sure you want to clear all data?\n\n' +
+                'This will permanently remove:\n' +
+                '• All study trial data\n' +
+                '• The visualization map\n' +
+                '• Any assigned points\n\n' +
+                'This action cannot be undone.'
+            );
+            
+            if (!confirmed) {
+                return;
+            }
+            
+            // Clear all data
+            studyData = [];
+            visualizationData = null;
+            normalizedPoints = null;
+            lastTouchedPoint = null;
+            
+            // Clear assignments
+            assignedPoints = { A: null, B: null, X: null };
+            
+            // Clear localStorage
+            localStorage.removeItem('fmSynthStudyData');
+            
+            // Update UI elements
+            document.getElementById('trial-count').textContent = '0';
+            document.getElementById('data-count').textContent = '0';
+            document.getElementById('unique-sounds').textContent = '0';
+            
+            // Clear the canvas
+            const canvas = document.getElementById('scatter-plot');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Clear assignments display
+            updateAssignmentDisplay();
+            
+            // Generate a new triplet for the study tab
+            generateNewTriplet();
+            
+            alert('All data has been cleared successfully.');
+        }
+        
         function exportData() {
             try {
                 if (studyData.length === 0) {
