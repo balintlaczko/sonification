@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FM Synth Perceptual Similarity Study</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }        
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .control-group label {
+            font-weight: 600;
+            color: #555;
+            font-size: 14px;
+        }
+        
+        .control-group input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .control-group input[type="range"] {
+            margin-top: 5px;
+        }
+        
+        .control-group .value-display {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .secondary-btn {
+            background-color: #2196F3;
+        }
+        
+        .secondary-btn:hover {
+            background-color: #1976D2;
+        }
+        
+        .study-section {
+            margin-top: 40px;
+            padding-top: 40px;
+            border-top: 2px solid #eee;
+        }
+        
+        .triplet-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .sound-card {
+            background: #f8f9fa;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .sound-card.active {
+            border-color: #4CAF50;
+            background: #e8f5e9;
+        }
+        
+        .sound-card h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        
+        .sound-card button {
+            width: 100%;
+            margin: 5px 0;
+        }
+        
+        .params-display {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+            line-height: 1.5;
+        }
+        
+        .question {
+            text-align: center;
+            font-size: 20px;
+            margin: 30px 0;
+            color: #333;
+        }
+        
+        .choice-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin: 30px 0;
+        }
+        
+        .choice-btn {
+            padding: 20px 40px;
+            font-size: 18px;
+            background-color: #FF9800;
+        }
+        
+        .choice-btn:hover {
+            background-color: #F57C00;
+        }
+        
+        #visualization {
+            margin-top: 40px;
+            text-align: center;
+        }
+        
+        #visualization-tab {
+            display: none;
+        }
+        
+        #visualization-tab.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .canvas-container {
+            width: 100%;
+            max-width: 800px;
+            position: relative;
+            margin: 20px auto;
+        }
+        
+        #scatter-plot {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: crosshair;
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .tooltip.visible {
+            opacity: 1;
+        }
+        
+        .tooltip::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+        }
+        
+        .tooltip[style*="--arrow-direction: bottom"]::after,
+        .tooltip::after {
+            top: 100%;
+            border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+        }
+        
+        .tooltip[style*="--arrow-direction: top"]::after {
+            bottom: 100%;
+            top: auto;
+            border-color: transparent transparent rgba(0, 0, 0, 0.9) transparent;
+        }
+        
+        .tooltip-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #4CAF50;
+        }
+        
+        .tooltip-param {
+            margin: 2px 0;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        
+        .tooltip-label {
+            color: #aaa;
+        }
+        
+        .tooltip-value {
+            font-family: monospace;
+            color: #fff;
+        }
+        
+        .stats {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .tab-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            border-bottom-color: #2196F3;
+            color: #2196F3;
+            font-weight: 600;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FM Synth Perceptual Similarity Study</h1>
+        
+        <div class="tab-container">
+            <div class="tab active" onclick="switchTab('test')">Test FM Synth</div>
+            <div class="tab" onclick="switchTab('study')">Similarity Study</div>
+            <div class="tab" onclick="switchTab('visualization')">Visualization</div>
+        </div>
+        
+        <!-- Test FM Synth Tab -->
+        <div id="test-tab" class="tab-content active">
+            <h2>Test FM Synthesis Parameters</h2>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="carrier-freq">Carrier Frequency (Hz)</label>
+                    <input type="range" id="carrier-freq" min="73.42" max="1174.66" value="440" step="0.01">
+                    <div class="value-display" id="carrier-freq-display">440.00 Hz</div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="harm-ratio">Harmonicity Ratio</label>
+                    <input type="range" id="harm-ratio" min="0" max="10" value="2" step="0.01">
+                    <div class="value-display" id="harm-ratio-display">2.00</div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="mod-index">Modulation Index</label>
+                    <input type="range" id="mod-index" min="0" max="10" value="1" step="0.01">
+                    <div class="value-display" id="mod-index-display">1.00</div>
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button onclick="playTestSound()">Play Test Sound</button>
+                <button onclick="randomizeParams()" class="secondary-btn">Randomize Parameters</button>
+            </div>
+        </div>
+        
+        <!-- Similarity Study Tab -->
+        <div id="study-tab" class="tab-content">
+            <h2>Perceptual Similarity Study</h2>
+            
+            <div class="stats">
+                <strong>Trials completed:</strong> <span id="trial-count">0</span>
+            </div>
+            
+            <div class="triplet-container">
+                <div class="sound-card" id="sound-a">
+                    <h3>Sound A</h3>
+                    <button onclick="playTripletSound('A')">Play Sound A</button>
+                    <div class="params-display" id="params-a"></div>
+                </div>
+                
+                <div class="sound-card" id="sound-b">
+                    <h3>Sound B</h3>
+                    <button onclick="playTripletSound('B')">Play Sound B</button>
+                    <div class="params-display" id="params-b"></div>
+                </div>
+                
+                <div class="sound-card" id="sound-x">
+                    <h3>Sound X</h3>
+                    <button onclick="playTripletSound('X')">Play Sound X</button>
+                    <div class="params-display" id="params-x"></div>
+                </div>
+            </div>
+            
+            <div class="question">
+                Which sound is X more similar to?
+            </div>
+            
+            <div class="choice-buttons">
+                <button class="choice-btn" onclick="recordChoice('A')">More like A</button>
+                <button class="choice-btn" onclick="recordChoice('B')">More like B</button>
+                <button class="choice-btn secondary-btn" onclick="generateNewTriplet()" style="background-color: #666;">Can't decide</button>
+            </div>
+            
+            <div class="button-group">
+                <button onclick="generateNewTriplet()" class="secondary-btn">New Triplet</button>
+                <button onclick="playAllSounds()" class="secondary-btn">Play All (A→B→X)</button>
+            </div>
+        </div>
+        
+        <!-- Visualization Tab -->
+        <div id="visualization-tab" class="tab-content">
+            <h2>Timbre Space Visualization</h2>
+            
+            <div class="stats">
+                <strong>Data points:</strong> <span id="data-count">0</span> | 
+                <strong>Unique sounds:</strong> <span id="unique-sounds">0</span>
+            </div>
+            
+            <div class="button-group">
+                <button onclick="updateVisualization()">Update Visualization</button>
+                <button onclick="exportData()" class="secondary-btn">Export Data</button>
+                <button onclick="importData()" class="secondary-btn">Import Data</button>
+                <button onclick="showDataInConsole()" class="secondary-btn">View in Console</button>
+                <input type="file" id="file-input" style="display: none;" accept=".json">
+            </div>
+            
+            <div class="assignment-controls">
+                <button class="assignment-btn" onclick="assignPoint('A')" id="assign-a-btn">Use as A</button>
+                <button class="assignment-btn" onclick="assignPoint('B')" id="assign-b-btn">Use as B</button>
+                <button class="assignment-btn" onclick="assignPoint('X')" id="assign-x-btn">Use as X</button>
+                <button class="clear-btn" onclick="clearAssignments()" style="display: none;" id="clear-assignments-btn">Clear All</button>
+            </div>
+            
+            <div class="assigned-sounds" id="assigned-sounds-container"></div>
+            
+            <div class="choice-controls" id="choice-controls" style="display: none;">
+                <div class="question" style="margin: 0;">Which sound is X more similar to?</div>
+                <button class="choice-btn" onclick="recordVisualizationChoice('A')">More like A</button>
+                <button class="choice-btn" onclick="recordVisualizationChoice('B')">More like B</button>
+            </div>
+            
+            <div class="canvas-container">
+                <canvas id="scatter-plot"></canvas>
+            </div>
+            <div id="tooltip" class="tooltip"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let audioContext;
+        let currentTriplet = null;
+        let studyData = [];
+        let visualizationData = null; // Store visualization data for interactivity
+        let normalizedPoints = null; // Store normalized coordinates separately
+        let lastTouchedPoint = null; // Track the last clicked point in visualization
+        let assignedPoints = { A: null, B: null, X: null }; // Track assigned points
+        
+        // Initialize audio context
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+        
+        // FM Synthesis function
+        function playFMSound(carrierFreq, harmRatio, modIndex, duration = 0.5) {
+            initAudio();
+            
+            const now = audioContext.currentTime;
+            
+            // Create oscillators
+            const carrier = audioContext.createOscillator();
+            const modulator = audioContext.createOscillator();
+            const modulatorGain = audioContext.createGain();
+            const masterGain = audioContext.createGain();
+            
+            // Set frequencies
+            carrier.frequency.value = carrierFreq;
+            const modFreq = carrierFreq * harmRatio;
+            modulator.frequency.value = modFreq;
+            
+            // Set modulation depth
+            modulatorGain.gain.value = modFreq * modIndex;
+            
+            // Connect FM synthesis chain
+            modulator.connect(modulatorGain);
+            modulatorGain.connect(carrier.frequency);
+            carrier.connect(masterGain);
+            masterGain.connect(audioContext.destination);
+            
+            // Envelope
+            masterGain.gain.setValueAtTime(0, now);
+            masterGain.gain.linearRampToValueAtTime(0.3, now + 0.01);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            
+            // Start and stop
+            carrier.start(now);
+            modulator.start(now);
+            carrier.stop(now + duration);
+            modulator.stop(now + duration);
+        }
+        
+        // Update display values
+        document.getElementById('carrier-freq').addEventListener('input', function(e) {
+            document.getElementById('carrier-freq-display').textContent = 
+                parseFloat(e.target.value).toFixed(2) + ' Hz';
+        });
+        
+        document.getElementById('harm-ratio').addEventListener('input', function(e) {
+            document.getElementById('harm-ratio-display').textContent = 
+                parseFloat(e.target.value).toFixed(2);
+        });
+        
+        document.getElementById('mod-index').addEventListener('input', function(e) {
+            document.getElementById('mod-index-display').textContent = 
+                parseFloat(e.target.value).toFixed(2);
+        });
+        
+        // Test sound functions
+        function playTestSound() {
+            const carrier = parseFloat(document.getElementById('carrier-freq').value);
+            const harmRatio = parseFloat(document.getElementById('harm-ratio').value);
+            const modIndex = parseFloat(document.getElementById('mod-index').value);
+            
+            playFMSound(carrier, harmRatio, modIndex);
+        }
+        
+        function randomizeParams() {
+            const carrierMin = 73.42;
+            const carrierMax = 1174.66;
+            const carrier = Math.random() * (carrierMax - carrierMin) + carrierMin;
+            const harmRatio = Math.random() * 10;
+            const modIndex = Math.random() * 10;
+            
+            document.getElementById('carrier-freq').value = carrier;
+            document.getElementById('harm-ratio').value = harmRatio;
+            document.getElementById('mod-index').value = modIndex;
+            
+            document.getElementById('carrier-freq-display').textContent = carrier.toFixed(2) + ' Hz';
+            document.getElementById('harm-ratio-display').textContent = harmRatio.toFixed(2);
+            document.getElementById('mod-index-display').textContent = modIndex.toFixed(2);
+        }
+        
+        // Study functions
+        function generateRandomParams() {
+            return {
+                carrier: Math.random() * (1174.66 - 73.42) + 73.42,
+                harmRatio: Math.random() * 10,
+                modIndex: Math.random() * 10
+            };
+        }
+        
+        function generateConstrainedParams(baseParams, variance = 0.3) {
+            // Generate parameters within a certain variance from base parameters
+            const carrier = baseParams.carrier + (Math.random() - 0.5) * 2 * variance * (1174.66 - 73.42);
+            const harmRatio = baseParams.harmRatio + (Math.random() - 0.5) * 2 * variance * 10;
+            const modIndex = baseParams.modIndex + (Math.random() - 0.5) * 2 * variance * 10;
+            
+            // Clamp to valid ranges
+            return {
+                carrier: Math.max(73.42, Math.min(1174.66, carrier)),
+                harmRatio: Math.max(0, Math.min(10, harmRatio)),
+                modIndex: Math.max(0, Math.min(10, modIndex))
+            };
+        }
+        
+        function generateNewTriplet() {
+            // Generate base point in parameter space
+            const baseParams = generateRandomParams();
+            
+            // Generate A and B as variations from the base
+            const paramsA = generateConstrainedParams(baseParams, 0.3);
+            const paramsB = generateConstrainedParams(baseParams, 0.3);
+            
+            // Generate X as either closer to A or B (randomly)
+            const closerTo = Math.random() < 0.5 ? paramsA : paramsB;
+            const fartherFrom = closerTo === paramsA ? paramsB : paramsA;
+            
+            // X is generated to be somewhat between A and B, but closer to one
+            const mixRatio = 0.3 + Math.random() * 0.4; // Between 0.3 and 0.7
+            const paramsX = {
+                carrier: closerTo.carrier * mixRatio + fartherFrom.carrier * (1 - mixRatio),
+                harmRatio: closerTo.harmRatio * mixRatio + fartherFrom.harmRatio * (1 - mixRatio),
+                modIndex: closerTo.modIndex * mixRatio + fartherFrom.modIndex * (1 - mixRatio)
+            };
+            
+            // Add some noise to X
+            const noisyX = generateConstrainedParams(paramsX, 0.1);
+            
+            currentTriplet = {
+                A: paramsA,
+                B: paramsB,
+                X: noisyX,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Update display
+            updateParamsDisplay('A', currentTriplet.A);
+            updateParamsDisplay('B', currentTriplet.B);
+            updateParamsDisplay('X', currentTriplet.X);
+            
+            // Reset active states
+            document.querySelectorAll('.sound-card').forEach(card => {
+                card.classList.remove('active');
+            });
+        }
+        
+        function updateParamsDisplay(sound, params) {
+            const display = document.getElementById(`params-${sound.toLowerCase()}`);
+            display.innerHTML = `
+                Carrier: ${params.carrier.toFixed(1)} Hz<br>
+                Harm Ratio: ${params.harmRatio.toFixed(2)}<br>
+                Mod Index: ${params.modIndex.toFixed(2)}
+            `;
+        }
+        
+        function playTripletSound(sound) {
+            if (!currentTriplet) {
+                generateNewTriplet();
+            }
+            
+            const params = currentTriplet[sound];
+            playFMSound(params.carrier, params.harmRatio, params.modIndex);
+            
+            // Update active state
+            document.querySelectorAll('.sound-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            document.getElementById(`sound-${sound.toLowerCase()}`).classList.add('active');
+        }
+        
+        function playAllSounds() {
+            if (!currentTriplet) {
+                generateNewTriplet();
+            }
+            
+            playTripletSound('A');
+            setTimeout(() => playTripletSound('B'), 700);
+            setTimeout(() => playTripletSound('X'), 1400);
+        }
+        
+        function recordChoice(choice) {
+            if (!currentTriplet) {
+                alert('Please generate a triplet first!');
+                return;
+            }
+            
+            const trialData = {
+                ...currentTriplet,
+                choice: choice,
+                responseTime: new Date().toISOString()
+            };
+            
+            studyData.push(trialData);
+            localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
+            
+            // Update trial count
+            document.getElementById('trial-count').textContent = studyData.length;
+            
+            // Generate new triplet
+            generateNewTriplet();
+            
+            // Flash feedback
+            const chosenCard = document.getElementById(`sound-${choice.toLowerCase()}`);
+            chosenCard.style.backgroundColor = '#4CAF50';
+            setTimeout(() => {
+                chosenCard.style.backgroundColor = '#f8f9fa';
+            }, 300);
+        }
+        
+        // Visualization functions
+        function computeSimilarityMatrix() {
+            const sounds = new Map();
+            const soundsList = [];
+            
+            // Collect all unique sounds
+            studyData.forEach(trial => {
+                ['A', 'B', 'X'].forEach(key => {
+                    const hash = JSON.stringify(trial[key]);
+                    if (!sounds.has(hash)) {
+                        const sound = {
+                            params: trial[key],
+                            hash: hash,
+                            index: soundsList.length
+                        };
+                        sounds.set(hash, sound);
+                        soundsList.push(sound);
+                    }
+                });
+            });
+            
+            const n = soundsList.length;
+            const distanceMatrix = Array(n).fill(0).map(() => Array(n).fill(0));
+            
+            // Initialize with parameter-based distances
+            for (let i = 0; i < n; i++) {
+                for (let j = i + 1; j < n; j++) {
+                    const p1 = soundsList[i].params;
+                    const p2 = soundsList[j].params;
+                    
+                    // Normalize and calculate Euclidean distance
+                    const carrierDist = (p1.carrier - p2.carrier) / (1174.66 - 73.42);
+                    const harmDist = (p1.harmRatio - p2.harmRatio) / 10;
+                    const modDist = (p1.modIndex - p2.modIndex) / 10;
+                    
+                    const dist = Math.sqrt(carrierDist ** 2 + harmDist ** 2 + modDist ** 2);
+                    distanceMatrix[i][j] = dist;
+                    distanceMatrix[j][i] = dist;
+                }
+            }
+            
+            // Adjust distances based on similarity judgments
+            studyData.forEach(trial => {
+                const aIdx = sounds.get(JSON.stringify(trial.A)).index;
+                const bIdx = sounds.get(JSON.stringify(trial.B)).index;
+                const xIdx = sounds.get(JSON.stringify(trial.X)).index;
+                
+                if (trial.choice === 'A') {
+                    // X is more similar to A than to B
+                    distanceMatrix[xIdx][aIdx] *= 0.8;
+                    distanceMatrix[aIdx][xIdx] *= 0.8;
+                    distanceMatrix[xIdx][bIdx] *= 1.2;
+                    distanceMatrix[bIdx][xIdx] *= 1.2;
+                } else {
+                    // X is more similar to B than to A
+                    distanceMatrix[xIdx][bIdx] *= 0.8;
+                    distanceMatrix[bIdx][xIdx] *= 0.8;
+                    distanceMatrix[xIdx][aIdx] *= 1.2;
+                    distanceMatrix[aIdx][xIdx] *= 1.2;
+                }
+            });
+            
+            return { sounds: soundsList, distanceMatrix };
+        }
+        
+        // Simple MDS implementation
+        function classicalMDS(distanceMatrix) {
+            const n = distanceMatrix.length;
+            
+            // Double centering
+            const D2 = distanceMatrix.map(row => row.map(d => d * d));
+            const rowMeans = D2.map(row => row.reduce((a, b) => a + b) / n);
+            const totalMean = rowMeans.reduce((a, b) => a + b) / n;
+            
+            const B = Array(n).fill(0).map(() => Array(n).fill(0));
+            for (let i = 0; i < n; i++) {
+                for (let j = 0; j < n; j++) {
+                    B[i][j] = -0.5 * (D2[i][j] - rowMeans[i] - rowMeans[j] + totalMean);
+                }
+            }
+            
+            // Simple power iteration for eigendecomposition (for 2D)
+            // This is a simplified version - in production, use a proper library
+            const coords = Array(n).fill(0).map(() => [Math.random(), Math.random()]);
+            
+            // Normalize by largest eigenvalues (simplified)
+            for (let iter = 0; iter < 50; iter++) {
+                const newCoords = Array(n).fill(0).map(() => [0, 0]);
+                
+                for (let i = 0; i < n; i++) {
+                    for (let j = 0; j < n; j++) {
+                        newCoords[i][0] += B[i][j] * coords[j][0];
+                        newCoords[i][1] += B[i][j] * coords[j][1];
+                    }
+                }
+                
+                // Normalize
+                const max0 = Math.max(...newCoords.map(c => Math.abs(c[0])));
+                const max1 = Math.max(...newCoords.map(c => Math.abs(c[1])));
+                
+                for (let i = 0; i < n; i++) {
+                    coords[i][0] = newCoords[i][0] / (max0 || 1);
+                    coords[i][1] = newCoords[i][1] / (max1 || 1);
+                }
+            }
+            
+            return coords;
+        }
+        
+        // Simple PCA implementation for 2D projection
+        function pca2D(data) {
+            const n = data.length;
+            if (n === 0) return [];
+            
+            // Calculate means
+            const mean = [
+                data.reduce((sum, p) => sum + p[0], 0) / n,
+                data.reduce((sum, p) => sum + p[1], 0) / n
+            ];
+            
+            // Center the data
+            const centered = data.map(p => [p[0] - mean[0], p[1] - mean[1]]);
+            
+            // Calculate covariance matrix
+            let cov00 = 0, cov01 = 0, cov11 = 0;
+            for (const p of centered) {
+                cov00 += p[0] * p[0];
+                cov01 += p[0] * p[1];
+                cov11 += p[1] * p[1];
+            }
+            cov00 /= n - 1;
+            cov01 /= n - 1;
+            cov11 /= n - 1;
+            
+            // Find eigenvalues and eigenvectors (2x2 case)
+            const trace = cov00 + cov11;
+            const det = cov00 * cov11 - cov01 * cov01;
+            const lambda1 = trace / 2 + Math.sqrt(trace * trace / 4 - det);
+            const lambda2 = trace / 2 - Math.sqrt(trace * trace / 4 - det);
+            
+            // Eigenvectors
+            const v1 = [cov01, lambda1 - cov00];
+            const v2 = [cov01, lambda2 - cov00];
+            
+            // Normalize eigenvectors
+            const norm1 = Math.sqrt(v1[0] ** 2 + v1[1] ** 2);
+            const norm2 = Math.sqrt(v2[0] ** 2 + v2[1] ** 2);
+            if (norm1 > 0) {
+                v1[0] /= norm1;
+                v1[1] /= norm1;
+            }
+            if (norm2 > 0) {
+                v2[0] /= norm2;
+                v2[1] /= norm2;
+            }
+            
+            // Project data onto principal components
+            return centered.map(p => [
+                p[0] * v1[0] + p[1] * v1[1],
+                p[0] * v2[0] + p[1] * v2[1]
+            ]);
+        }
+        
+        function resizeCanvas() {
+            const container = document.querySelector('.canvas-container');
+            const canvas = document.getElementById('scatter-plot');
+            
+            if (!container || !canvas) return;
+            
+            // Get container width
+            const containerWidth = container.clientWidth;
+            
+            // Set canvas size maintaining aspect ratio
+            const aspectRatio = 4/3; // 800x600 aspect ratio
+            const canvasWidth = Math.min(containerWidth, 800);
+            const canvasHeight = canvasWidth / aspectRatio;
+            
+            // Set both CSS size and actual canvas size
+            canvas.style.width = canvasWidth + 'px';
+            canvas.style.height = canvasHeight + 'px';
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            
+            // If we have normalized points, just rescale them without recalculating
+            if (normalizedPoints) {
+                rescalePoints();
+            }
+        }
+        
+        function rescalePoints() {
+            const canvas = document.getElementById('scatter-plot');
+            const ctx = canvas.getContext('2d');
+            
+            // Responsive margins
+            const marginRatio = 0.05; // 5% margin
+            const margin = Math.min(canvas.width, canvas.height) * marginRatio;
+            const width = canvas.width - 2 * margin;
+            const height = canvas.height - 2 * margin;
+            
+            // Responsive point size
+            const baseRadius = Math.min(canvas.width, canvas.height) / 100;
+            const radius = Math.max(6, Math.min(12, baseRadius));
+            
+            // Rescale existing normalized points to new canvas dimensions
+            const points = normalizedPoints.map(np => ({
+                x: margin + np.normalizedX * width,
+                y: margin + np.normalizedY * height,
+                color: np.color,
+                params: np.params,
+                radius: radius,
+                highlighted: false
+            }));
+            
+            // Update visualization data
+            visualizationData = { points, canvas, ctx };
+            
+            // Redraw
+            drawVisualization();
+        }
+        
+        function updateVisualization() {
+            const canvas = document.getElementById('scatter-plot');
+            const ctx = canvas.getContext('2d');
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (studyData.length === 0) {
+                ctx.fillStyle = '#666';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('No data yet. Complete some trials first!', canvas.width / 2, canvas.height / 2);
+                normalizedPoints = null;
+                return;
+            }
+            
+            // Compute similarity matrix and apply MDS
+            const { sounds, distanceMatrix } = computeSimilarityMatrix();
+            
+            if (sounds.length < 3) {
+                ctx.fillStyle = '#666';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Need at least 3 different sounds. Keep collecting data!', canvas.width / 2, canvas.height / 2);
+                normalizedPoints = null;
+                return;
+            }
+            
+            // Apply MDS to get 2D coordinates
+            const mdsCoords = classicalMDS(distanceMatrix);
+            
+            // Apply PCA to the MDS results for better visualization
+            const pcaCoords = pca2D(mdsCoords);
+            
+            // Normalize coordinates to 0-1 range and store them
+            const xCoords = pcaCoords.map(p => p[0]);
+            const yCoords = pcaCoords.map(p => p[1]);
+            const xMin = Math.min(...xCoords);
+            const xMax = Math.max(...xCoords);
+            const yMin = Math.min(...yCoords);
+            const yMax = Math.max(...yCoords);
+            
+            // Store normalized points (0-1 range) for future resizing
+            normalizedPoints = pcaCoords.map((coord, i) => {
+                const normalizedX = (coord[0] - xMin) / (xMax - xMin || 1);
+                const normalizedY = (coord[1] - yMin) / (yMax - yMin || 1);
+                
+                // Color based on harmonicity ratio
+                const hue = sounds[i].params.harmRatio * 36;
+                const lightness = 30 + (sounds[i].params.modIndex / 10) * 40;
+                const color = `hsl(${hue}, 70%, ${lightness}%)`;
+                
+                return {
+                    normalizedX,
+                    normalizedY,
+                    color,
+                    params: sounds[i].params
+                };
+            });
+            
+            // Now scale to current canvas size
+            rescalePoints();
+            
+            // Update stats
+            document.getElementById('data-count').textContent = studyData.length;
+            document.getElementById('unique-sounds').textContent = sounds.length;
+        }
+        
+        function drawVisualization() {
+            if (!visualizationData) return;
+            
+            const { points, canvas, ctx } = visualizationData;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Calculate responsive sizes
+            const margin = Math.min(canvas.width, canvas.height) * 0.05;
+            const fontSize = Math.max(12, Math.min(16, canvas.width / 50));
+            const titleFontSize = Math.max(14, Math.min(18, canvas.width / 40));
+            
+            // Draw axes
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(margin, canvas.height / 2);
+            ctx.lineTo(canvas.width - margin, canvas.height / 2);
+            ctx.moveTo(canvas.width / 2, margin);
+            ctx.lineTo(canvas.width / 2, canvas.height - margin);
+            ctx.stroke();
+            
+            // Draw points
+            points.forEach((point) => {
+                // Draw shadow for highlighted points
+                if (point.highlighted) {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                    ctx.beginPath();
+                    ctx.arc(point.x + 2, point.y + 2, point.radius + 4, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                
+                // Draw point
+                ctx.fillStyle = point.color;
+                ctx.strokeStyle = point.highlighted ? '#fff' : '#333';
+                ctx.lineWidth = point.highlighted ? 3 : 1;
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, point.radius, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+            });
+            
+            // Labels with responsive font size
+            ctx.fillStyle = '#666';
+            ctx.font = `${fontSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('PC1', canvas.width / 2, canvas.height - margin/2);
+            
+            ctx.save();
+            ctx.translate(margin/2, canvas.height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('PC2', 0, 0);
+            ctx.restore();
+            
+            // Title
+            ctx.fillStyle = '#333';
+            ctx.font = `${titleFontSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('Perceptual Timbre Space (MDS + PCA)', canvas.width / 2, margin);
+        }
+        
+        // Interactive canvas functions
+        function getMousePos(canvas, evt) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: evt.clientX - rect.left,
+                y: evt.clientY - rect.top
+            };
+        }
+        
+        function findPointAt(x, y) {
+            if (!visualizationData) return null;
+            
+            const { points } = visualizationData;
+            
+            for (let i = points.length - 1; i >= 0; i--) {
+                const point = points[i];
+                const dx = x - point.x;
+                const dy = y - point.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist <= point.radius + 2) {
+                    return point;
+                }
+            }
+            
+            return null;
+        }
+        
+        // Set up canvas interactivity
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('scatter-plot');
+            const tooltip = document.getElementById('tooltip');
+            let hoveredPoint = null;
+            
+            canvas.addEventListener('mousemove', function(evt) {
+                const pos = getMousePos(canvas, evt);
+                const point = findPointAt(pos.x, pos.y);
+                
+                if (point !== hoveredPoint) {
+                    // Update hover state
+                    if (hoveredPoint) {
+                        hoveredPoint.highlighted = false;
+                    }
+                    
+                    hoveredPoint = point;
+                    
+                    if (point) {
+                        point.highlighted = true;
+                        
+                        // Show tooltip
+                        const rect = canvas.getBoundingClientRect();
+                        tooltip.innerHTML = `
+                            <div class="tooltip-title">FM Synth Parameters</div>
+                            <div class="tooltip-param">
+                                <span class="tooltip-label">Carrier:</span>
+                                <span class="tooltip-value">${point.params.carrier.toFixed(1)} Hz</span>
+                            </div>
+                            <div class="tooltip-param">
+                                <span class="tooltip-label">Harm Ratio:</span>
+                                <span class="tooltip-value">${point.params.harmRatio.toFixed(2)}</span>
+                            </div>
+                            <div class="tooltip-param">
+                                <span class="tooltip-label">Mod Index:</span>
+                                <span class="tooltip-value">${point.params.modIndex.toFixed(2)}</span>
+                            </div>
+                        `;
+                        
+                        // Position tooltip closer to the point
+                        const tooltipX = rect.left + point.x;
+                        const tooltipY = rect.top + point.y - 15; // Much closer to the point
+                        
+                        // Get tooltip dimensions
+                        tooltip.style.display = 'block';
+                        const tooltipRect = tooltip.getBoundingClientRect();
+                        tooltip.style.display = '';
+                        
+                        // Adjust position to keep tooltip on screen
+                        let finalX = tooltipX - tooltipRect.width / 2;
+                        let finalY = tooltipY - tooltipRect.height;
+                        
+                        // Keep tooltip within viewport
+                        if (finalX < 5) finalX = 5;
+                        if (finalX + tooltipRect.width > window.innerWidth - 5) {
+                            finalX = window.innerWidth - tooltipRect.width - 5;
+                        }
+                        
+                        // If tooltip would go above viewport, show it below the point instead
+                        if (finalY < 5) {
+                            finalY = tooltipY + point.radius + 15;
+                            // Flip the arrow
+                            tooltip.style.setProperty('--arrow-direction', 'top');
+                        } else {
+                            tooltip.style.setProperty('--arrow-direction', 'bottom');
+                        }
+                        
+                        tooltip.style.left = finalX + 'px';
+                        tooltip.style.top = finalY + 'px';
+                        tooltip.classList.add('visible');
+                        
+                        canvas.style.cursor = 'pointer';
+                    } else {
+                        tooltip.classList.remove('visible');
+                        canvas.style.cursor = 'crosshair';
+                    }
+                    
+                    drawVisualization();
+                }
+            });
+            
+            canvas.addEventListener('mouseleave', function() {
+                if (hoveredPoint) {
+                    hoveredPoint.highlighted = false;
+                    hoveredPoint = null;
+                    drawVisualization();
+                }
+                tooltip.classList.remove('visible');
+            });
+            
+            canvas.addEventListener('click', function(evt) {
+                const pos = getMousePos(canvas, evt);
+                const point = findPointAt(pos.x, pos.y);
+                
+                if (point) {
+                    // Store last touched point
+                    lastTouchedPoint = point;
+                    
+                    // Play the sound
+                    playFMSound(point.params.carrier, point.params.harmRatio, point.params.modIndex);
+                    
+                    // Visual feedback
+                    const originalRadius = point.radius;
+                    point.radius = 12;
+                    drawVisualization();
+                    
+                    // Show indicator for last touched point
+                    showLastTouchedIndicator(point);
+                    
+                    setTimeout(() => {
+                        point.radius = originalRadius;
+                        drawVisualization();
+                    }, 200);
+                }
+            });
+        });
+        
+        // Tab switching
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            // Update visualization if switching to that tab
+            if (tabName === 'visualization') {
+                updateVisualization();
+            }
+        }
+        
+        // Data management
+        function exportData() {
+            try {
+                if (studyData.length === 0) {
+                    alert('No data to export yet! Complete some similarity trials first.');
+                    return;
+                }
+                
+                const exportObject = {
+                    version: "1.0",
+                    exportDate: new Date().toISOString(),
+                    totalTrials: studyData.length,
+                    data: studyData
+                };
+                
+                const dataStr = JSON.stringify(exportObject, null, 2);
+                const filename = `fm-synth-study-${new Date().toISOString().slice(0, 10)}.json`;
+                
+                // Try multiple methods in order of preference
+                
+                // Method 1: Standard download (might be blocked)
+                if (!attemptStandardDownload(dataStr, filename)) {
+                    // Method 2: Data URI download (works in more cases)
+                    if (!attemptDataUriDownload(dataStr, filename)) {
+                        // Method 3: Show copy dialog as last resort
+                        showExportDialog(dataStr);
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Export error:', error);
+                showExportDialog(JSON.stringify(studyData, null, 2));
+            }
+        }
+        
+        function attemptStandardDownload(dataStr, filename) {
+            try {
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                
+                // Try programmatic click
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                
+                // Assume it worked if no error thrown
+                console.log('Standard download attempted');
+                return true;
+            } catch (e) {
+                console.error('Standard download failed:', e);
+                return false;
+            }
+        }
+        
+        function attemptDataUriDownload(dataStr, filename) {
+            try {
+                // Use base64 encoding for better compatibility
+                const base64 = btoa(unescape(encodeURIComponent(dataStr)));
+                const dataUri = `data:application/json;base64,${base64}`;
+                
+                const link = document.createElement('a');
+                link.href = dataUri;
+                link.download = filename;
+                link.style.display = 'none';
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                console.log('Data URI download attempted');
+                return true;
+            } catch (e) {
+                console.error('Data URI download failed:', e);
+                return false;
+            }
+        }
+        
+        function showExportDialog(dataStr) {
+            // Create a modal dialog with the data
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            `;
+            
+            const content = document.createElement('div');
+            content.style.cssText = `
+                background: white;
+                padding: 30px;
+                border-radius: 8px;
+                max-width: 80%;
+                max-height: 80%;
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            `;
+            
+            content.innerHTML = `
+                <h2 style="margin: 0;">Export Data - Manual Save Required</h2>
+                <p style="color: #666;">Due to browser restrictions, automatic download is blocked. Please copy the data below and save it manually:</p>
+                <ol style="color: #666; margin: 5px 0;">
+                    <li>Click "Copy to Clipboard" below</li>
+                    <li>Open a text editor (Notepad, TextEdit, etc.)</li>
+                    <li>Paste the content (Ctrl+V or Cmd+V)</li>
+                    <li>Save the file with a .json extension</li>
+                </ol>
+                <textarea 
+                    id="export-textarea"
+                    style="width: 600px; height: 300px; font-family: monospace; font-size: 12px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;"
+                    readonly
+                >${dataStr}</textarea>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="copyExportData()" 
+                            style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px;">
+                        📋 Copy to Clipboard
+                    </button>
+                    <button onclick="this.closest('div[style*=\"position: fixed\"]').remove()" 
+                            style="background: #666; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px;">
+                        Close
+                    </button>
+                </div>
+            `;
+            
+            modal.appendChild(content);
+            document.body.appendChild(modal);
+            
+            // Select all text
+            const textarea = content.querySelector('textarea');
+            textarea.select();
+            textarea.focus();
+        }
+        
+        function copyExportData() {
+            const textarea = document.getElementById('export-textarea');
+            textarea.select();
+            
+            try {
+                // Try modern clipboard API first
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(textarea.value).then(() => {
+                        alert('✅ Data copied to clipboard! You can now paste it into a text editor and save as .json');
+                    }).catch(() => {
+                        // Fallback to older method
+                        document.execCommand('copy');
+                        alert('✅ Data copied to clipboard! You can now paste it into a text editor and save as .json');
+                    });
+                } else {
+                    // Use older execCommand method
+                    document.execCommand('copy');
+                    alert('✅ Data copied to clipboard! You can now paste it into a text editor and save as .json');
+                }
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                alert('Please manually select all text (Ctrl+A) and copy (Ctrl+C)');
+            }
+        }
+        
+        function copyToClipboard(text) {
+            // Keep this for backward compatibility
+            copyExportData();
+        }
+        
+        function importData() {
+            document.getElementById('file-input').click();
+        }
+        
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const importedData = JSON.parse(event.target.result);
+                    studyData = [...studyData, ...importedData];
+                    localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
+                    
+                    document.getElementById('trial-count').textContent = studyData.length;
+                    alert(`Imported ${importedData.length} trials successfully!`);
+                } catch (err) {
+                    alert('Error importing data: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+        
+        function showDataInConsole() {
+            if (studyData.length === 0) {
+                alert('No data collected yet!');
+                return;
+            }
+            
+            console.log('=== FM Synth Study Data ===');
+            console.log(`Total trials: ${studyData.length}`);
+            console.log('Data:', studyData);
+            console.log('JSON (copy this):', JSON.stringify(studyData, null, 2));
+            
+            alert(`Data has been printed to the browser console.\n\nTo view it:\n1. Press F12 or right-click → Inspect\n2. Go to the Console tab\n3. Copy the JSON data from there`);
+        }
+        
+        // Alternative export method using data URI
+        function exportDataAlternative() {
+            if (studyData.length === 0) {
+                alert('No data to export yet!');
+                return;
+            }
+            
+            const exportObject = {
+                version: "1.0",
+                exportDate: new Date().toISOString(),
+                totalTrials: studyData.length,
+                data: studyData
+            };
+            
+            const dataStr = JSON.stringify(exportObject, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const link = document.createElement('a');
+            link.setAttribute('href', dataUri);
+            link.setAttribute('download', `fm-synth-study-${new Date().toISOString().slice(0, 10)}.json`);
+            link.style.display = 'none';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        // Assignment functions for visualization
+        function showLastTouchedIndicator(point) {
+            // Remove existing indicator if any
+            const existingIndicator = document.querySelector('.last-touched-indicator');
+            if (existingIndicator) {
+                existingIndicator.remove();
+            }
+            
+            // Create new indicator
+            const indicator = document.createElement('div');
+            indicator.className = 'last-touched-indicator';
+            
+            const canvas = document.getElementById('scatter-plot');
+            const rect = canvas.getBoundingClientRect();
+            
+            indicator.style.left = (rect.left + point.x - point.radius - 3) + 'px';
+            indicator.style.top = (rect.top + point.y - point.radius - 3) + 'px';
+            indicator.style.width = (point.radius * 2 + 6) + 'px';
+            indicator.style.height = (point.radius * 2 + 6) + 'px';
+            
+            document.body.appendChild(indicator);
+            
+            // Remove after animation
+            setTimeout(() => {
+                if (indicator.parentNode) {
+                    indicator.remove();
+                }
+            }, 1500);
+        }
+        
+        function assignPoint(role) {
+            if (!lastTouchedPoint) {
+                alert('Please click on a point in the visualization first!');
+                return;
+            }
+            
+            // Assign the point
+            assignedPoints[role] = {
+                params: lastTouchedPoint.params,
+                color: lastTouchedPoint.color
+            };
+            
+            // Update UI
+            updateAssignmentDisplay();
+            
+            // Clear last touched point
+            lastTouchedPoint = null;
+        }
+        
+        function updateAssignmentDisplay() {
+            const container = document.getElementById('assigned-sounds-container');
+            container.innerHTML = '';
+            
+            // Create a wrapper div to ensure horizontal layout
+            const wrapper = document.createElement('div');
+            wrapper.style.display = 'grid';
+            wrapper.style.gridTemplateColumns = 'repeat(3, 1fr)';
+            wrapper.style.gap = '20px';
+            wrapper.style.maxWidth = '900px';
+            wrapper.style.margin = '0 auto';
+            
+            // Show assigned sounds
+            ['A', 'B', 'X'].forEach(role => {
+                if (assignedPoints[role]) {
+                    const card = document.createElement('div');
+                    card.style.background = '#f8f9fa';
+                    card.style.border = '2px solid #ddd';
+                    card.style.borderRadius = '8px';
+                    card.style.padding = '20px';
+                    card.style.textAlign = 'center';
+                    card.style.position = 'relative';
+                    card.style.transition = 'all 0.3s';
+                    
+                    // Create remove button
+                    const removeBtn = document.createElement('button');
+                    removeBtn.textContent = '×';
+                    removeBtn.style.position = 'absolute';
+                    removeBtn.style.top = '8px';
+                    removeBtn.style.right = '8px';
+                    removeBtn.style.background = '#e0e0e0';
+                    removeBtn.style.color = '#666';
+                    removeBtn.style.border = 'none';
+                    removeBtn.style.borderRadius = '50%';
+                    removeBtn.style.width = '20px';
+                    removeBtn.style.height = '20px';
+                    removeBtn.style.fontSize = '14px';
+                    removeBtn.style.cursor = 'pointer';
+                    removeBtn.style.padding = '0';
+                    removeBtn.style.display = 'flex';
+                    removeBtn.style.alignItems = 'center';
+                    removeBtn.style.justifyContent = 'center';
+                    removeBtn.onclick = () => removeAssignment(role);
+                    
+                    removeBtn.onmouseover = () => {
+                        removeBtn.style.background = '#f44336';
+                        removeBtn.style.color = 'white';
+                    };
+                    removeBtn.onmouseout = () => {
+                        removeBtn.style.background = '#e0e0e0';
+                        removeBtn.style.color = '#666';
+                    };
+                    
+                    // Create title
+                    const title = document.createElement('h3');
+                    title.textContent = `Sound ${role}`;
+                    title.style.margin = '0 0 15px 0';
+                    title.style.color = '#333';
+                    
+                    // Create play button
+                    const playBtn = document.createElement('button');
+                    playBtn.textContent = `Play Sound ${role}`;
+                    playBtn.style.width = '100%';
+                    playBtn.style.margin = '5px 0';
+                    playBtn.style.backgroundColor = '#4CAF50';
+                    playBtn.style.color = 'white';
+                    playBtn.style.border = 'none';
+                    playBtn.style.padding = '12px 24px';
+                    playBtn.style.borderRadius = '4px';
+                    playBtn.style.cursor = 'pointer';
+                    playBtn.style.fontSize = '16px';
+                    playBtn.onclick = () => playAssignedSound(role);
+                    
+                    playBtn.onmouseover = () => {
+                        playBtn.style.backgroundColor = '#45a049';
+                    };
+                    playBtn.onmouseout = () => {
+                        playBtn.style.backgroundColor = '#4CAF50';
+                    };
+                    
+                    // Create params display
+                    const paramsDiv = document.createElement('div');
+                    paramsDiv.style.fontSize = '12px';
+                    paramsDiv.style.color = '#666';
+                    paramsDiv.style.marginTop = '10px';
+                    paramsDiv.style.lineHeight = '1.5';
+                    paramsDiv.innerHTML = `
+                        Carrier: ${assignedPoints[role].params.carrier.toFixed(1)} Hz<br>
+                        Harm Ratio: ${assignedPoints[role].params.harmRatio.toFixed(2)}<br>
+                        Mod Index: ${assignedPoints[role].params.modIndex.toFixed(2)}
+                    `;
+                    
+                    // Assemble card
+                    card.appendChild(removeBtn);
+                    card.appendChild(title);
+                    card.appendChild(playBtn);
+                    card.appendChild(paramsDiv);
+                    
+                    wrapper.appendChild(card);
+                }
+            });
+            
+            container.appendChild(wrapper);
+            
+            // Show/hide controls based on assignments
+            const allAssigned = assignedPoints.A && assignedPoints.B && assignedPoints.X;
+            document.getElementById('choice-controls').style.display = allAssigned ? 'block' : 'none';
+            document.getElementById('clear-assignments-btn').style.display = 
+                (assignedPoints.A || assignedPoints.B || assignedPoints.X) ? 'inline-block' : 'none';
+            
+            // Update assignment buttons state
+            ['A', 'B', 'X'].forEach(role => {
+                const btn = document.getElementById(`assign-${role.toLowerCase()}-btn`);
+                btn.textContent = assignedPoints[role] ? `✓ Assigned as ${role}` : `Use as ${role}`;
+            });
+        }
+        
+        function removeAssignment(role) {
+            assignedPoints[role] = null;
+            updateAssignmentDisplay();
+        }
+        
+        function playAssignedSound(role) {
+            if (assignedPoints[role]) {
+                const params = assignedPoints[role].params;
+                playFMSound(params.carrier, params.harmRatio, params.modIndex);
+            }
+        }
+        
+        function clearAssignments() {
+            assignedPoints = { A: null, B: null, X: null };
+            updateAssignmentDisplay();
+        }
+        
+        function recordVisualizationChoice(choice) {
+            if (!assignedPoints.A || !assignedPoints.B || !assignedPoints.X) {
+                alert('Please assign all three points first!');
+                return;
+            }
+            
+            // Create trial data from assigned points
+            const trialData = {
+                A: assignedPoints.A.params,
+                B: assignedPoints.B.params,
+                X: assignedPoints.X.params,
+                choice: choice,
+                timestamp: new Date().toISOString(),
+                responseTime: new Date().toISOString(),
+                source: 'visualization' // Mark that this came from visualization
+            };
+            
+            // Add to study data
+            studyData.push(trialData);
+            localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
+            
+            // Update trial count
+            document.getElementById('trial-count').textContent = studyData.length;
+            
+            // Clear assignments
+            clearAssignments();
+            
+            // Update visualization with new data
+            updateVisualization();
+            
+            // Flash feedback
+            const container = document.getElementById('assigned-sounds-container');
+            container.style.backgroundColor = '#4CAF50';
+            setTimeout(() => {
+                container.style.backgroundColor = 'transparent';
+            }, 300);
+        }
+        
+        // Load saved data on startup
+        window.addEventListener('load', function() {
+            const savedData = localStorage.getItem('fmSynthStudyData');
+            if (savedData) {
+                studyData = JSON.parse(savedData);
+                document.getElementById('trial-count').textContent = studyData.length;
+            }
+            
+            // Generate initial triplet
+            generateNewTriplet();
+            
+            // Set up canvas resizing
+            resizeCanvas();
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            resizeCanvas();
+        });
+        
+        // Also resize when switching tabs
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            // Update visualization if switching to that tab
+            if (tabName === 'visualization') {
+                setTimeout(() => {
+                    resizeCanvas();
+                    updateVisualization();
+                }, 10);
+            }
+        }
+    </script>
+</body>
+</html>
