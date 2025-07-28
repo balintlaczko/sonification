@@ -700,18 +700,23 @@
                 const bIdx = sounds.get(JSON.stringify(trial.B)).index;
                 const xIdx = sounds.get(JSON.stringify(trial.X)).index;
                 
+                // Stronger weight for visualization-based judgments
+                const isVisualizationJudgment = trial.source === 'visualization';
+                const similarityFactor = isVisualizationJudgment ? 0.1 : 0.8;  // Stronger adjustment
+                const dissimilarityFactor = isVisualizationJudgment ? 2 : 1.2;  // Stronger adjustment
+                
                 if (trial.choice === 'A') {
                     // X is more similar to A than to B
-                    distanceMatrix[xIdx][aIdx] *= 0.8;
-                    distanceMatrix[aIdx][xIdx] *= 0.8;
-                    distanceMatrix[xIdx][bIdx] *= 1.2;
-                    distanceMatrix[bIdx][xIdx] *= 1.2;
+                    distanceMatrix[xIdx][aIdx] *= similarityFactor;
+                    distanceMatrix[aIdx][xIdx] *= similarityFactor;
+                    distanceMatrix[xIdx][bIdx] *= dissimilarityFactor;
+                    distanceMatrix[bIdx][xIdx] *= dissimilarityFactor;
                 } else {
                     // X is more similar to B than to A
-                    distanceMatrix[xIdx][bIdx] *= 0.8;
-                    distanceMatrix[bIdx][xIdx] *= 0.8;
-                    distanceMatrix[xIdx][aIdx] *= 1.2;
-                    distanceMatrix[aIdx][xIdx] *= 1.2;
+                    distanceMatrix[xIdx][bIdx] *= similarityFactor;
+                    distanceMatrix[bIdx][xIdx] *= similarityFactor;
+                    distanceMatrix[xIdx][aIdx] *= dissimilarityFactor;
+                    distanceMatrix[aIdx][xIdx] *= dissimilarityFactor;
                 }
             });
             
@@ -739,8 +744,8 @@
             
             try {
                 console.log('✅ Using ML-Matrix library for MDS calculation');
-                console.log('Library object:', MLLib);
-                console.log('Available components:', Object.keys(MLLib));
+                // console.log('Library object:', MLLib);
+                // console.log('Available components:', Object.keys(MLLib));
                 
                 // Try to access Matrix and EigenvalueDecomposition
                 const Matrix = MLLib.Matrix || MLLib.default?.Matrix;
@@ -894,8 +899,18 @@
             // Responsive margins
             const marginRatio = 0.05; // 5% margin
             const margin = Math.min(canvas.width, canvas.height) * marginRatio;
-            const width = canvas.width - 2 * margin;
-            const height = canvas.height - 2 * margin;
+            
+            // Calculate title font size to reserve space for it
+            const titleFontSize = Math.max(14, Math.min(18, canvas.width / 40));
+            const titleSpace = titleFontSize + 10; // Title height plus some padding
+            
+            // Adjust drawing area to leave space for title at top
+            const topMargin = margin + titleSpace;
+            const sideMargin = margin;
+            const bottomMargin = margin;
+            
+            const width = canvas.width - 2 * sideMargin;
+            const height = canvas.height - topMargin - bottomMargin;
             
             // Responsive point size
             const baseRadius = Math.min(canvas.width, canvas.height) / 100;
@@ -903,8 +918,8 @@
             
             // Rescale existing normalized points to new canvas dimensions
             const points = normalizedPoints.map(np => ({
-                x: margin + np.normalizedX * width,
-                y: margin + np.normalizedY * height,
+                x: sideMargin + np.normalizedX * width,
+                y: topMargin + np.normalizedY * height,
                 color: np.color,
                 params: np.params,
                 radius: radius,
@@ -962,10 +977,19 @@
                 const normalizedX = (coord[0] - xMin) / (xMax - xMin || 1);
                 const normalizedY = (coord[1] - yMin) / (yMax - yMin || 1);
                 
-                // Color based on harmonicity ratio
-                const hue = sounds[i].params.harmRatio * 36;
-                const lightness = 30 + (sounds[i].params.modIndex / 10) * 40;
-                const color = `hsl(${hue}, 70%, ${lightness}%)`;
+                // Color based on synth parameters mapped to RGB
+                // Convert frequency to MIDI pitch: MIDI = 12 * log2(freq/440) + 69
+                const midiPitch = 12 * Math.log2(sounds[i].params.carrier / 440) + 69;
+                // Map MIDI pitch range 38-86 to Red channel (0-230)
+                const red = Math.round(Math.max(0, Math.min(230, ((midiPitch - 38) / (86 - 38)) * 230)));
+                
+                // Map Harmonicity Ratio 0-10 to Green channel (0-230)
+                const green = Math.round((sounds[i].params.harmRatio / 10) * 230);
+                
+                // Map Modulation Index 0-10 to Blue channel (0-230)
+                const blue = Math.round((sounds[i].params.modIndex / 10) * 230);
+                
+                const color = `rgb(${red}, ${green}, ${blue})`;
                 
                 return {
                     normalizedX,
@@ -996,15 +1020,15 @@
             const fontSize = Math.max(12, Math.min(16, canvas.width / 50));
             const titleFontSize = Math.max(14, Math.min(18, canvas.width / 40));
             
-            // Draw axes
-            ctx.strokeStyle = '#999';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(margin, canvas.height / 2);
-            ctx.lineTo(canvas.width - margin, canvas.height / 2);
-            ctx.moveTo(canvas.width / 2, margin);
-            ctx.lineTo(canvas.width / 2, canvas.height - margin);
-            ctx.stroke();
+            // // Draw axes
+            // ctx.strokeStyle = '#999';
+            // ctx.lineWidth = 1;
+            // ctx.beginPath();
+            // ctx.moveTo(margin, canvas.height / 2);
+            // ctx.lineTo(canvas.width - margin, canvas.height / 2);
+            // ctx.moveTo(canvas.width / 2, margin);
+            // ctx.lineTo(canvas.width / 2, canvas.height - margin);
+            // ctx.stroke();
             
             // Draw points
             points.forEach((point) => {
@@ -1026,17 +1050,60 @@
                 ctx.stroke();
             });
             
-            // Labels with responsive font size
-            ctx.fillStyle = '#666';
-            ctx.font = `${fontSize}px Arial`;
+            // Draw assignment labels for A, B, X points
+            const labelFontSize = Math.max(10, Math.min(14, canvas.width / 60));
+            ctx.font = `bold ${labelFontSize}px Arial`;
             ctx.textAlign = 'center';
-            ctx.fillText('MDS1', canvas.width / 2, canvas.height - margin/2);
+            ctx.textBaseline = 'middle';
             
-            ctx.save();
-            ctx.translate(margin/2, canvas.height / 2);
-            ctx.rotate(-Math.PI / 2);
-            ctx.fillText('MDS2', 0, 0);
-            ctx.restore();
+            points.forEach((point) => {
+                // Check if this point matches any assigned point
+                let assignmentLabel = null;
+                
+                ['A', 'B', 'X'].forEach(role => {
+                    if (assignedPoints[role] && 
+                        Math.abs(assignedPoints[role].params.carrier - point.params.carrier) < 0.1 &&
+                        Math.abs(assignedPoints[role].params.harmRatio - point.params.harmRatio) < 0.01 &&
+                        Math.abs(assignedPoints[role].params.modIndex - point.params.modIndex) < 0.01) {
+                        assignmentLabel = role;
+                    }
+                });
+                
+                if (assignmentLabel) {
+                    // Draw label background
+                    const labelOffset = point.radius + 8;
+                    const labelX = point.x;
+                    const labelY = point.y - labelOffset;
+                    
+                    // Background circle for label
+                    ctx.fillStyle = assignmentLabel === 'A' ? '#FF5722' : 
+                                   assignmentLabel === 'B' ? '#2196F3' : '#FF9800';
+                    ctx.beginPath();
+                    ctx.arc(labelX, labelY, labelFontSize * 0.8, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    // Label border
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    // Label text
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText(assignmentLabel, labelX, labelY);
+                }
+            });
+            
+            // // Labels with responsive font size
+            // ctx.fillStyle = '#666';
+            // ctx.font = `${fontSize}px Arial`;
+            // ctx.textAlign = 'center';
+            // ctx.fillText('MDS1', canvas.width / 2, canvas.height - margin/2);
+            
+            // ctx.save();
+            // ctx.translate(margin/2, canvas.height / 2);
+            // ctx.rotate(-Math.PI / 2);
+            // ctx.fillText('MDS2', 0, 0);
+            // ctx.restore();
             
             // Title
             ctx.fillStyle = '#333';
@@ -1660,6 +1727,9 @@
                 const btn = document.getElementById(`assign-${role.toLowerCase()}-btn`);
                 btn.textContent = assignedPoints[role] ? `✓ Assigned as ${role}` : `Use as ${role}`;
             });
+            
+            // Redraw visualization to update labels
+            drawVisualization();
         }
         
         function removeAssignment(role) {
