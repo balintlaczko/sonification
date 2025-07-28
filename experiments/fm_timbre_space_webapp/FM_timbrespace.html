@@ -270,6 +270,51 @@
             color: #fff;
         }
         
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        
+        .loading-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e0e0e0;
+            border-top: 4px solid #2196F3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        
+        .loading-text {
+            color: #666;
+            font-size: 14px;
+            text-align: center;
+            line-height: 1.4;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
         .stats {
             margin: 20px 0;
             padding: 15px;
@@ -425,6 +470,13 @@
             
             <div class="canvas-container">
                 <canvas id="scatter-plot"></canvas>
+                <div id="loading-overlay" class="loading-overlay">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">
+                        Calculating MDS...<br>
+                        <small>This may take a moment</small>
+                    </div>
+                </div>
             </div>
             <div id="tooltip" class="tooltip"></div>
         </div>
@@ -751,7 +803,7 @@
             }
             
             try {
-                console.log('✅ Using ML-Matrix library for MDS calculation');
+                // console.log('✅ Using ML-Matrix library for MDS calculation');
                 // console.log('Library object:', MLLib);
                 // console.log('Available components:', Object.keys(MLLib));
                 
@@ -766,7 +818,7 @@
                     throw new Error('EigenvalueDecomposition class not found in ML library');
                 }
                 
-                console.log('✅ Found Matrix and EigenvalueDecomposition classes');
+                // console.log('✅ Found Matrix and EigenvalueDecomposition classes');
                 
                 // Create squared distance matrix
                 const D2 = new Matrix(n, n);
@@ -904,6 +956,9 @@
             const canvas = document.getElementById('scatter-plot');
             const ctx = canvas.getContext('2d');
             
+            // Hide loading overlay if it's visible
+            hideLoadingOverlay();
+            
             // Responsive margins
             const marginRatio = 0.05; // 5% margin
             const margin = Math.min(canvas.width, canvas.height) * marginRatio;
@@ -941,78 +996,113 @@
             drawVisualization();
         }
         
+        // Helper functions for loading overlay
+        function showLoadingOverlay() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.classList.add('visible');
+            }
+        }
+        
+        function hideLoadingOverlay() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.classList.remove('visible');
+            }
+        }
+        
         function updateVisualization() {
             const canvas = document.getElementById('scatter-plot');
             const ctx = canvas.getContext('2d');
             
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Show loading overlay
+            showLoadingOverlay();
             
-            if (studyData.length === 0) {
-                ctx.fillStyle = '#666';
-                ctx.font = '16px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('No data yet. Complete some trials first!', canvas.width / 2, canvas.height / 2);
-                normalizedPoints = null;
-                return;
-            }
-            
-            // Compute similarity matrix and apply MDS
-            const { sounds, distanceMatrix } = computeSimilarityMatrix();
-            
-            if (sounds.length < 3) {
-                ctx.fillStyle = '#666';
-                ctx.font = '16px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Need at least 3 different sounds. Keep collecting data!', canvas.width / 2, canvas.height / 2);
-                normalizedPoints = null;
-                return;
-            }
-            
-            // Apply MDS to get 2D coordinates
-            const mdsCoords = classicalMDS(distanceMatrix);
-            
-            // Normalize coordinates to 0-1 range and store them
-            const xCoords = mdsCoords.map(p => p[0]);
-            const yCoords = mdsCoords.map(p => p[1]);
-            const xMin = Math.min(...xCoords);
-            const xMax = Math.max(...xCoords);
-            const yMin = Math.min(...yCoords);
-            const yMax = Math.max(...yCoords);
-            
-            // Store normalized points (0-1 range) for future resizing
-            normalizedPoints = mdsCoords.map((coord, i) => {
-                const normalizedX = (coord[0] - xMin) / (xMax - xMin || 1);
-                const normalizedY = (coord[1] - yMin) / (yMax - yMin || 1);
-                
-                // Color based on synth parameters mapped to RGB
-                // Convert frequency to MIDI pitch: MIDI = 12 * log2(freq/440) + 69
-                const midiPitch = 12 * Math.log2(sounds[i].params.carrier / 440) + 69;
-                // Map MIDI pitch range 38-86 to Red channel (0-230)
-                const red = Math.round(Math.max(0, Math.min(230, ((midiPitch - 38) / (86 - 38)) * 230)));
-                
-                // Map Harmonicity Ratio 0-10 to Green channel (0-230)
-                const green = Math.round((sounds[i].params.harmRatio / 10) * 230);
-                
-                // Map Modulation Index 0-10 to Blue channel (0-230)
-                const blue = Math.round((sounds[i].params.modIndex / 10) * 230);
-                
-                const color = `rgb(${red}, ${green}, ${blue})`;
-                
-                return {
-                    normalizedX,
-                    normalizedY,
-                    color,
-                    params: sounds[i].params
-                };
-            });
-            
-            // Now scale to current canvas size
-            rescalePoints();
-            
-            // Update stats
-            document.getElementById('data-count').textContent = studyData.length;
-            document.getElementById('unique-sounds').textContent = sounds.length;
+            // Use setTimeout to allow the loading overlay to render before starting computation
+            setTimeout(() => {
+                try {
+                    // Clear canvas
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    if (studyData.length === 0) {
+                        ctx.fillStyle = '#666';
+                        ctx.font = '16px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('No data yet. Complete some trials first!', canvas.width / 2, canvas.height / 2);
+                        normalizedPoints = null;
+                        hideLoadingOverlay();
+                        return;
+                    }
+                    
+                    // Compute similarity matrix and apply MDS
+                    const { sounds, distanceMatrix } = computeSimilarityMatrix();
+                    
+                    if (sounds.length < 3) {
+                        ctx.fillStyle = '#666';
+                        ctx.font = '16px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('Need at least 3 different sounds. Keep collecting data!', canvas.width / 2, canvas.height / 2);
+                        normalizedPoints = null;
+                        hideLoadingOverlay();
+                        return;
+                    }
+                    
+                    // Apply MDS to get 2D coordinates (this is the computationally expensive part)
+                    const mdsCoords = classicalMDS(distanceMatrix);
+                    
+                    // Normalize coordinates to 0-1 range and store them
+                    const xCoords = mdsCoords.map(p => p[0]);
+                    const yCoords = mdsCoords.map(p => p[1]);
+                    const xMin = Math.min(...xCoords);
+                    const xMax = Math.max(...xCoords);
+                    const yMin = Math.min(...yCoords);
+                    const yMax = Math.max(...yCoords);
+                    
+                    // Store normalized points (0-1 range) for future resizing
+                    normalizedPoints = mdsCoords.map((coord, i) => {
+                        const normalizedX = (coord[0] - xMin) / (xMax - xMin || 1);
+                        const normalizedY = (coord[1] - yMin) / (yMax - yMin || 1);
+                        
+                        // Color based on synth parameters mapped to RGB
+                        // Convert frequency to MIDI pitch: MIDI = 12 * log2(freq/440) + 69
+                        const midiPitch = 12 * Math.log2(sounds[i].params.carrier / 440) + 69;
+                        // Map MIDI pitch range 38-86 to Red channel (0-230)
+                        const red = Math.round(Math.max(0, Math.min(230, ((midiPitch - 38) / (86 - 38)) * 230)));
+                        
+                        // Map Harmonicity Ratio 0-10 to Green channel (0-230)
+                        const green = Math.round((sounds[i].params.harmRatio / 10) * 230);
+                        
+                        // Map Modulation Index 0-10 to Blue channel (0-230)
+                        const blue = Math.round((sounds[i].params.modIndex / 10) * 230);
+                        
+                        const color = `rgb(${red}, ${green}, ${blue})`;
+                        
+                        return {
+                            normalizedX,
+                            normalizedY,
+                            color,
+                            params: sounds[i].params
+                        };
+                    });
+                    
+                    // Now scale to current canvas size
+                    rescalePoints();
+                    
+                    // Update stats
+                    document.getElementById('data-count').textContent = studyData.length;
+                    document.getElementById('unique-sounds').textContent = sounds.length;
+                    
+                } catch (error) {
+                    console.error('Error updating visualization:', error);
+                    ctx.fillStyle = '#666';
+                    ctx.font = '16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Error updating visualization. Please try again.', canvas.width / 2, canvas.height / 2);
+                } finally {
+                    // Always hide loading overlay
+                    hideLoadingOverlay();
+                }
+            }, 50); // Small delay to ensure loading overlay renders
         }
         
         function drawVisualization() {
