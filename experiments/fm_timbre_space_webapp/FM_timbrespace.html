@@ -8,6 +8,7 @@
     <!-- ML-Matrix library for proper MDS -->
     <!-- <script src="https://cdn.jsdelivr.net/npm/ml-matrix@6.12.1/matrix.umd.min.js"></script> -->
     <script src="libs/matrix.umd.min.js"></script>
+    <script src="libs/umap-js.min.js"></script>
     
     <style>
         body {
@@ -704,7 +705,204 @@
                 chosenCard.style.backgroundColor = '#f8f9fa';
             }, 300);
         }
-        
+
+        async function computeEmbedding(distanceMatrix, method = 'mds') {
+            const n = distanceMatrix.length;
+            
+            switch(method) {
+                case 'umap':
+                    return await computeUMAP(distanceMatrix);
+                case 'tsne':
+                    return computeTSNE(distanceMatrix);
+                case 'mds':
+                    return classicalMDS(distanceMatrix);
+                case 'force':
+                    return forceDirectedLayout(distanceMatrix);
+                default:
+                    return classicalMDS(distanceMatrix);
+            }
+        }
+
+        async function computeUMAP(distanceMatrix) {
+            // Ensure UMAP library is loaded
+            if (typeof UMAP === 'undefined') {
+                console.warn('UMAP library not loaded, falling back to MDS');
+                return classicalMDS(distanceMatrix);
+            }
+            
+            try {
+                const umap = new UMAP({
+                    nComponents: 2,
+                    nNeighbors: Math.min(15, Math.floor(distanceMatrix.length / 2)),
+                    minDist: 0.1,
+                    spread: 1.0,
+                    metric: 'precomputed',
+                    // For incremental updates:
+                    transformSeed: 42,  // Consistent initialization
+                });
+                
+                // UMAP expects a 2D array
+                const embedding = await umap.fitAsync(distanceMatrix);
+                return embedding;
+                
+            } catch (error) {
+                console.error('UMAP computation failed:', error);
+                return classicalMDS(distanceMatrix);
+            }
+        }
+
+        // Enhanced force-directed layout with better parameters
+        function forceDirectedLayout(distanceMatrix, iterations = 500) {
+            const n = distanceMatrix.length;
+            
+            // Initialize with MDS solution for better starting positions
+            let positions;
+            try {
+                positions = classicalMDS(distanceMatrix);
+            } catch {
+                // Random initialization if MDS fails
+                positions = Array(n).fill(0).map(() => [
+                    Math.random() - 0.5,
+                    Math.random() - 0.5
+                ]);
+            }
+            
+            // Parameters
+            let learningRate = 0.1;
+            const repulsionStrength = 0.5;
+            
+            for (let iter = 0; iter < iterations; iter++) {
+                const forces = positions.map(() => [0, 0]);
+                
+                // Attraction/repulsion based on target distances
+                for (let i = 0; i < n; i++) {
+                    for (let j = i + 1; j < n; j++) {
+                        const dx = positions[i][0] - positions[j][0];
+                        const dy = positions[i][1] - positions[j][1];
+                        const currentDist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+                        const targetDist = distanceMatrix[i][j];
+                        
+                        // Spring force
+                        const force = (currentDist - targetDist) / targetDist;
+                        const fx = (dx / currentDist) * force * learningRate;
+                        const fy = (dy / currentDist) * force * learningRate;
+                        
+                        forces[i][0] -= fx;
+                        forces[i][1] -= fy;
+                        forces[j][0] += fx;
+                        forces[j][1] += fy;
+                    }
+                }
+                
+                // Apply forces with momentum
+                const momentum = 0.9;
+                for (let i = 0; i < n; i++) {
+                    positions[i][0] += forces[i][0] * (1 - momentum * (iter / iterations));
+                    positions[i][1] += forces[i][1] * (1 - momentum * (iter / iterations));
+                }
+                
+                // Adaptive learning rate
+                if (iter % 50 === 0) {
+                    learningRate *= 0.95;
+                }
+            }
+            
+            return positions;
+        }
+
+        // Hybrid approach: combine multiple embeddings
+        function hybridEmbedding(distanceMatrix) {
+            // Get embeddings from different methods
+            const mdsCoords = classicalMDS(distanceMatrix);
+            const forceCoords = forceDirectedLayout(distanceMatrix, 200);
+            
+            // Weight towards MDS for global structure, force-directed for local
+            const alpha = 0.7; // MDS weight
+            const combined = mdsCoords.map((mds, i) => [
+                alpha * mds[0] + (1 - alpha) * forceCoords[i][0],
+                alpha * mds[1] + (1 - alpha) * forceCoords[i][1]
+            ]);
+            
+            return combined;
+        }
+
+        // Incremental UMAP update (approximate)
+        function incrementalUMAPUpdate(existingEmbedding, newDistances, existingDistances) {
+            // This is a simplified approach - full incremental UMAP is complex
+            // For new points, find their position based on nearest neighbors
+            
+            const k = 5; // Number of neighbors to consider
+            const newPointIndex = existingEmbedding.length;
+            
+            // Find k nearest neighbors
+            const neighbors = [];
+            for (let i = 0; i < existingEmbedding.length; i++) {
+                neighbors.push({ index: i, distance: newDistances[i] });
+            }
+            neighbors.sort((a, b) => a.distance - b.distance);
+            const kNearest = neighbors.slice(0, k);
+            
+            // Position new point as weighted average of neighbors
+            let x = 0, y = 0;
+            let weightSum = 0;
+            
+            kNearest.forEach(neighbor => {
+                const weight = 1 / (neighbor.distance + 0.001);
+                x += existingEmbedding[neighbor.index][0] * weight;
+                y += existingEmbedding[neighbor.index][1] * weight;
+                weightSum += weight;
+            });
+            
+            return [x / weightSum, y / weightSum];
+        }
+
+        // Add UI controls for visualization method
+        function addVisualizationControls() {
+            const controls = document.createElement('div');
+            controls.innerHTML = `
+                <div class="control-group" style="margin: 20px 0;">
+                    <label for="viz-method">Visualization Method:</label>
+                    <select id="viz-method" onchange="updateVisualizationMethod()">
+                        <option value="mds">Classical MDS</option>
+                        <option value="umap">UMAP (if available)</option>
+                        <option value="force">Force-Directed</option>
+                        <option value="hybrid">Hybrid MDS+Force</option>
+                    </select>
+                    <span id="viz-info" style="margin-left: 10px; color: #666; font-size: 12px;"></span>
+                </div>
+            `;
+            
+            // Insert after the button group in visualization tab
+            const vizTab = document.getElementById('visualization-tab');
+            const buttonGroup = vizTab.querySelector('.button-group');
+            buttonGroup.insertAdjacentElement('afterend', controls);
+        }
+        addVisualizationControls();
+        // Update visualization method based on selection
+        function updateVisualizationMethod() {
+            const method = document.getElementById('viz-method').value;
+            const info = document.getElementById('viz-info');
+            
+            switch(method) {
+                case 'mds':
+                    info.textContent = 'Using Classical MDS for visualization.';
+                    break;
+                case 'umap':
+                    info.textContent = 'Using UMAP for visualization (if available).';
+                    break;
+                case 'force':
+                    info.textContent = 'Using Force-Directed layout for visualization.';
+                    break;
+                case 'hybrid':
+                    info.textContent = 'Using Hybrid MDS + Force-Directed layout for visualization.';
+                    break;
+                default:
+                    info.textContent = '';
+                    break;
+            }
+            updateVisualization();
+        }
+
         // Visualization functions
         function computeSimilarityMatrix() {
             const sounds = new Map();
@@ -1014,12 +1212,13 @@
         function updateVisualization() {
             const canvas = document.getElementById('scatter-plot');
             const ctx = canvas.getContext('2d');
+            const method = document.getElementById('viz-method')?.value || 'mds';
             
             // Show loading overlay
             showLoadingOverlay();
             
             // Use setTimeout to allow the loading overlay to render before starting computation
-            setTimeout(() => {
+            setTimeout(async () => {
                 try {
                     // Clear canvas
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1036,6 +1235,10 @@
                     
                     // Compute similarity matrix and apply MDS
                     const { sounds, distanceMatrix } = computeSimilarityMatrix();
+
+                    // Apply selected embedding method
+                    const coords = await computeEmbedding(distanceMatrix, method);
+                    
                     
                     if (sounds.length < 3) {
                         ctx.fillStyle = '#666';
@@ -1047,19 +1250,19 @@
                         return;
                     }
                     
-                    // Apply MDS to get 2D coordinates (this is the computationally expensive part)
-                    const mdsCoords = classicalMDS(distanceMatrix);
+                    // // Apply MDS to get 2D coordinates (this is the computationally expensive part)
+                    // const mdsCoords = classicalMDS(distanceMatrix);
                     
                     // Normalize coordinates to 0-1 range and store them
-                    const xCoords = mdsCoords.map(p => p[0]);
-                    const yCoords = mdsCoords.map(p => p[1]);
+                    const xCoords = coords.map(p => p[0]);
+                    const yCoords = coords.map(p => p[1]);
                     const xMin = Math.min(...xCoords);
                     const xMax = Math.max(...xCoords);
                     const yMin = Math.min(...yCoords);
                     const yMax = Math.max(...yCoords);
                     
                     // Store normalized points (0-1 range) for future resizing
-                    normalizedPoints = mdsCoords.map((coord, i) => {
+                    normalizedPoints = coords.map((coord, i) => {
                         const normalizedX = (coord[0] - xMin) / (xMax - xMin || 1);
                         const normalizedY = (coord[1] - yMin) / (yMax - yMin || 1);
                         
@@ -1091,6 +1294,11 @@
                     // Update stats
                     document.getElementById('data-count').textContent = studyData.length;
                     document.getElementById('unique-sounds').textContent = sounds.length;
+                    // Update info text
+                    const info = document.getElementById('viz-info');
+                    if (info) {
+                        info.textContent = `${sounds.length} sounds embedded using ${method.toUpperCase()}`;
+                    }
                     
                 } catch (error) {
                     console.error('Error updating visualization:', error);
