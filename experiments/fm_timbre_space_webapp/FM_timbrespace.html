@@ -702,21 +702,29 @@
                 
                 // Stronger weight for visualization-based judgments
                 const isVisualizationJudgment = trial.source === 'visualization';
-                const similarityFactor = isVisualizationJudgment ? 0.1 : 0.8;  // Stronger adjustment
-                const dissimilarityFactor = isVisualizationJudgment ? 2 : 1.2;  // Stronger adjustment
+                const similarityAdjustment = isVisualizationJudgment ? -3 : -0.1;  // Subtract from distance (make closer)
+                const dissimilarityAdjustment = isVisualizationJudgment ? 3 : 0.1;  // Add to distance (make farther)
                 
                 if (trial.choice === 'A') {
                     // X is more similar to A than to B
-                    distanceMatrix[xIdx][aIdx] *= similarityFactor;
-                    distanceMatrix[aIdx][xIdx] *= similarityFactor;
-                    distanceMatrix[xIdx][bIdx] *= dissimilarityFactor;
-                    distanceMatrix[bIdx][xIdx] *= dissimilarityFactor;
+                    distanceMatrix[xIdx][aIdx] += similarityAdjustment;
+                    distanceMatrix[aIdx][xIdx] += similarityAdjustment;
+                    distanceMatrix[xIdx][bIdx] += dissimilarityAdjustment;
+                    distanceMatrix[bIdx][xIdx] += dissimilarityAdjustment;
                 } else {
                     // X is more similar to B than to A
-                    distanceMatrix[xIdx][bIdx] *= similarityFactor;
-                    distanceMatrix[bIdx][xIdx] *= similarityFactor;
-                    distanceMatrix[xIdx][aIdx] *= dissimilarityFactor;
-                    distanceMatrix[aIdx][xIdx] *= dissimilarityFactor;
+                    distanceMatrix[xIdx][bIdx] += similarityAdjustment;
+                    distanceMatrix[bIdx][xIdx] += similarityAdjustment;
+                    distanceMatrix[xIdx][aIdx] += dissimilarityAdjustment;
+                    distanceMatrix[aIdx][xIdx] += dissimilarityAdjustment;
+                }
+                
+                // Ensure distances don't go negative
+                const minDistance = 0.002; // Minimum distance to avoid zero
+                for (let i = 0; i < n; i++) {
+                    for (let j = 0; j < n; j++) {
+                        distanceMatrix[i][j] = Math.max(minDistance, distanceMatrix[i][j]);
+                    }
                 }
             });
             
@@ -1180,8 +1188,8 @@
                         `;
                         
                         // Position tooltip closer to the point
-                        const tooltipX = rect.left + point.x;
-                        const tooltipY = rect.top + point.y - 15; // Much closer to the point
+                        const tooltipX = rect.left + point.x + window.scrollX;
+                        const tooltipY = rect.top + point.y + window.scrollY - 15; // Much closer to the point
                         
                         // Get tooltip dimensions
                         tooltip.style.display = 'block';
@@ -1339,7 +1347,10 @@
                 };
                 
                 const dataStr = JSON.stringify(exportObject, null, 2);
-                const filename = `fm-synth-study-${new Date().toISOString().slice(0, 10)}.json`;
+                const now = new Date();
+                const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+                const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '_'); // HH_MM_SS
+                const filename = `fm-synth-study-${dateStr}_${timeStr}.json`;
                 
                 // Try multiple methods in order of preference
                 
@@ -1553,9 +1564,14 @@
             const dataStr = JSON.stringify(exportObject, null, 2);
             const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
             
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+            const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '_'); // HH_MM_SS
+            const filename = `fm-synth-study-${dateStr}_${timeStr}.json`;
+            
             const link = document.createElement('a');
             link.setAttribute('href', dataUri);
-            link.setAttribute('download', `fm-synth-study-${new Date().toISOString().slice(0, 10)}.json`);
+            link.setAttribute('download', filename);
             link.style.display = 'none';
             
             document.body.appendChild(link);
