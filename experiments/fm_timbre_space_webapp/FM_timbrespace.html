@@ -8,7 +8,6 @@
     <!-- ML-Matrix library for proper MDS -->
     <!-- <script src="https://cdn.jsdelivr.net/npm/ml-matrix@6.12.1/matrix.umd.min.js"></script> -->
     <script src="libs/matrix.umd.min.js"></script>
-    <script src="libs/umap-js.min.js"></script>
     
     <style>
         body {
@@ -351,6 +350,117 @@
         .tab-content.active {
             display: block;
         }
+        
+        /* Assignment Cards Styles */
+        .assignment-cards-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin: 20px 0;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .assignment-card {
+            background: #f8f9fa;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            height: 200px;
+            width: 185px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .assignment-card.assigned {
+            border-color: #4CAF50;
+            background: #e8f5e9;
+        }
+        
+        .assignment-content {
+            padding: 20px;
+            text-align: center;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .assignment-btn {
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            width: 100%;
+        }
+        
+        .assignment-btn:hover {
+            background-color: #1976D2;
+        }
+        
+        .assignment-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .assignment-card h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        .assignment-card .play-btn {
+            width: 100%;
+            margin: 10px 0;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .assignment-card .play-btn:hover {
+            background-color: #45a049;
+        }
+        
+        .assignment-card .params-display {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+            line-height: 1.5;
+            text-align: left;
+        }
+        
+        .assignment-card .remove-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #e0e0e0;
+            color: #666;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+        
+        .assignment-card .remove-btn:hover {
+            background: #f44336;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -454,14 +564,29 @@
                 <input type="file" id="file-input" style="display: none;" accept=".json">
             </div>
             
-            <div class="assignment-controls">
-                <button class="assignment-btn" onclick="assignPoint('A')" id="assign-a-btn">Use as A</button>
-                <button class="assignment-btn" onclick="assignPoint('B')" id="assign-b-btn">Use as B</button>
-                <button class="assignment-btn" onclick="assignPoint('X')" id="assign-x-btn">Use as X</button>
-                <button class="clear-btn" onclick="clearAssignments()" style="display: none;" id="clear-assignments-btn">Clear All</button>
+            <div class="assignment-cards-container">
+                <div class="assignment-card" id="assignment-card-a">
+                    <div class="assignment-content" id="assignment-content-a">
+                        <button class="assignment-btn" onclick="assignPoint('A')" id="assign-a-btn">Use as A</button>
+                    </div>
+                </div>
+                
+                <div class="assignment-card" id="assignment-card-b">
+                    <div class="assignment-content" id="assignment-content-b">
+                        <button class="assignment-btn" onclick="assignPoint('B')" id="assign-b-btn">Use as B</button>
+                    </div>
+                </div>
+                
+                <div class="assignment-card" id="assignment-card-x">
+                    <div class="assignment-content" id="assignment-content-x">
+                        <button class="assignment-btn" onclick="assignPoint('X')" id="assign-x-btn">Use as X</button>
+                    </div>
+                </div>
             </div>
             
-            <div class="assigned-sounds" id="assigned-sounds-container"></div>
+            <div class="assignment-controls" style="text-align: center; margin: 20px 0; display: none;">
+                <button class="clear-btn" onclick="clearAssignments()" style="display: none;" id="clear-assignments-btn">Clear All</button>
+            </div>
             
             <div class="choice-controls" id="choice-controls" style="display: none;">
                 <div class="question" style="margin: 0;">Which sound is X more similar to?</div>
@@ -474,7 +599,7 @@
                 <div id="loading-overlay" class="loading-overlay">
                     <div class="loading-spinner"></div>
                     <div class="loading-text">
-                        Calculating MDS...<br>
+                        Calculating map...<br>
                         <small>This may take a moment</small>
                     </div>
                 </div>
@@ -709,83 +834,96 @@
         async function computeEmbedding(distanceMatrix, method = 'mds') {
             const n = distanceMatrix.length;
             
-            switch(method) {
-                case 'umap':
-                    return await computeUMAP(distanceMatrix);
-                case 'tsne':
-                    return computeTSNE(distanceMatrix);
-                case 'mds':
-                    return classicalMDS(distanceMatrix);
-                case 'force':
-                    return forceDirectedLayout(distanceMatrix);
-                default:
-                    return classicalMDS(distanceMatrix);
-            }
-        }
-
-        async function computeUMAP(distanceMatrix) {
-            // Ensure UMAP library is loaded
-            if (typeof UMAP === 'undefined') {
-                console.warn('UMAP library not loaded, falling back to MDS');
-                return classicalMDS(distanceMatrix);
+            if (n < 2) {
+                return [[0, 0]];
             }
             
             try {
-                const umap = new UMAP({
-                    nComponents: 2,
-                    nNeighbors: Math.min(15, Math.floor(distanceMatrix.length / 2)),
-                    minDist: 0.1,
-                    spread: 1.0,
-                    metric: 'precomputed',
-                    // For incremental updates:
-                    transformSeed: 42,  // Consistent initialization
-                });
-                
-                // UMAP expects a 2D array
-                const embedding = await umap.fitAsync(distanceMatrix);
-                return embedding;
-                
+                switch(method) {
+                    case 'mds':
+                        return classicalMDS(distanceMatrix);
+                    case 'force':
+                        return forceDirectedLayout(distanceMatrix);
+                    case 'hybrid':
+                        return hybridEmbedding(distanceMatrix);
+                    default:
+                        return classicalMDS(distanceMatrix);
+                }
             } catch (error) {
-                console.error('UMAP computation failed:', error);
+                console.error(`Error with ${method} method:`, error);
+                console.warn('Falling back to Classical MDS');
                 return classicalMDS(distanceMatrix);
             }
         }
 
         // Enhanced force-directed layout with better parameters
-        function forceDirectedLayout(distanceMatrix, iterations = 500) {
+        function forceDirectedLayout(distanceMatrix, iterations = 500, options = {}) {
             const n = distanceMatrix.length;
             
-            // Initialize with MDS solution for better starting positions
-            let positions;
+            if (n < 2) {
+                return [[0, 0]];
+            }
+            
+            // Default options
+            const opts = {
+                attractionStrength: 0.5,
+                repulsionStrength: 0.5,
+                learningRate: 0.1,
+                ...options
+            };
+            
+            // Initialize positions with more spread
+            let positions = Array(n).fill(0).map(() => [
+                (Math.random() - 0.5) * 4, // Larger initial spread
+                (Math.random() - 0.5) * 4
+            ]);
+            
+            // Try to initialize with MDS if available, but don't fail if it doesn't work
             try {
-                positions = classicalMDS(distanceMatrix);
-            } catch {
-                // Random initialization if MDS fails
-                positions = Array(n).fill(0).map(() => [
-                    Math.random() - 0.5,
-                    Math.random() - 0.5
-                ]);
+                const mdsPositions = classicalMDS(distanceMatrix);
+                if (mdsPositions && mdsPositions.length === n) {
+                    // Scale MDS positions to ensure good initial spread
+                    const xCoords = mdsPositions.map(p => p[0]);
+                    const yCoords = mdsPositions.map(p => p[1]);
+                    const xRange = Math.max(...xCoords) - Math.min(...xCoords);
+                    const yRange = Math.max(...yCoords) - Math.min(...yCoords);
+                    
+                    if (xRange > 0.001 && yRange > 0.001) {
+                        positions = mdsPositions.map(pos => [pos[0], pos[1]]);
+                    }
+                }
+            } catch (e) {
+                console.log('MDS initialization failed for force-directed, using random positions');
             }
             
             // Parameters
-            let learningRate = 0.1;
-            const repulsionStrength = 0.5;
+            let learningRate = opts.learningRate;
             
             for (let iter = 0; iter < iterations; iter++) {
                 const forces = positions.map(() => [0, 0]);
                 
-                // Attraction/repulsion based on target distances
+                // Calculate forces between all pairs
                 for (let i = 0; i < n; i++) {
                     for (let j = i + 1; j < n; j++) {
                         const dx = positions[i][0] - positions[j][0];
                         const dy = positions[i][1] - positions[j][1];
                         const currentDist = Math.sqrt(dx * dx + dy * dy) || 0.001;
-                        const targetDist = distanceMatrix[i][j];
+                        const targetDist = distanceMatrix[i][j] || 0.1;
                         
-                        // Spring force
-                        const force = (currentDist - targetDist) / targetDist;
-                        const fx = (dx / currentDist) * force * learningRate;
-                        const fy = (dy / currentDist) * force * learningRate;
+                        // Ensure target distance is reasonable
+                        const clampedTargetDist = Math.max(0.01, Math.min(5.0, targetDist));
+                        
+                        // Spring force proportional to distance error
+                        const error = currentDist - clampedTargetDist;
+                        const forceStrength = error * learningRate;
+                        
+                        // Unit vector from j to i
+                        const unitX = dx / currentDist;
+                        const unitY = dy / currentDist;
+                        
+                        // Apply force (attractive if too far, repulsive if too close)
+                        const fx = unitX * forceStrength;
+                        const fy = unitY * forceStrength;
                         
                         forces[i][0] -= fx;
                         forces[i][1] -= fy;
@@ -794,20 +932,45 @@
                     }
                 }
                 
-                // Apply forces with momentum
-                const momentum = 0.9;
+                // Apply forces with dampening
+                const dampening = 0.8;
                 for (let i = 0; i < n; i++) {
-                    positions[i][0] += forces[i][0] * (1 - momentum * (iter / iterations));
-                    positions[i][1] += forces[i][1] * (1 - momentum * (iter / iterations));
+                    // Check for invalid forces
+                    if (isNaN(forces[i][0]) || isNaN(forces[i][1])) {
+                        forces[i][0] = 0;
+                        forces[i][1] = 0;
+                    }
+                    
+                    // Apply with dampening
+                    positions[i][0] += forces[i][0] * dampening;
+                    positions[i][1] += forces[i][1] * dampening;
+                    
+                    // Check for invalid positions
+                    if (isNaN(positions[i][0]) || isNaN(positions[i][1])) {
+                        positions[i][0] = (Math.random() - 0.5) * 2;
+                        positions[i][1] = (Math.random() - 0.5) * 2;
+                    }
                 }
                 
                 // Adaptive learning rate
-                if (iter % 50 === 0) {
+                if (iter % 100 === 0) {
                     learningRate *= 0.95;
                 }
             }
             
-            return positions;
+            // Ensure we have valid final positions
+            const validPositions = positions.map(pos => [
+                isNaN(pos[0]) ? Math.random() - 0.5 : pos[0],
+                isNaN(pos[1]) ? Math.random() - 0.5 : pos[1]
+            ]);
+            
+            console.log('Force-directed layout completed with', n, 'points');
+            console.log('Final position ranges:', {
+                x: [Math.min(...validPositions.map(p => p[0])), Math.max(...validPositions.map(p => p[0]))],
+                y: [Math.min(...validPositions.map(p => p[1])), Math.max(...validPositions.map(p => p[1]))]
+            });
+            
+            return validPositions;
         }
 
         // Hybrid approach: combine multiple embeddings
@@ -826,45 +989,15 @@
             return combined;
         }
 
-        // Incremental UMAP update (approximate)
-        function incrementalUMAPUpdate(existingEmbedding, newDistances, existingDistances) {
-            // This is a simplified approach - full incremental UMAP is complex
-            // For new points, find their position based on nearest neighbors
-            
-            const k = 5; // Number of neighbors to consider
-            const newPointIndex = existingEmbedding.length;
-            
-            // Find k nearest neighbors
-            const neighbors = [];
-            for (let i = 0; i < existingEmbedding.length; i++) {
-                neighbors.push({ index: i, distance: newDistances[i] });
-            }
-            neighbors.sort((a, b) => a.distance - b.distance);
-            const kNearest = neighbors.slice(0, k);
-            
-            // Position new point as weighted average of neighbors
-            let x = 0, y = 0;
-            let weightSum = 0;
-            
-            kNearest.forEach(neighbor => {
-                const weight = 1 / (neighbor.distance + 0.001);
-                x += existingEmbedding[neighbor.index][0] * weight;
-                y += existingEmbedding[neighbor.index][1] * weight;
-                weightSum += weight;
-            });
-            
-            return [x / weightSum, y / weightSum];
-        }
-
         // Add UI controls for visualization method
         function addVisualizationControls() {
             const controls = document.createElement('div');
+            
             controls.innerHTML = `
                 <div class="control-group" style="margin: 20px 0;">
                     <label for="viz-method">Visualization Method:</label>
                     <select id="viz-method" onchange="updateVisualizationMethod()">
                         <option value="mds">Classical MDS</option>
-                        <option value="umap">UMAP (if available)</option>
                         <option value="force">Force-Directed</option>
                         <option value="hybrid">Hybrid MDS+Force</option>
                     </select>
@@ -887,9 +1020,6 @@
                 case 'mds':
                     info.textContent = 'Using Classical MDS for visualization.';
                     break;
-                case 'umap':
-                    info.textContent = 'Using UMAP for visualization (if available).';
-                    break;
                 case 'force':
                     info.textContent = 'Using Force-Directed layout for visualization.';
                     break;
@@ -900,6 +1030,8 @@
                     info.textContent = '';
                     break;
             }
+            
+            info.style.color = '#666';
             updateVisualization();
         }
 
@@ -952,8 +1084,8 @@
                 
                 // Stronger weight for visualization-based judgments
                 const isVisualizationJudgment = trial.source === 'visualization';
-                const similarityAdjustment = isVisualizationJudgment ? -3 : -0.1;  // Subtract from distance (make closer)
-                const dissimilarityAdjustment = isVisualizationJudgment ? 3 : 0.1;  // Add to distance (make farther)
+                const similarityAdjustment = isVisualizationJudgment ? -1 : -0.1;  // Subtract from distance (make closer)
+                const dissimilarityAdjustment = isVisualizationJudgment ? 1 : 0.1;  // Add to distance (make farther)
                 
                 if (trial.choice === 'A') {
                     // X is more similar to A than to B
@@ -1250,9 +1382,6 @@
                         return;
                     }
                     
-                    // // Apply MDS to get 2D coordinates (this is the computationally expensive part)
-                    // const mdsCoords = classicalMDS(distanceMatrix);
-                    
                     // Normalize coordinates to 0-1 range and store them
                     const xCoords = coords.map(p => p[0]);
                     const yCoords = coords.map(p => p[1]);
@@ -1261,10 +1390,25 @@
                     const yMin = Math.min(...yCoords);
                     const yMax = Math.max(...yCoords);
                     
+                    console.log(`Coordinate ranges for ${method}:`, {
+                        x: [xMin, xMax],
+                        y: [yMin, yMax],
+                        xRange: xMax - xMin,
+                        yRange: yMax - yMin
+                    });
+                    
+                    // Ensure we have valid ranges for normalization
+                    const xRange = xMax - xMin;
+                    const yRange = yMax - yMin;
+                    const minRange = 0.001; // Minimum range to avoid division by zero
+                    
+                    const normalizeX = xRange > minRange ? xRange : 1;
+                    const normalizeY = yRange > minRange ? yRange : 1;
+                    
                     // Store normalized points (0-1 range) for future resizing
                     normalizedPoints = coords.map((coord, i) => {
-                        const normalizedX = (coord[0] - xMin) / (xMax - xMin || 1);
-                        const normalizedY = (coord[1] - yMin) / (yMax - yMin || 1);
+                        const normalizedX = xRange > minRange ? (coord[0] - xMin) / normalizeX : 0.5;
+                        const normalizedY = yRange > minRange ? (coord[1] - yMin) / normalizeY : 0.5;
                         
                         // Color based on synth parameters mapped to RGB
                         // Convert frequency to MIDI pitch: MIDI = 12 * log2(freq/440) + 69
@@ -1325,16 +1469,6 @@
             const margin = Math.min(canvas.width, canvas.height) * 0.05;
             const fontSize = Math.max(12, Math.min(16, canvas.width / 50));
             const titleFontSize = Math.max(14, Math.min(18, canvas.width / 40));
-            
-            // // Draw axes
-            // ctx.strokeStyle = '#999';
-            // ctx.lineWidth = 1;
-            // ctx.beginPath();
-            // ctx.moveTo(margin, canvas.height / 2);
-            // ctx.lineTo(canvas.width - margin, canvas.height / 2);
-            // ctx.moveTo(canvas.width / 2, margin);
-            // ctx.lineTo(canvas.width / 2, canvas.height - margin);
-            // ctx.stroke();
             
             // Draw points
             points.forEach((point) => {
@@ -1399,23 +1533,11 @@
                 }
             });
             
-            // // Labels with responsive font size
-            // ctx.fillStyle = '#666';
-            // ctx.font = `${fontSize}px Arial`;
-            // ctx.textAlign = 'center';
-            // ctx.fillText('MDS1', canvas.width / 2, canvas.height - margin/2);
-            
-            // ctx.save();
-            // ctx.translate(margin/2, canvas.height / 2);
-            // ctx.rotate(-Math.PI / 2);
-            // ctx.fillText('MDS2', 0, 0);
-            // ctx.restore();
-            
             // Title
             ctx.fillStyle = '#333';
             ctx.font = `${titleFontSize}px Arial`;
             ctx.textAlign = 'center';
-            ctx.fillText('Perceptual Timbre Space (Classical MDS)', canvas.width / 2, margin);
+            ctx.fillText('Perceptual Timbre Space', canvas.width / 2, margin);
         }
         
         // Interactive canvas functions
@@ -1448,6 +1570,9 @@
         
         // Set up canvas interactivity
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize assignment display
+            updateAssignmentDisplay();
+            
             const canvas = document.getElementById('scatter-plot');
             const tooltip = document.getElementById('tooltip');
             let hoveredPoint = null;
@@ -1927,120 +2052,38 @@
         }
         
         function updateAssignmentDisplay() {
-            const container = document.getElementById('assigned-sounds-container');
-            container.innerHTML = '';
-            
-            // Create a wrapper div to ensure horizontal layout
-            const wrapper = document.createElement('div');
-            wrapper.style.display = 'grid';
-            wrapper.style.gridTemplateColumns = 'repeat(3, 1fr)';
-            wrapper.style.gap = '20px';
-            wrapper.style.maxWidth = '900px';
-            wrapper.style.margin = '0 auto';
-            
-            // Show assigned sounds
+            // Update each assignment card
             ['A', 'B', 'X'].forEach(role => {
+                const card = document.getElementById(`assignment-card-${role.toLowerCase()}`);
+                const content = document.getElementById(`assignment-content-${role.toLowerCase()}`);
+                
                 if (assignedPoints[role]) {
-                    const card = document.createElement('div');
-                    card.style.background = '#f8f9fa';
-                    card.style.border = '2px solid #ddd';
-                    card.style.borderRadius = '8px';
-                    card.style.padding = '20px';
-                    card.style.textAlign = 'center';
-                    card.style.position = 'relative';
-                    card.style.transition = 'all 0.3s';
+                    // Card is assigned - show the assigned content
+                    card.classList.add('assigned');
                     
-                    // Create remove button
-                    const removeBtn = document.createElement('button');
-                    removeBtn.textContent = '×';
-                    removeBtn.style.position = 'absolute';
-                    removeBtn.style.top = '8px';
-                    removeBtn.style.right = '8px';
-                    removeBtn.style.background = '#e0e0e0';
-                    removeBtn.style.color = '#666';
-                    removeBtn.style.border = 'none';
-                    removeBtn.style.borderRadius = '50%';
-                    removeBtn.style.width = '20px';
-                    removeBtn.style.height = '20px';
-                    removeBtn.style.fontSize = '14px';
-                    removeBtn.style.cursor = 'pointer';
-                    removeBtn.style.padding = '0';
-                    removeBtn.style.display = 'flex';
-                    removeBtn.style.alignItems = 'center';
-                    removeBtn.style.justifyContent = 'center';
-                    removeBtn.onclick = () => removeAssignment(role);
-                    
-                    removeBtn.onmouseover = () => {
-                        removeBtn.style.background = '#f44336';
-                        removeBtn.style.color = 'white';
-                    };
-                    removeBtn.onmouseout = () => {
-                        removeBtn.style.background = '#e0e0e0';
-                        removeBtn.style.color = '#666';
-                    };
-                    
-                    // Create title
-                    const title = document.createElement('h3');
-                    title.textContent = `Sound ${role}`;
-                    title.style.margin = '0 0 15px 0';
-                    title.style.color = '#333';
-                    
-                    // Create play button
-                    const playBtn = document.createElement('button');
-                    playBtn.textContent = `Play Sound ${role}`;
-                    playBtn.style.width = '100%';
-                    playBtn.style.margin = '5px 0';
-                    playBtn.style.backgroundColor = '#4CAF50';
-                    playBtn.style.color = 'white';
-                    playBtn.style.border = 'none';
-                    playBtn.style.padding = '12px 24px';
-                    playBtn.style.borderRadius = '4px';
-                    playBtn.style.cursor = 'pointer';
-                    playBtn.style.fontSize = '16px';
-                    playBtn.onclick = () => playAssignedSound(role);
-                    
-                    playBtn.onmouseover = () => {
-                        playBtn.style.backgroundColor = '#45a049';
-                    };
-                    playBtn.onmouseout = () => {
-                        playBtn.style.backgroundColor = '#4CAF50';
-                    };
-                    
-                    // Create params display
-                    const paramsDiv = document.createElement('div');
-                    paramsDiv.style.fontSize = '12px';
-                    paramsDiv.style.color = '#666';
-                    paramsDiv.style.marginTop = '10px';
-                    paramsDiv.style.lineHeight = '1.5';
-                    paramsDiv.innerHTML = `
-                        Carrier: ${assignedPoints[role].params.carrier.toFixed(1)} Hz<br>
-                        Harm Ratio: ${assignedPoints[role].params.harmRatio.toFixed(2)}<br>
-                        Mod Index: ${assignedPoints[role].params.modIndex.toFixed(2)}
+                    content.innerHTML = `
+                        <button class="remove-btn" onclick="removeAssignment('${role}')">×</button>
+                        <h3>Sound ${role}</h3>
+                        <button class="play-btn" onclick="playAssignedSound('${role}')">Play Sound ${role}</button>
+                        <div class="params-display">
+                            Carrier: ${assignedPoints[role].params.carrier.toFixed(1)} Hz<br>
+                            Harm Ratio: ${assignedPoints[role].params.harmRatio.toFixed(2)}<br>
+                            Mod Index: ${assignedPoints[role].params.modIndex.toFixed(2)}
+                        </div>
                     `;
+                } else {
+                    // Card is unassigned - show the assignment button
+                    card.classList.remove('assigned');
                     
-                    // Assemble card
-                    card.appendChild(removeBtn);
-                    card.appendChild(title);
-                    card.appendChild(playBtn);
-                    card.appendChild(paramsDiv);
-                    
-                    wrapper.appendChild(card);
+                    content.innerHTML = `
+                        <button class="assignment-btn" onclick="assignPoint('${role}')" id="assign-${role.toLowerCase()}-btn">Use as ${role}</button>
+                    `;
                 }
             });
-            
-            container.appendChild(wrapper);
             
             // Show/hide controls based on assignments
             const allAssigned = assignedPoints.A && assignedPoints.B && assignedPoints.X;
             document.getElementById('choice-controls').style.display = allAssigned ? 'block' : 'none';
-            document.getElementById('clear-assignments-btn').style.display = 
-                (assignedPoints.A || assignedPoints.B || assignedPoints.X) ? 'inline-block' : 'none';
-            
-            // Update assignment buttons state
-            ['A', 'B', 'X'].forEach(role => {
-                const btn = document.getElementById(`assign-${role.toLowerCase()}-btn`);
-                btn.textContent = assignedPoints[role] ? `✓ Assigned as ${role}` : `Use as ${role}`;
-            });
             
             // Redraw visualization to update labels
             drawVisualization();
@@ -2093,12 +2136,17 @@
             // Update visualization with new data
             updateVisualization();
             
-            // Flash feedback
-            const container = document.getElementById('assigned-sounds-container');
-            container.style.backgroundColor = '#4CAF50';
-            setTimeout(() => {
-                container.style.backgroundColor = 'transparent';
-            }, 300);
+            // Flash feedback on the choice controls
+            const choiceControls = document.getElementById('choice-controls');
+            if (choiceControls) {
+                choiceControls.style.backgroundColor = '#4CAF50';
+                choiceControls.style.borderRadius = '4px';
+                choiceControls.style.padding = '10px';
+                setTimeout(() => {
+                    choiceControls.style.backgroundColor = 'transparent';
+                    choiceControls.style.padding = '0';
+                }, 300);
+            }
         }
         
         // Load saved data on startup
