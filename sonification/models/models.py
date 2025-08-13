@@ -2762,7 +2762,7 @@ class PlFMEmbedder(LightningModule):
             print("not training, using the shadow model")
             # use the shadow model for inference
             mu, logvar = self.shadow(in_spec)
-        return mu + logvar
+        return mu #+ logvar
 
 
     def training_step(self, batch, batch_idx):
@@ -2774,7 +2774,7 @@ class PlFMEmbedder(LightningModule):
         scheduler = self.lr_schedulers()
 
         # get the batch
-        epoch_idx = self.trainer.current_epoch
+        # epoch_idx = self.trainer.current_epoch
 
         norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
         x = self.input_synth(freqs, ratios, indices).detach() # (batch_size, n_samples)
@@ -2821,12 +2821,11 @@ class PlFMEmbedder(LightningModule):
         in_spec_x = scale(in_spec_x, in_spec_x.min(), in_spec_x.max(), 0, 1)
         in_spec_x_a = scale(in_spec_x_a, in_spec_x_a.min(), in_spec_x_a.max(), 0, 1)
         # predict the embeddings
-        mu, logvar = self.shadow(in_spec_x)
-        teacher_x = mu + logvar  # teacher output
+        teacher_x, _ = self.shadow(in_spec_x)  # teacher output
+        teacher_x = teacher_x.detach()  # detach the teacher output to avoid gradients flowing back to the shadow model
         # center and sharpen DINO-style
         teacher_x_centered = F.softmax((teacher_x - self.center) / self.teacher_temperature, dim=-1).detach()
-        mu, logvar = self.model(in_spec_x_a)
-        student_x_a = mu + logvar  # student output
+        student_x_a, _ = self.model(in_spec_x_a)
         student_x_a = student_x_a / self.student_temperature
 
         # calculate the loss

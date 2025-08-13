@@ -44,9 +44,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_embedder")
-    parser.add_argument("--ckpt_name", type=str, default="home_v1.1")
+    parser.add_argument("--ckpt_name", type=str, default="home_v2")
     parser.add_argument("--logdir", type=str, default="./logs/fm_embedder")
-    parser.add_argument("--comment", type=str, default="smaller model")
+    parser.add_argument("--comment", type=str, default="discard logvar instead of adding to mu")
     
     args = parser.parse_args()
 
