@@ -44,8 +44,7 @@ class FmSynthDataset(Dataset):
             self.df = pd.read_csv(csv_path)
         self.sr = sr
         self.dur = dur
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
         self.synth = FMSynth(sr).to(self.device)
 
     def __len__(self):
@@ -63,12 +62,9 @@ class FmSynthDataset(Dataset):
         harm_ratio_col_id = self.df.columns.get_loc("harm_ratio")
         mod_index_col_id = self.df.columns.get_loc("mod_index")
         # extract the carrier frequency, harm_ratio, mod_index, repeat for nsamps
-        carr_freq = row_tensor[:,
-                               freq_col_id].unsqueeze(-1).repeat(1, nsamps)
-        harm_ratio = row_tensor[:,
-                                harm_ratio_col_id].unsqueeze(-1).repeat(1, nsamps)
-        mod_index = row_tensor[:,
-                               mod_index_col_id].unsqueeze(-1).repeat(1, nsamps)
+        carr_freq = row_tensor[:, freq_col_id].unsqueeze(-1).repeat(1, nsamps)
+        harm_ratio = row_tensor[:, harm_ratio_col_id].unsqueeze(-1).repeat(1, nsamps)
+        mod_index = row_tensor[:, mod_index_col_id].unsqueeze(-1).repeat(1, nsamps)
         fm_synth = self.synth(carr_freq, harm_ratio, mod_index)
         return fm_synth
 
@@ -83,10 +79,8 @@ class FmMel2PCADataset(Dataset):
             n_mels=200,
             mel_scaler=None,
             pca_scaler=None):
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu")
-        self.fm_synth = FmSynthDataset(
-            dataframe=fm_params_dataframe, sr=sr, dur=dur)
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
+        self.fm_synth = FmSynthDataset(dataframe=fm_params_dataframe, sr=sr, dur=dur)
         self.pca = torch.tensor(pca_array).float().to(self.device)
         self.sr = sr
         self.dur = dur
@@ -186,10 +180,8 @@ class FmMelContrastiveDataset(Dataset):
             dur=1,
             n_mels=200,
             mel_scaler=None):
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu")
-        self.fm_synth = FmSynthDataset(
-            dataframe=fm_params_dataframe, sr=sr, dur=dur)
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
+        self.fm_synth = FmSynthDataset(dataframe=fm_params_dataframe, sr=sr, dur=dur)
         self.sr = sr
         self.dur = dur
         self.n_mels = n_mels
@@ -253,10 +245,8 @@ class FmMelContrastiveDataset(Dataset):
                 mel_scaled = torch.tensor(
                     mel_scaled, device=self.device).reshape(-1, 1, self.n_mels)  # (B, 1, n_mels)
             if self.apply_masking and i != 0:
-                p = torch.rand(1) * \
-                    (self.masking_max_p - self.masking_min_p) + self.masking_min_p
-                mel_scaled = self.mask_mels(
-                    mel_scaled, p=p, upper_half_only=self.masking_upper_half_only)
+                p = torch.rand(1) * (self.masking_max_p - self.masking_min_p) + self.masking_min_p
+                mel_scaled = self.mask_mels(mel_scaled, p=p, upper_half_only=self.masking_upper_half_only)
             mels.append(mel_scaled)
 
         # a list of tensors of shape (B, 1, n_mels)
@@ -271,8 +261,7 @@ class FmMelContrastiveDataset(Dataset):
         mels_indices = torch.arange(num_mels).unsqueeze(0).repeat(b_size, 1)
         for i in range(b_size):
             mels_indices[i] = mels_indices[i][torch.randperm(num_mels)]
-        mels_indices = mels_indices[...,
-                                    :masked_bins].unsqueeze(1).to(self.device)
+        mels_indices = mels_indices[..., :masked_bins].unsqueeze(1).to(self.device)
         if upper_half_only:
             mels_indices += num_mels
         mels_masked = mels.clone()
@@ -331,8 +320,7 @@ class ContrastiveSinusoidalDataset(Dataset):
         self.sr = sr
         self.dur = dur
         self.n_mels = n_mels
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
         self.synth = Sinewave(sr).to(self.device)
         self.mel_spec = MelSpectrogram(
             sample_rate=self.sr,
@@ -350,8 +338,7 @@ class ContrastiveSinusoidalDataset(Dataset):
         return len(self.df)
 
     def generate_partials(self, n_batches):
-        pitches = torch.rand(n_batches, self.num_partials) * \
-            self.pitch_range + self.min_pitch  # (B, num_partials)
+        pitches = torch.rand(n_batches, self.num_partials) * self.pitch_range + self.min_pitch  # (B, num_partials)
         pitches = pitches.sort(dim=1).values  # (B, num_partials)
         diff_between_lowest = pitches[:, 1] - pitches[:, 0]  # (B,)
         # enforce minimum difference between lowest and second lowest pitch
@@ -572,8 +559,7 @@ class PlMelEncoder(LightningModule):
         if self.teacher_loss_weight > 0:
             y_teacher = self.shadow(x).detach()
             # embeddings should be similar to teacher
-            loss_teacher = self.teacher_loss_weight * \
-                self.mse(y_student, y_teacher)
+            loss_teacher = self.teacher_loss_weight * self.mse(y_student, y_teacher)
             loss += loss_teacher
 
         loss_pitch = 0

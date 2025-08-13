@@ -9,7 +9,7 @@ from torchaudio.transforms import MelSpectrogram
 from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims, midi2frequency, scale
 from ..utils.misc import kl_scheduler, ema
-from ..utils.dsp import seconds2samples
+from ..utils.dsp import seconds2samples, transposition2duration
 from .loss import kld_loss, latent_consistency_loss
 import matplotlib.pyplot as plt
 import os
@@ -23,6 +23,9 @@ from auraloss.freq import MultiResolutionSTFTLoss
 import time
 import wandb
 import subprocess
+from copy import deepcopy
+from collections import OrderedDict
+from sys import stderr
 
 
 class AE(nn.Module):
@@ -2619,3 +2622,249 @@ class PlImgFactorVAE(LightningModule):
             d_optimizer, mode='min', factor=self.lr_decay_d, patience=50000)
         # return the optimizers and schedulers
         return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
+    
+
+class PlFMEmbedder(LightningModule):
+    def __init__(self, args):
+        super().__init__()
+        # Important: This property activates manual optimization.
+        self.automatic_optimization = False
+        self.save_hyperparameters()
+        self.args = args
+
+        self.sr = args.sr
+        self.batch_size = args.batch_size
+        self.warmup_epochs = args.warmup_epochs
+        self.n_samples = args.length_samps
+        self.n_fft = args.n_fft
+        self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
+        self.max_harm_ratio = args.max_harm_ratio
+        self.max_mod_idx = args.max_mod_idx
+        self.apply_transposition = args.apply_transposition > 0
+        self.latent_size = args.latent_size
+        self.center_momentum = args.center_momentum
+        self.register_buffer("center", torch.zeros(1, self.latent_size, device=self.device))
+        self.decay = args.ema_decay
+        self.student_temperature = args.student_temperature
+        self.teacher_temperature = args.teacher_temperature
+        self.logdir = args.logdir
+
+        # learning rate
+        self.lr = args.lr
+        self.lr_decay = args.lr_decay
+
+        # models
+        self.input_synth = FMSynth(sr=self.sr)
+        self.input_synth.eval()
+        self.mel_spectrogram = MelSpectrogram(
+            sample_rate=self.sr,
+            n_fft=self.n_fft,
+            f_min=args.f_min,
+            f_max=args.f_max,
+            n_mels=args.n_mels,
+            power=args.power,
+            normalized=args.normalized > 0,
+        )
+        self.model = MelSpecEncoder(
+            input_width=args.n_mels,
+            encoder_channels=args.encoder_channels,
+            encoder_kernels=args.encoder_kernels,
+            n_res_block=args.encoder_n_res_block,
+            n_res_channel=args.encoder_n_res_channel,
+            stride=4,
+            latent_size=self.latent_size,
+            dropout=args.dropout
+        )
+
+        def init_weights_kaiming(m):
+            if isinstance(m, (nn.Conv2d, nn.Linear)):  # Apply to conv and linear layers
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
+        self.model.apply(init_weights_kaiming)
+
+
+    def create_shadow_model(self):
+        self.shadow = deepcopy(self.model)
+        for param in self.shadow.parameters():
+            param.detach_()
+        self.shadow.eval()
+
+
+    # following this source: https://www.zijianhu.com/post/pytorch/ema/
+    @torch.no_grad()
+    def ema_update(self):
+        if not self.training:
+            print("EMA update should only be called during training",
+                  file=stderr, flush=True)
+            return
+
+        model_params = OrderedDict(self.model.named_parameters())
+        shadow_params = OrderedDict(self.shadow.named_parameters())
+
+        # check if both model contains the same set of keys
+        assert model_params.keys() == shadow_params.keys()
+
+        for name, param in model_params.items():
+            # see https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage
+            # shadow_variable -= (1 - decay) * (shadow_variable - variable)
+            shadow_params[name].sub_(
+                (1. - self.decay) * (shadow_params[name] - param))
+
+        model_buffers = OrderedDict(self.model.named_buffers())
+        shadow_buffers = OrderedDict(self.shadow.named_buffers())
+
+        # check if both model contains the same set of keys
+        assert model_buffers.keys() == shadow_buffers.keys()
+
+        for name, buffer in model_buffers.items():
+            # buffers are copied
+            shadow_buffers[name].copy_(buffer)
+
+    @torch.no_grad()
+    def update_center(self, teacher_output):
+        """
+        Update center used for teacher output on a single GPU.
+        """
+        batch_center = torch.mean(teacher_output, dim=0, keepdim=True)
+        self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
+
+
+    def sample_fm_params(self, batch_size):
+        pitches_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
+        pitches = scale(pitches_norm, 0, 1, 38, 86)
+        freqs = midi2frequency(pitches)
+        ratios_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
+        ratios = ratios_norm * self.max_harm_ratio
+        ratios = torch.clip(ratios, 0.1, self.max_harm_ratio) # avoid zero ratios
+        indices_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
+        indices = indices_norm * self.max_mod_idx
+        indices = torch.clip(indices, 0.1, self.max_mod_idx) # avoid zero indices
+        # stack norm params together
+        norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1)
+        # now repeat on the samples dimension
+        freqs = freqs.unsqueeze(1).repeat(1, self.sr)
+        ratios = ratios.unsqueeze(1).repeat(1, self.sr)
+        indices = indices.unsqueeze(1).repeat(1, self.sr)
+        return norm_params, freqs, ratios, indices
+    
+
+    def forward(self, x):
+        print("entering PlFMEmbedder forward")
+        in_wf = x.unsqueeze(1)
+        # get the mel spectrogram
+        in_spec = self.mel_spectrogram(in_wf)
+        # normalize it
+        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # predict the embedding
+        if self.training:
+            print("training, using the main model")
+            mu, logvar = self.model(in_spec)
+        else:
+            print("not training, using the shadow model")
+            # use the shadow model for inference
+            mu, logvar = self.shadow(in_spec)
+        return mu + logvar
+
+
+    def training_step(self, batch, batch_idx):
+        self.model.train()
+        self.shadow.eval()
+
+        # get the optimizers and schedulers
+        optimizer = self.optimizers()
+        scheduler = self.lr_schedulers()
+
+        # get the batch
+        epoch_idx = self.trainer.current_epoch
+
+        norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
+        x = self.input_synth(freqs, ratios, indices).detach() # (batch_size, n_samples)
+        # copy to x_a
+        x_a = x.clone()
+
+        # apply transposition augmentation for x_a
+        if self.apply_transposition:
+            # get a random number between -2 and 2 for pitch transposition
+            transposition = torch.rand(1) * 4 - 2
+            target_dur = transposition2duration(transposition.float())
+            target_dur = target_dur[0]
+            # apply the transposition
+            x_a = x_a.unsqueeze(1) # (batch_size, 1, n_samples)
+            x_a = torch.nn.functional.interpolate(x_a, scale_factor=target_dur, mode='linear')
+            x_a = x_a.squeeze(1) # (batch_size, n_samples)
+
+        # apply common augmentations: random slice, random phase flip, random noise
+        inputs = [x, x_a]
+        for i, x_x in enumerate(inputs):
+            # select a random slice of self.n_samples
+            start_idx = torch.randint(0, x_x.shape[-1] - self.n_samples, (1,))
+            x_x = x_x[:, start_idx:start_idx + self.n_samples]
+            # add random phase flip
+            phase_flip = torch.rand(self.batch_size, 1, device=self.device)
+            phase_flip = torch.where(phase_flip > 0.5, 1, -1)
+            x_x = x_x * phase_flip
+            # add random noise
+            noise = torch.randn_like(x_x, device=self.device)
+            noise = (noise - noise.min()) / (noise.max() - noise.min())
+            noise = noise * 2 - 1
+            noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
+            noise = noise * noise_coeff
+            x_x = x_x + noise
+            x_x = x_x.unsqueeze(1) # (batch_size, 1, n_samples)
+            inputs[i] = x_x
+        x, x_a = inputs
+
+        # forward pass
+        # get the mel spectrograms
+        in_spec_x = self.mel_spectrogram(x.detach())
+        in_spec_x_a = self.mel_spectrogram(x_a.detach())
+        # normalize them
+        in_spec_x = scale(in_spec_x, in_spec_x.min(), in_spec_x.max(), 0, 1)
+        in_spec_x_a = scale(in_spec_x_a, in_spec_x_a.min(), in_spec_x_a.max(), 0, 1)
+        # predict the embeddings
+        mu, logvar = self.shadow(in_spec_x)
+        teacher_x = mu + logvar  # teacher output
+        # center and sharpen DINO-style
+        teacher_x_centered = F.softmax((teacher_x - self.center) / self.teacher_temperature, dim=-1).detach()
+        mu, logvar = self.model(in_spec_x_a)
+        student_x_a = mu + logvar  # student output
+        student_x_a = student_x_a / self.student_temperature
+
+        # calculate the loss
+        # cross entropy loss between teacher and student (DINO-style)
+        loss = torch.sum(-teacher_x_centered * F.log_softmax(student_x_a, dim=-1), dim=-1).mean()
+
+        # backward pass
+        optimizer.zero_grad()
+        self.manual_backward(loss)
+        self.clip_gradients(optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+
+        optimizer.step()
+        scheduler.step(loss.item())
+
+        # update the EMA
+        self.ema_update()
+        # update the center
+        self.update_center(teacher_x)
+
+        # log losses
+        self.log_dict({
+            "loss": loss,
+            "lr": scheduler.get_last_lr()[0],
+        }, prog_bar=True)
+        
+
+    def on_train_batch_start(self, batch, batch_idx):
+        epoch = self.trainer.current_epoch
+        if epoch < self.warmup_epochs:
+            lr_scale = min(1.0, (epoch + 1) / self.warmup_epochs)
+            for pg in self.trainer.optimizers[0].param_groups:
+                pg["lr"] = self.lr * lr_scale
+
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(
+            self.model.parameters(), lr=self.lr)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min', factor=self.lr_decay, patience=50000)
+        # return the optimizers and schedulers
+        return [optimizer], [scheduler]
