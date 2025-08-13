@@ -2,14 +2,13 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-import wandb.sync
 from .layers import LinearEncoder, LinearDecoder, ResBlock, LinearResBlock, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
 from .ddsp import FMSynth
 from torchaudio.transforms import MelSpectrogram
 from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims, midi2frequency, scale
 from ..utils.misc import kl_scheduler, ema
-from ..utils.dsp import seconds2samples, transposition2duration
+from ..utils.dsp import transposition2duration
 from .loss import kld_loss, latent_consistency_loss
 import matplotlib.pyplot as plt
 import os
@@ -20,9 +19,6 @@ import numpy as np
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 from auraloss.freq import MultiResolutionSTFTLoss
-import time
-import wandb
-import subprocess
 from copy import deepcopy
 from collections import OrderedDict
 from sys import stderr
@@ -2523,7 +2519,7 @@ class PlImgFactorVAE(LightningModule):
         zeros = torch.zeros(self.batch_size, dtype=torch.long, device=self.device)
 
         # get the batch
-        epoch_idx = self.trainer.current_epoch
+        # epoch_idx = self.trainer.current_epoch
         # batch is the main VAE batch
         x_vae, _ = batch  # assuming MNIST (x, label)
 
@@ -2646,7 +2642,10 @@ class PlFMEmbedder(LightningModule):
         self.register_buffer("center", torch.zeros(1, self.latent_size, device=self.device))
         self.decay = args.ema_decay
         self.student_temperature = args.student_temperature
-        self.teacher_temperature = args.teacher_temperature
+        self.teacher_temperature_min = args.teacher_temperature_min
+        self.teacher_temperature_max = args.teacher_temperature_max
+        self.teacher_temperature_ramp_start_epoch = args.teacher_temperature_ramp_start_epoch
+        self.teacher_temperature_ramp_num_epochs = args.teacher_temperature_ramp_num_epochs
         self.logdir = args.logdir
 
         # learning rate
@@ -2823,8 +2822,11 @@ class PlFMEmbedder(LightningModule):
         # predict the embeddings
         teacher_x, _ = self.shadow(in_spec_x)  # teacher output
         teacher_x = teacher_x.detach()  # detach the teacher output to avoid gradients flowing back to the shadow model
+        current_teacher_temperature = (self.teacher_temperature_max - self.teacher_temperature_min) * \
+            min(1.0, (self.trainer.current_epoch - self.teacher_temperature_ramp_start_epoch) /
+            self.teacher_temperature_ramp_num_epochs) + self.teacher_temperature_min if self.trainer.current_epoch > self.teacher_temperature_ramp_start_epoch else self.teacher_temperature_min
         # center and sharpen DINO-style
-        teacher_x_centered = F.softmax((teacher_x - self.center) / self.teacher_temperature, dim=-1).detach()
+        teacher_x_centered = F.softmax((teacher_x - self.center) / current_teacher_temperature, dim=-1).detach()
         student_x_a, _ = self.model(in_spec_x_a)
         student_x_a = student_x_a / self.student_temperature
 
@@ -2849,6 +2851,7 @@ class PlFMEmbedder(LightningModule):
         self.log_dict({
             "loss": loss,
             "lr": scheduler.get_last_lr()[0],
+            "teacher_temperature": current_teacher_temperature,
         }, prog_bar=True)
         
 
