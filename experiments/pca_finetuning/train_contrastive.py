@@ -28,7 +28,10 @@ def main():
     # model params
     parser.add_argument("--latent_size", type=int, default=64)
     parser.add_argument("--center_momentum", type=float, default=0.9)
-    parser.add_argument("--ema_decay", type=float, default=0.99)
+    parser.add_argument("--ema_decay_min", type=float, default=0.996)
+    parser.add_argument("--ema_decay_max", type=float, default=0.9999)
+    parser.add_argument("--ema_decay_ramp_start_epoch", type=int, default=0)
+    parser.add_argument("--ema_decay_ramp_num_epochs", type=int, default=2000)
     parser.add_argument("--student_temperature", type=float, default=0.1)
     parser.add_argument("--teacher_temperature_min", type=float, default=0.04)
     parser.add_argument("--teacher_temperature_max", type=float, default=0.07)
@@ -47,9 +50,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_embedder")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v2")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v3")
     parser.add_argument("--logdir", type=str, default="./logs/fm_embedder")
-    parser.add_argument("--comment", type=str, default="with teacher temp annealing")
+    parser.add_argument("--comment", type=str, default="add ema_decay annealing")
     
     args = parser.parse_args()
 
@@ -122,7 +125,10 @@ def main():
         max_mod_idx=args.max_mod_idx,
         apply_transposition=args.apply_transposition,
         center_momentum=args.center_momentum,
-        ema_decay=args.ema_decay,
+        ema_decay_min=args.ema_decay_min,
+        ema_decay_max=args.ema_decay_max,
+        ema_decay_ramp_start_epoch=args.ema_decay_ramp_start_epoch,
+        ema_decay_ramp_num_epochs=args.ema_decay_ramp_num_epochs,
         student_temperature=args.student_temperature,
         teacher_temperature_min=args.teacher_temperature_min,
         teacher_temperature_max=args.teacher_temperature_max,

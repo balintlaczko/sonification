@@ -2640,7 +2640,10 @@ class PlFMEmbedder(LightningModule):
         self.latent_size = args.latent_size
         self.center_momentum = args.center_momentum
         self.register_buffer("center", torch.zeros(1, self.latent_size, device=self.device))
-        self.decay = args.ema_decay
+        self.ema_decay_min = args.ema_decay_min
+        self.ema_decay_max = args.ema_decay_max
+        self.ema_decay_ramp_start_epoch = args.ema_decay_ramp_start_epoch
+        self.ema_decay_ramp_num_epochs = args.ema_decay_ramp_num_epochs
         self.student_temperature = args.student_temperature
         self.teacher_temperature_min = args.teacher_temperature_min
         self.teacher_temperature_max = args.teacher_temperature_max
@@ -2702,11 +2705,17 @@ class PlFMEmbedder(LightningModule):
         # check if both model contains the same set of keys
         assert model_params.keys() == shadow_params.keys()
 
+        # calculate decay
+        decay = (self.ema_decay_max - self.ema_decay_min) * \
+            min(1.0, (self.trainer.current_epoch - self.ema_decay_ramp_start_epoch) /
+            self.ema_decay_ramp_num_epochs) + self.ema_decay_min if self.trainer.current_epoch > self.ema_decay_ramp_start_epoch else self.ema_decay_min
+        self.log("ema_decay", decay)
+
         for name, param in model_params.items():
             # see https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage
             # shadow_variable -= (1 - decay) * (shadow_variable - variable)
             shadow_params[name].sub_(
-                (1. - self.decay) * (shadow_params[name] - param))
+                (1. - decay) * (shadow_params[name] - param))
 
         model_buffers = OrderedDict(self.model.named_buffers())
         shadow_buffers = OrderedDict(self.shadow.named_buffers())
@@ -2867,6 +2876,6 @@ class PlFMEmbedder(LightningModule):
         optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=self.lr_decay, patience=50000)
+            optimizer, mode='min', factor=self.lr_decay, patience=100000)
         # return the optimizers and schedulers
         return [optimizer], [scheduler]
