@@ -163,8 +163,9 @@
         .choice-buttons {
             display: flex;
             justify-content: center;
-            gap: 40px;
+            gap: 20px;
             margin: 30px 0;
+            flex-wrap: wrap;
         }
         
         .choice-btn {
@@ -538,6 +539,7 @@
                 <button class="choice-btn" onclick="recordChoice('A')">More like A</button>
                 <button class="choice-btn" onclick="recordChoice('B')">More like B</button>
                 <button class="choice-btn secondary-btn" onclick="generateNewTriplet()" style="background-color: #666;">Can't decide</button>
+                <button class="choice-btn" onclick="recordABSimilarity()" style="background-color: #9C27B0;">A and B are more similar</button>
             </div>
             
             <div class="button-group">
@@ -612,11 +614,14 @@
         // Global variables
         let audioContext;
         let currentTriplet = null;
+        let previousTriplet = null; // Store previous triplet for reuse
         let studyData = [];
         let visualizationData = null; // Store visualization data for interactivity
         let normalizedPoints = null; // Store normalized coordinates separately
         let lastTouchedPoint = null; // Track the last clicked point in visualization
         let assignedPoints = { A: null, B: null, X: null }; // Track assigned points
+        let currentLayout = null; // Store current layout positions for force-directed continuation
+        let currentSoundSet = []; // Track current sound set to detect changes
         
         // Initialize audio context
         function initAudio() {
@@ -728,39 +733,101 @@
         }
         
         function generateNewTriplet() {
-            // Generate base point in parameter space
-            const baseParams = generateRandomParams();
+            let paramsA, paramsB, paramsX;
+            let reuseInfo = { isReused: false, position: null, fromPrevious: null };
             
-            // Generate A and B as variations from the base
-            const paramsA = generateConstrainedParams(baseParams, 0.3);
-            const paramsB = generateConstrainedParams(baseParams, 0.3);
-            
-            // Generate X as either closer to A or B (randomly)
-            const closerTo = Math.random() < 0.5 ? paramsA : paramsB;
-            const fartherFrom = closerTo === paramsA ? paramsB : paramsA;
-            
-            // X is generated to be somewhat between A and B, but closer to one
-            const mixRatio = 0.3 + Math.random() * 0.4; // Between 0.3 and 0.7
-            const paramsX = {
-                carrier: closerTo.carrier * mixRatio + fartherFrom.carrier * (1 - mixRatio),
-                harmRatio: closerTo.harmRatio * mixRatio + fartherFrom.harmRatio * (1 - mixRatio),
-                modIndex: closerTo.modIndex * mixRatio + fartherFrom.modIndex * (1 - mixRatio)
-            };
-            
-            // Add some noise to X
-            const noisyX = generateConstrainedParams(paramsX, 0.1);
+            // If we have a previous triplet, reuse one of its sounds
+            if (previousTriplet && Math.random() < 0.8) { // 80% chance to reuse a sound
+                // Randomly select which sound from the previous triplet to reuse
+                const previousSounds = ['A', 'B', 'X'];
+                const selectedPrevious = previousSounds[Math.floor(Math.random() * previousSounds.length)];
+                const reuseParams = previousTriplet[selectedPrevious];
+                
+                // Randomly assign the reused sound to A, B, or X in the new triplet
+                const newPositions = ['A', 'B', 'X'];
+                const reusePosition = newPositions[Math.floor(Math.random() * newPositions.length)];
+                
+                console.log(`Reusing sound ${selectedPrevious} from previous triplet as ${reusePosition}`);
+                reuseInfo = { isReused: true, position: reusePosition, fromPrevious: selectedPrevious };
+                
+                // Generate base point for the other sounds
+                const baseParams = generateRandomParams();
+                
+                if (reusePosition === 'A') {
+                    paramsA = { ...reuseParams }; // Reuse previous sound
+                    paramsB = generateConstrainedParams(baseParams, 0.3);
+                    
+                    // Generate X closer to either A (reused) or B
+                    const closerTo = Math.random() < 0.5 ? paramsA : paramsB;
+                    const fartherFrom = closerTo === paramsA ? paramsB : paramsA;
+                    const mixRatio = 0.3 + Math.random() * 0.4;
+                    paramsX = {
+                        carrier: closerTo.carrier * mixRatio + fartherFrom.carrier * (1 - mixRatio),
+                        harmRatio: closerTo.harmRatio * mixRatio + fartherFrom.harmRatio * (1 - mixRatio),
+                        modIndex: closerTo.modIndex * mixRatio + fartherFrom.modIndex * (1 - mixRatio)
+                    };
+                    paramsX = generateConstrainedParams(paramsX, 0.1);
+                    
+                } else if (reusePosition === 'B') {
+                    paramsA = generateConstrainedParams(baseParams, 0.3);
+                    paramsB = { ...reuseParams }; // Reuse previous sound
+                    
+                    // Generate X closer to either A or B (reused)
+                    const closerTo = Math.random() < 0.5 ? paramsA : paramsB;
+                    const fartherFrom = closerTo === paramsA ? paramsB : paramsA;
+                    const mixRatio = 0.3 + Math.random() * 0.4;
+                    paramsX = {
+                        carrier: closerTo.carrier * mixRatio + fartherFrom.carrier * (1 - mixRatio),
+                        harmRatio: closerTo.harmRatio * mixRatio + fartherFrom.harmRatio * (1 - mixRatio),
+                        modIndex: closerTo.modIndex * mixRatio + fartherFrom.modIndex * (1 - mixRatio)
+                    };
+                    paramsX = generateConstrainedParams(paramsX, 0.1);
+                    
+                } else { // reusePosition === 'X'
+                    paramsA = generateConstrainedParams(baseParams, 0.3);
+                    paramsB = generateConstrainedParams(baseParams, 0.3);
+                    paramsX = { ...reuseParams }; // Reuse previous sound as X
+                }
+                
+            } else {
+                // Generate completely new triplet (original behavior)
+                console.log('Generating completely new triplet');
+                
+                // Generate base point in parameter space
+                const baseParams = generateRandomParams();
+                
+                // Generate A and B as variations from the base
+                paramsA = generateConstrainedParams(baseParams, 0.3);
+                paramsB = generateConstrainedParams(baseParams, 0.3);
+                
+                // Generate X as either closer to A or B (randomly)
+                const closerTo = Math.random() < 0.5 ? paramsA : paramsB;
+                const fartherFrom = closerTo === paramsA ? paramsB : paramsA;
+                
+                // X is generated to be somewhat between A and B, but closer to one
+                const mixRatio = 0.3 + Math.random() * 0.4; // Between 0.3 and 0.7
+                paramsX = {
+                    carrier: closerTo.carrier * mixRatio + fartherFrom.carrier * (1 - mixRatio),
+                    harmRatio: closerTo.harmRatio * mixRatio + fartherFrom.harmRatio * (1 - mixRatio),
+                    modIndex: closerTo.modIndex * mixRatio + fartherFrom.modIndex * (1 - mixRatio)
+                };
+                
+                // Add some noise to X
+                paramsX = generateConstrainedParams(paramsX, 0.1);
+            }
             
             currentTriplet = {
                 A: paramsA,
                 B: paramsB,
-                X: noisyX,
-                timestamp: new Date().toISOString()
+                X: paramsX,
+                timestamp: new Date().toISOString(),
+                reuseInfo: reuseInfo // Store reuse information
             };
             
             // Update display
-            updateParamsDisplay('A', currentTriplet.A);
-            updateParamsDisplay('B', currentTriplet.B);
-            updateParamsDisplay('X', currentTriplet.X);
+            updateParamsDisplay('A', currentTriplet.A, reuseInfo.position === 'A' ? reuseInfo.fromPrevious : null);
+            updateParamsDisplay('B', currentTriplet.B, reuseInfo.position === 'B' ? reuseInfo.fromPrevious : null);
+            updateParamsDisplay('X', currentTriplet.X, reuseInfo.position === 'X' ? reuseInfo.fromPrevious : null);
             
             // Reset active states
             document.querySelectorAll('.sound-card').forEach(card => {
@@ -768,9 +835,14 @@
             });
         }
         
-        function updateParamsDisplay(sound, params) {
+        function updateParamsDisplay(sound, params, reuseFromPrevious = null) {
             const display = document.getElementById(`params-${sound.toLowerCase()}`);
+            let reuseIndicator = '';
+            if (reuseFromPrevious) {
+                reuseIndicator = `<div style="color: #FF9800; font-weight: bold; margin-bottom: 5px; font-size: 11px;">↻ Reused from ${reuseFromPrevious}</div>`;
+            }
             display.innerHTML = `
+                ${reuseIndicator}
                 Carrier: ${params.carrier.toFixed(1)} Hz<br>
                 Harm Ratio: ${params.harmRatio.toFixed(2)}<br>
                 Mod Index: ${params.modIndex.toFixed(2)}
@@ -820,6 +892,9 @@
             // Update trial count
             document.getElementById('trial-count').textContent = studyData.length;
             
+            // Store current triplet as previous before generating new one
+            previousTriplet = { ...currentTriplet };
+            
             // Generate new triplet
             generateNewTriplet();
             
@@ -831,6 +906,57 @@
             }, 300);
         }
 
+        function recordABSimilarity() {
+            if (!currentTriplet) {
+                alert('Please generate a triplet first!');
+                return;
+            }
+            
+            // Create the transformed triplet where A becomes X and X becomes A
+            // This represents the judgment that A and B are more similar to each other than X is to either
+            const transformedTriplet = {
+                A: currentTriplet.X,  // X becomes the new A
+                B: currentTriplet.B,  // B stays the same
+                X: currentTriplet.A,  // A becomes the new X
+                timestamp: new Date().toISOString(),
+                originalTriplet: { ...currentTriplet }, // Keep reference to original for debugging
+                transformationType: 'AB_similarity'
+            };
+            
+            // Record the judgment that (new) X is more similar to B than to A
+            // This captures the user's judgment that A and B were more similar to each other
+            const trialData = {
+                ...transformedTriplet,
+                choice: 'B',  // In the transformed triplet, X (original A) is judged closer to B
+                responseTime: new Date().toISOString(),
+                originalChoice: 'AB_similarity'  // Track that this came from the AB similarity button
+            };
+            
+            studyData.push(trialData);
+            localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
+            
+            // Update trial count
+            document.getElementById('trial-count').textContent = studyData.length;
+            
+            // Store current triplet as previous before generating new one
+            previousTriplet = { ...currentTriplet };
+            
+            // Generate new triplet
+            generateNewTriplet();
+            
+            // Flash feedback on both A and B cards to show they were judged as similar
+            const cardA = document.getElementById('sound-a');
+            const cardB = document.getElementById('sound-b');
+            
+            cardA.style.backgroundColor = '#9C27B0';
+            cardB.style.backgroundColor = '#9C27B0';
+            
+            setTimeout(() => {
+                cardA.style.backgroundColor = '#f8f9fa';
+                cardB.style.backgroundColor = '#f8f9fa';
+            }, 300);
+        }
+
         async function computeEmbedding(distanceMatrix, method = 'mds') {
             const n = distanceMatrix.length;
             
@@ -839,20 +965,37 @@
             }
             
             try {
+                let result;
                 switch(method) {
                     case 'mds':
-                        return classicalMDS(distanceMatrix);
+                        result = classicalMDS(distanceMatrix);
+                        // Store current layout for future use
+                        currentLayout = result.map(pos => [pos[0], pos[1]]);
+                        return result;
                     case 'force':
-                        return forceDirectedLayout(distanceMatrix);
+                        // Get user-specified parameters
+                        const iterations = parseInt(document.getElementById('force-iterations')?.value) || 500;
+                        const learningRate = parseFloat(document.getElementById('force-learning-rate')?.value) || 0.1;
+                        const initialization = document.getElementById('force-initialization')?.value || 'mds';
+                        return forceDirectedLayout(distanceMatrix, iterations, { learningRate, initialization });
                     case 'hybrid':
-                        return hybridEmbedding(distanceMatrix);
+                        result = hybridEmbedding(distanceMatrix);
+                        // Store current layout for future use
+                        currentLayout = result.map(pos => [pos[0], pos[1]]);
+                        return result;
                     default:
-                        return classicalMDS(distanceMatrix);
+                        result = classicalMDS(distanceMatrix);
+                        // Store current layout for future use
+                        currentLayout = result.map(pos => [pos[0], pos[1]]);
+                        return result;
                 }
             } catch (error) {
                 console.error(`Error with ${method} method:`, error);
                 console.warn('Falling back to Classical MDS');
-                return classicalMDS(distanceMatrix);
+                const fallbackResult = classicalMDS(distanceMatrix);
+                // Store current layout for future use
+                currentLayout = fallbackResult.map(pos => [pos[0], pos[1]]);
+                return fallbackResult;
             }
         }
 
@@ -869,6 +1012,7 @@
                 attractionStrength: 0.5,
                 repulsionStrength: 0.5,
                 learningRate: 0.1,
+                initialization: 'mds',
                 ...options
             };
             
@@ -878,22 +1022,30 @@
                 (Math.random() - 0.5) * 4
             ]);
             
-            // Try to initialize with MDS if available, but don't fail if it doesn't work
-            try {
-                const mdsPositions = classicalMDS(distanceMatrix);
-                if (mdsPositions && mdsPositions.length === n) {
-                    // Scale MDS positions to ensure good initial spread
-                    const xCoords = mdsPositions.map(p => p[0]);
-                    const yCoords = mdsPositions.map(p => p[1]);
-                    const xRange = Math.max(...xCoords) - Math.min(...xCoords);
-                    const yRange = Math.max(...yCoords) - Math.min(...yCoords);
-                    
-                    if (xRange > 0.001 && yRange > 0.001) {
-                        positions = mdsPositions.map(pos => [pos[0], pos[1]]);
+            // Choose initialization method based on user preference
+            if (opts.initialization === 'current' && currentLayout && currentLayout.length === n) {
+                // Use current layout positions
+                console.log('Using current positions for force-directed initialization');
+                positions = currentLayout.map(pos => [pos[0], pos[1]]);
+            } else {
+                // Try to initialize with MDS (default behavior)
+                try {
+                    const mdsPositions = classicalMDS(distanceMatrix);
+                    if (mdsPositions && mdsPositions.length === n) {
+                        // Scale MDS positions to ensure good initial spread
+                        const xCoords = mdsPositions.map(p => p[0]);
+                        const yCoords = mdsPositions.map(p => p[1]);
+                        const xRange = Math.max(...xCoords) - Math.min(...xCoords);
+                        const yRange = Math.max(...yCoords) - Math.min(...yCoords);
+                        
+                        if (xRange > 0.001 && yRange > 0.001) {
+                            positions = mdsPositions.map(pos => [pos[0], pos[1]]);
+                            console.log('Using MDS positions for force-directed initialization');
+                        }
                     }
+                } catch (e) {
+                    console.log('MDS initialization failed for force-directed, using random positions');
                 }
-            } catch (e) {
-                console.log('MDS initialization failed for force-directed, using random positions');
             }
             
             // Parameters
@@ -933,7 +1085,7 @@
                 }
                 
                 // Apply forces with dampening
-                const dampening = 0.8;
+                const dampening = 0.95;
                 for (let i = 0; i < n; i++) {
                     // Check for invalid forces
                     if (isNaN(forces[i][0]) || isNaN(forces[i][1])) {
@@ -954,7 +1106,7 @@
                 
                 // Adaptive learning rate
                 if (iter % 100 === 0) {
-                    learningRate *= 0.95;
+                    learningRate *= 0.999;
                 }
             }
             
@@ -963,6 +1115,9 @@
                 isNaN(pos[0]) ? Math.random() - 0.5 : pos[0],
                 isNaN(pos[1]) ? Math.random() - 0.5 : pos[1]
             ]);
+            
+            // Store current layout for future use
+            currentLayout = validPositions.map(pos => [pos[0], pos[1]]);
             
             console.log('Force-directed layout completed with', n, 'points');
             console.log('Final position ranges:', {
@@ -1003,25 +1158,107 @@
                     </select>
                     <span id="viz-info" style="margin-left: 10px; color: #666; font-size: 12px;"></span>
                 </div>
+                
+                <div id="force-params" class="control-group" style="margin: 20px 0; display: none;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 400px;">
+                        <div>
+                            <label for="force-iterations">Iterations:</label>
+                            <input type="number" id="force-iterations" min="100" max="2000" value="500" step="100" 
+                                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <div style="font-size: 12px; color: #666; margin-top: 4px;">100-2000</div>
+                        </div>
+                        <div>
+                            <label for="force-learning-rate">Learning Rate:</label>
+                            <input type="number" id="force-learning-rate" min="0.01" max="0.5" value="0.1" step="0.01" 
+                                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <div style="font-size: 12px; color: #666; margin-top: 4px;">0.01-0.5</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <label for="force-initialization">Starting Positions:</label>
+                        <select id="force-initialization" style="width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-left: 10px;">
+                            <option value="mds">Initialize with MDS</option>
+                            <option value="current">Use Current Positions</option>
+                        </select>
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">Choose starting positions for force-directed layout</div>
+                    </div>
+                </div>
             `;
             
             // Insert after the button group in visualization tab
             const vizTab = document.getElementById('visualization-tab');
             const buttonGroup = vizTab.querySelector('.button-group');
             buttonGroup.insertAdjacentElement('afterend', controls);
+            
+            // Add event listeners for force-directed parameters
+            const iterationsInput = document.getElementById('force-iterations');
+            const learningRateInput = document.getElementById('force-learning-rate');
+            const initializationSelect = document.getElementById('force-initialization');
+            
+            if (iterationsInput) {
+                iterationsInput.addEventListener('change', () => {
+                    if (document.getElementById('viz-method').value === 'force') {
+                        updateVisualization();
+                    }
+                });
+            }
+            
+            if (learningRateInput) {
+                learningRateInput.addEventListener('change', () => {
+                    if (document.getElementById('viz-method').value === 'force') {
+                        updateVisualization();
+                    }
+                });
+            }
+            
+            if (initializationSelect) {
+                initializationSelect.addEventListener('change', () => {
+                    if (document.getElementById('viz-method').value === 'force') {
+                        updateVisualization();
+                    }
+                });
+            }
         }
         addVisualizationControls();
         // Update visualization method based on selection
         function updateVisualizationMethod() {
             const method = document.getElementById('viz-method').value;
             const info = document.getElementById('viz-info');
+            const forceParams = document.getElementById('force-params');
+            const initSelect = document.getElementById('force-initialization');
+            
+            // Show/hide force-directed parameters
+            if (forceParams) {
+                forceParams.style.display = method === 'force' ? 'block' : 'none';
+            }
+            
+            // Update initialization option availability
+            if (initSelect && method === 'force') {
+                const currentOption = initSelect.querySelector('option[value="current"]');
+                if (currentOption) {
+                    if (!currentLayout || currentLayout.length === 0) {
+                        currentOption.disabled = true;
+                        currentOption.textContent = 'Use Current Positions (not available)';
+                        // If current was selected but not available, switch to MDS
+                        if (initSelect.value === 'current') {
+                            initSelect.value = 'mds';
+                        }
+                    } else {
+                        currentOption.disabled = false;
+                        currentOption.textContent = 'Use Current Positions';
+                    }
+                }
+            }
             
             switch(method) {
                 case 'mds':
                     info.textContent = 'Using Classical MDS for visualization.';
                     break;
                 case 'force':
-                    info.textContent = 'Using Force-Directed layout for visualization.';
+                    const initMethod = initSelect ? initSelect.value : 'mds';
+                    const initText = initMethod === 'current' && currentLayout ? 
+                        ' (continuing from current positions)' : ' (starting from MDS)';
+                    info.textContent = `Using Force-Directed layout for visualization${initText}.`;
                     break;
                 case 'hybrid':
                     info.textContent = 'Using Hybrid MDS + Force-Directed layout for visualization.';
@@ -1055,6 +1292,17 @@
                     }
                 });
             });
+            
+            // Check if sound set has changed - if so, reset current layout
+            const newSoundHashes = soundsList.map(s => s.hash).sort();
+            const currentSoundHashes = currentSoundSet.map(s => s.hash).sort();
+            
+            if (newSoundHashes.length !== currentSoundHashes.length || 
+                !newSoundHashes.every((hash, i) => hash === currentSoundHashes[i])) {
+                console.log('Sound set changed, resetting current layout');
+                currentLayout = null;
+                currentSoundSet = soundsList.map(s => ({ ...s })); // Deep copy
+            }
             
             const n = soundsList.length;
             const distanceMatrix = Array(n).fill(0).map(() => Array(n).fill(0));
@@ -1438,10 +1686,33 @@
                     // Update stats
                     document.getElementById('data-count').textContent = studyData.length;
                     document.getElementById('unique-sounds').textContent = sounds.length;
-                    // Update info text
+                    
+                    // Update info text with more details for force-directed method
                     const info = document.getElementById('viz-info');
                     if (info) {
-                        info.textContent = `${sounds.length} sounds embedded using ${method.toUpperCase()}`;
+                        let infoText = `${sounds.length} sounds embedded using ${method.toUpperCase()}`;
+                        if (method === 'force') {
+                            const initMethod = document.getElementById('force-initialization')?.value || 'mds';
+                            const initText = initMethod === 'current' && currentLayout ? 
+                                ' (continued from current positions)' : ' (started from MDS)';
+                            infoText += initText;
+                        }
+                        info.textContent = infoText;
+                    }
+                    
+                    // Update initialization option availability
+                    const initSelect = document.getElementById('force-initialization');
+                    if (initSelect && method === 'force') {
+                        const currentOption = initSelect.querySelector('option[value="current"]');
+                        if (currentOption) {
+                            if (!currentLayout || currentLayout.length === 0) {
+                                currentOption.disabled = true;
+                                currentOption.textContent = 'Use Current Positions (not available)';
+                            } else {
+                                currentOption.disabled = false;
+                                currentOption.textContent = 'Use Current Positions';
+                            }
+                        }
                     }
                     
                 } catch (error) {
@@ -1729,6 +2000,9 @@
             visualizationData = null;
             normalizedPoints = null;
             lastTouchedPoint = null;
+            currentLayout = null; // Clear stored layout positions
+            currentSoundSet = []; // Clear tracked sound set
+            previousTriplet = null; // Clear previous triplet
             
             // Clear assignments
             assignedPoints = { A: null, B: null, X: null };
