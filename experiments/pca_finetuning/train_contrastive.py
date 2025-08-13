@@ -47,9 +47,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_embedder")
-    parser.add_argument("--ckpt_name", type=str, default="home_v2")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v2")
     parser.add_argument("--logdir", type=str, default="./logs/fm_embedder")
-    parser.add_argument("--comment", type=str, default="discard logvar instead of adding to mu")
+    parser.add_argument("--comment", type=str, default="with teacher temp annealing")
     
     args = parser.parse_args()
 
@@ -124,7 +124,10 @@ def main():
         center_momentum=args.center_momentum,
         ema_decay=args.ema_decay,
         student_temperature=args.student_temperature,
-        teacher_temperature=args.teacher_temperature,
+        teacher_temperature_min=args.teacher_temperature_min,
+        teacher_temperature_max=args.teacher_temperature_max,
+        teacher_temperature_ramp_start_epoch=args.teacher_temperature_ramp_start_epoch,
+        teacher_temperature_ramp_num_epochs=args.teacher_temperature_ramp_num_epochs,
         latent_size=args.latent_size,
         encoder_channels=args.encoder_channels,
         encoder_kernels=args.encoder_kernels,
