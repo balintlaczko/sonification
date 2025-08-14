@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SynthMaps - Interactive FM Synth Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden;
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 350px;
+            background: #2a2a2a;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #444;
+        }
+
+        #main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            background: #ffffff;
+        }
+
+        #controls-bottom {
+            height: 80px;
+            background: #2a2a2a;
+            padding: 15px 20px;
+            border-top: 1px solid #444;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .control-group {
+            margin-bottom: 25px;
+        }
+
+        .control-group h3 {
+            margin-bottom: 12px;
+            color: #ffa500;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .file-input-wrapper {
+            margin-bottom: 10px;
+        }
+
+        .file-input-wrapper label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .file-input {
+            width: 100%;
+            padding: 8px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .file-input:hover {
+            border-color: #666;
+        }
+
+        .parameter-control {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 10px;
+        }
+
+        .parameter-control label {
+            flex: 1;
+            font-size: 13px;
+            color: #ccc;
+        }
+
+        .parameter-value {
+            width: 80px;
+            padding: 6px 10px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 13px;
+            text-align: right;
+        }
+
+        .parameter-value:focus {
+            outline: none;
+            border-color: #ffa500;
+        }
+
+        #embeddings-viz {
+            height: 120px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .embedding-bar {
+            position: absolute;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to top, #ff6b6b, #ffa500);
+            transition: height 0.2s ease;
+        }
+
+        .slider-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .slider-container label {
+            font-size: 13px;
+            color: #aaa;
+            white-space: nowrap;
+        }
+
+        .slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 4px;
+            border-radius: 2px;
+            background: #444;
+            outline: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ffa500;
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ffa500;
+            cursor: pointer;
+            border: none;
+        }
+
+        .button {
+            padding: 10px 20px;
+            background: #ffa500;
+            border: none;
+            border-radius: 4px;
+            color: #1a1a1a;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+
+        .button:hover {
+            background: #ff8c00;
+        }
+
+        .button:active {
+            transform: scale(0.98);
+        }
+
+        .button.stop {
+            background: #ff4444;
+        }
+
+        .button.stop:hover {
+            background: #ff6666;
+        }
+
+        #info-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(42, 42, 42, 0.9);
+            padding: 15px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            backdrop-filter: blur(10px);
+        }
+
+        #info-display div {
+            margin-bottom: 5px;
+        }
+
+        #loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        #loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #444;
+            border-top: 3px solid #ffa500;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .zoom-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .zoom-button {
+            width: 35px;
+            height: 35px;
+            background: #444;
+            border: none;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .zoom-button:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <div class="control-group">
+            <h3>Load Data Files</h3>
+            <div class="file-input-wrapper">
+                <label>Coordinates (JSON):</label>
+                <input type="file" id="coords-file" class="file-input" accept=".json">
+            </div>
+            <div class="file-input-wrapper">
+                <label>FM Parameters (JSON):</label>
+                <input type="file" id="params-file" class="file-input" accept=".json">
+            </div>
+            <div class="file-input-wrapper">
+                <label>Model Embeddings (JSON):</label>
+                <input type="file" id="embeddings-file" class="file-input" accept=".json">
+            </div>
+            <div class="file-input-wrapper">
+                <label>Colors (JSON):</label>
+                <input type="file" id="colors-file" class="file-input" accept=".json">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>FM Synth Parameters</h3>
+            <div class="parameter-control">
+                <label>Carrier Freq (Hz):</label>
+                <input type="number" id="carrier-freq" class="parameter-value" value="440" step="0.1">
+            </div>
+            <div class="parameter-control">
+                <label>Harmonicity Ratio:</label>
+                <input type="number" id="harm-ratio" class="parameter-value" value="1" step="0.1">
+            </div>
+            <div class="parameter-control">
+                <label>Modulation Index:</label>
+                <input type="number" id="mod-index" class="parameter-value" value="1" step="0.1">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Model Embeddings</h3>
+            <div id="embeddings-viz"></div>
+        </div>
+
+        <div class="control-group">
+            <h3>Audio Control</h3>
+            <button id="audio-toggle" class="button">Turn Audio On</button>
+        </div>
+
+        <div class="control-group">
+            <h3>View Controls</h3>
+            <div class="parameter-control">
+                <label>Point Size:</label>
+                <input type="range" id="point-size" class="slider" min="0.1" max="2" value="0.5" step="0.1" style="width: 120px;">
+                <span id="point-size-value" class="parameter-value" style="width: 50px;">0.5</span>
+            </div>
+            <div class="parameter-control">
+                <label>Highlight Size:</label>
+                <input type="range" id="highlight-size" class="slider" min="0.5" max="3" value="1.0" step="0.1" style="width: 120px;">
+                <span id="highlight-size-value" class="parameter-value" style="width: 50px;">1.0</span>
+            </div>
+            <div class="zoom-controls" style="margin-top: 10px;">
+                <button class="zoom-button" id="zoom-in">+</button>
+                <button class="zoom-button" id="zoom-out">−</button>
+                <button class="zoom-button" id="zoom-reset">⟲</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <div id="canvas-container">
+            <div id="info-display">
+                <div>Points loaded: <span id="point-count">0</span></div>
+                <div>Selected: <span id="selected-point">None</span></div>
+                <div>FPS: <span id="fps">0</span></div>
+            </div>
+            <div id="loading-overlay">
+                <div class="loading-spinner"></div>
+            </div>
+        </div>
+        <div id="controls-bottom">
+            <div class="slider-container">
+                <label>Camera Orbit:</label>
+                <input type="range" id="orbit-slider" class="slider" min="0" max="360" value="0">
+                <span id="orbit-value">0°</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ml-knn@3.0.0/lib/index.min.js"></script>
+    <script>
+        // Global variables
+        let scene, camera, renderer, controls;
+        let pointCloud, pointsGeometry;
+        let highlightPoint, highlightGeometry, highlightMaterial; // Separate highlight point
+        let raycaster, mouse;
+        let selectedPoint = null;
+        let hoveredPoint = null;
+        let pointCloudGroup; // Container for rotation
+        let knnClassifier = null; // KNN for point selection
+        let pointPositions2D = []; // Screen space positions for KNN
+        let originalSizes = []; // Store original sizes for points
+        
+        // Data storage
+        let coordinates = null;
+        let fmParams = null;
+        let embeddings = null;
+        let colors = null;
+        let originalColors = null; // Store original colors
+        
+        // Audio
+        let synth = null;
+        let audioEnabled = false;
+        
+        // Animation
+        let animationId;
+        let lastTime = 0;
+        let frameCount = 0;
+        let fpsUpdateTime = 0;
+
+        // Initialize Three.js scene
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffffff);
+            
+            camera = new THREE.PerspectiveCamera(
+                75,
+                container.clientWidth / container.clientHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(0, 0, 30);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            directionalLight.position.set(10, 10, 10);
+            scene.add(directionalLight);
+            
+            // Initialize raycaster for mouse interaction
+            raycaster = new THREE.Raycaster();
+            raycaster.params.Points.threshold = 0.5; // Increased threshold for easier selection
+            mouse = new THREE.Vector2();
+            
+            // Create a group to contain the point cloud for rotation
+            pointCloudGroup = new THREE.Group();
+            scene.add(pointCloudGroup);
+            
+            // Initialize highlight point (will be added when needed)
+            createHighlightPoint();
+            
+            // Mouse controls
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('mousedown', onMouseDown);
+            renderer.domElement.addEventListener('mouseup', onMouseUp);
+            renderer.domElement.addEventListener('wheel', onMouseWheel);
+            
+            // Drag controls for rotation and selection
+            let isDragging = false;
+            let isSelecting = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            let dragStartPosition = { x: 0, y: 0 };
+            
+            function onMouseDown(e) {
+                if (e.shiftKey) {
+                    isDragging = true;
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                } else {
+                    isSelecting = true;
+                    dragStartPosition = { x: e.clientX, y: e.clientY };
+                    findNearestPoint(e.clientX, e.clientY);
+                }
+            }
+            
+            function onMouseUp(e) {
+                isDragging = false;
+                isSelecting = false;
+            }
+            
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const deltaX = e.clientX - previousMousePosition.x;
+                    const deltaY = e.clientY - previousMousePosition.y;
+                    
+                    if (pointCloudGroup) {
+                        pointCloudGroup.rotation.y += deltaX * 0.01;
+                        pointCloudGroup.rotation.x += deltaY * 0.01;
+                    }
+                    
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                } else if (isSelecting) {
+                    // Continuously update selection while dragging
+                    findNearestPoint(e.clientX, e.clientY);
+                }
+            });
+            
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onMouseMove(event) {
+            const container = document.getElementById('canvas-container');
+            const rect = container.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        }
+        
+        function findNearestPoint(clientX, clientY) {
+            if (!pointCloud || !coordinates) return;
+            
+            const container = document.getElementById('canvas-container');
+            const rect = container.getBoundingClientRect();
+            const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            const y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            
+            // Method 1: Try raycasting first for direct hits
+            raycaster.setFromCamera({ x, y }, camera);
+            const intersects = raycaster.intersectObject(pointCloud);
+            
+            if (intersects.length > 0) {
+                selectPoint(intersects[0].index);
+                return;
+            }
+            
+            // Method 2: Find nearest point in screen space
+            const parsedCoords = parseFluCoMaData(coordinates);
+            let minDistance = Infinity;
+            let nearestIndex = -1;
+            
+            parsedCoords.forEach((coord, i) => {
+                // Transform 3D point to screen space
+                const vector = new THREE.Vector3(
+                    coord.values[0] || 0,
+                    coord.values[1] || 0,
+                    coord.values[2] || 0
+                );
+                
+                // Apply the same transformations as the point cloud
+                if (pointCloud) {
+                    vector.multiply(pointCloud.scale);
+                    vector.add(pointCloud.position);
+                }
+                
+                // Apply group rotation
+                if (pointCloudGroup) {
+                    vector.applyEuler(pointCloudGroup.rotation);
+                }
+                
+                // Project to screen space
+                vector.project(camera);
+                
+                // Calculate distance in screen space
+                const dx = vector.x - x;
+                const dy = vector.y - y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestIndex = i;
+                }
+            });
+            
+            if (nearestIndex >= 0 && minDistance < 0.1) { // Threshold for selection
+                selectPoint(nearestIndex);
+            }
+        }
+
+        function onMouseWheel(event) {
+            event.preventDefault();
+            const zoomSpeed = 0.1;
+            
+            if (event.deltaY < 0) {
+                camera.position.z *= (1 - zoomSpeed);
+            } else {
+                camera.position.z *= (1 + zoomSpeed);
+            }
+            
+            camera.position.z = Math.max(5, Math.min(100, camera.position.z));
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // Load and parse FluCoMa JSON format
+        async function loadJSON(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        resolve(data);
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+        }
+
+        function parseFluCoMaData(data) {
+            const result = [];
+            for (const key in data.data) {
+                result.push({
+                    id: key,
+                    values: data.data[key]
+                });
+            }
+            return result;
+        }
+
+        // Create point cloud from loaded data
+        function createPointCloud() {
+            if (!coordinates || !colors) return;
+            
+            // Remove existing point cloud
+            if (pointCloud) {
+                pointCloudGroup.remove(pointCloud);
+                pointsGeometry.dispose();
+            }
+            
+            const parsedCoords = parseFluCoMaData(coordinates);
+            const parsedColors = parseFluCoMaData(colors);
+            
+            const positions = [];
+            const colorsArray = [];
+            
+            parsedCoords.forEach((coord, i) => {
+                // Use 3D coordinates if available, otherwise use 2D with z=0
+                positions.push(
+                    coord.values[0] || 0,
+                    coord.values[1] || 0,
+                    coord.values[2] || 0
+                );
+                
+                if (parsedColors[i]) {
+                    colorsArray.push(
+                        parsedColors[i].values[0] || 0.5,
+                        parsedColors[i].values[1] || 0.5,
+                        parsedColors[i].values[2] || 0.5
+                    );
+                } else {
+                    colorsArray.push(0.5, 0.5, 0.5);
+                }
+            });
+            
+            pointsGeometry = new THREE.BufferGeometry();
+            pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            pointsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colorsArray, 3));
+            
+            // Create size attribute for dynamic sizing
+            const sizes = new Float32Array(parsedCoords.length);
+            for (let i = 0; i < parsedCoords.length; i++) {
+                sizes[i] = 1.0; // Default size
+            }
+            pointsGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            originalSizes = Array.from(sizes);
+            
+            // Store original colors for restoration
+            originalColors = colorsArray.slice();
+            
+            // Create circular sprite texture for round points
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(0.5, 'rgba(255,255,255,1)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 64, 64);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            
+            // Use standard PointsMaterial with size attribute
+            const material = new THREE.PointsMaterial({
+                size: 0.5, // Default size, will be updated by slider
+                vertexColors: true,
+                sizeAttenuation: true,
+                map: texture,
+                alphaTest: 0.5,
+                transparent: true
+            });
+            
+            pointCloud = new THREE.Points(pointsGeometry, material);
+            
+            // Calculate proper bounding box and scale
+            pointsGeometry.computeBoundingBox();
+            const bbox = pointsGeometry.boundingBox;
+            const center = new THREE.Vector3();
+            bbox.getCenter(center);
+            
+            // Calculate the size of the bounding box
+            const size = new THREE.Vector3();
+            bbox.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            
+            // Scale the point cloud to fit nicely in view
+            const targetSize = 20; // Target size for the largest dimension
+            const scale = maxDim > 0 ? targetSize / maxDim : 1;
+            pointCloud.scale.set(scale, scale, scale);
+            
+            // Center the point cloud at origin
+            pointCloud.position.set(
+                -center.x * scale,
+                -center.y * scale,
+                -center.z * scale
+            );
+            
+            // Add to group instead of scene
+            pointCloudGroup.add(pointCloud);
+            
+            // Update UI
+            document.getElementById('point-count').textContent = parsedCoords.length;
+            
+            console.log(`Created point cloud with ${parsedCoords.length} points`);
+            console.log(`Bounding box size: x=${size.x.toFixed(2)}, y=${size.y.toFixed(2)}, z=${size.z.toFixed(2)}`);
+            console.log(`Applied scale: ${scale.toFixed(4)}`);
+            console.log(`Center: x=${center.x.toFixed(2)}, y=${center.y.toFixed(2)}, z=${center.z.toFixed(2)}`);
+        }
+
+        // Select a point and update parameters
+        function selectPoint(index) {
+            if (!fmParams || !embeddings) return;
+            
+            const parsedParams = parseFluCoMaData(fmParams);
+            const parsedEmbeddings = parseFluCoMaData(embeddings);
+            
+            if (parsedParams[index]) {
+                const params = parsedParams[index].values;
+                document.getElementById('carrier-freq').value = params[0].toFixed(2);
+                document.getElementById('harm-ratio').value = params[1].toFixed(2);
+                document.getElementById('mod-index').value = params[2].toFixed(2);
+                
+                if (audioEnabled && synth) {
+                    updateSynth();
+                }
+            }
+            
+            if (parsedEmbeddings[index]) {
+                visualizeEmbeddings(parsedEmbeddings[index].values);
+            }
+            
+            selectedPoint = index;
+            document.getElementById('selected-point').textContent = `Index ${index}`;
+            
+            // Highlight selected point
+            updatePointHighlight(index);
+        }
+
+        function createHighlightPoint() {
+            // Create circular sprite texture for highlight point
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(0.5, 'rgba(255,255,255,1)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 64, 64);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            
+            // Create geometry and material for highlight
+            highlightGeometry = new THREE.BufferGeometry();
+            const position = new Float32Array([0, 0, 0]);
+            const color = new Float32Array([1, 1, 0]);
+            highlightGeometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
+            highlightGeometry.setAttribute('color', new THREE.Float32BufferAttribute(color, 3));
+            
+            highlightMaterial = new THREE.PointsMaterial({
+                size: 1.0, // Default highlight size, will be updated by slider
+                vertexColors: true,
+                sizeAttenuation: true,
+                map: texture,
+                alphaTest: 0.5,
+                transparent: true,
+                depthTest: false // Render on top
+            });
+            
+            highlightPoint = new THREE.Points(highlightGeometry, highlightMaterial);
+            highlightPoint.visible = false; // Hidden by default
+        }
+
+        function updatePointHighlight(index) {
+            if (!pointCloud || !coordinates || !originalColors) return;
+            
+            // Hide highlight if no point selected
+            if (index === null || index < 0) {
+                if (highlightPoint) {
+                    highlightPoint.visible = false;
+                }
+                selectedPoint = null;
+                return;
+            }
+            
+            const parsedCoords = parseFluCoMaData(coordinates);
+            
+            if (parsedCoords[index]) {
+                // Get the position of the selected point
+                const coord = parsedCoords[index].values;
+                const position = new Float32Array([
+                    coord[0] || 0,
+                    coord[1] || 0,
+                    coord[2] || 0
+                ]);
+                
+                // Get the color of the selected point
+                const colorIdx = index * 3;
+                const color = new Float32Array([
+                    originalColors[colorIdx],
+                    originalColors[colorIdx + 1],
+                    originalColors[colorIdx + 2]
+                ]);
+                
+                // Update highlight point position and color
+                highlightGeometry.attributes.position.array[0] = position[0];
+                highlightGeometry.attributes.position.array[1] = position[1];
+                highlightGeometry.attributes.position.array[2] = position[2];
+                highlightGeometry.attributes.position.needsUpdate = true;
+                
+                highlightGeometry.attributes.color.array[0] = color[0];
+                highlightGeometry.attributes.color.array[1] = color[1];
+                highlightGeometry.attributes.color.array[2] = color[2];
+                highlightGeometry.attributes.color.needsUpdate = true;
+                
+                // Apply the same transformations as the main point cloud
+                if (pointCloud) {
+                    highlightPoint.scale.copy(pointCloud.scale);
+                    highlightPoint.position.copy(pointCloud.position);
+                }
+                
+                // Add to the same group as the point cloud
+                if (!highlightPoint.parent) {
+                    pointCloudGroup.add(highlightPoint);
+                }
+                
+                highlightPoint.visible = true;
+            }
+            
+            // Update selected point tracking
+            selectedPoint = index;
+        }
+
+        // Visualize embeddings
+        function visualizeEmbeddings(values) {
+            const container = document.getElementById('embeddings-viz');
+            container.innerHTML = '';
+            
+            const maxBars = Math.min(values.length, 100); // Limit to 100 bars for performance
+            const barWidth = container.clientWidth / maxBars;
+            
+            // Normalize values
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const range = max - min || 1;
+            
+            for (let i = 0; i < maxBars; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'embedding-bar';
+                bar.style.left = `${i * barWidth}px`;
+                bar.style.width = `${Math.max(1, barWidth - 1)}px`;
+                
+                const normalizedValue = (values[i] - min) / range;
+                bar.style.height = `${normalizedValue * 100}%`;
+                
+                container.appendChild(bar);
+            }
+        }
+
+        // Audio synthesis
+        async function initAudio() {
+            await Tone.start();
+            
+            // Create FM synth
+            synth = new Tone.FMSynth({
+                harmonicity: 1,
+                modulationIndex: 1,
+                oscillator: { type: 'sine' },
+                modulation: { type: 'sine' },
+                envelope: {
+                    attack: 0.01,
+                    decay: 0.1,
+                    sustain: 0.5,
+                    release: 0.5
+                },
+                modulationEnvelope: {
+                    attack: 0.01,
+                    decay: 0.1,
+                    sustain: 0.5,
+                    release: 0.5
+                }
+            }).toDestination();
+            
+            synth.volume.value = -12;
+        }
+
+        function updateSynth() {
+            if (!synth || !audioEnabled) return;
+            
+            const freq = parseFloat(document.getElementById('carrier-freq').value);
+            const harmRatio = parseFloat(document.getElementById('harm-ratio').value);
+            const modIndex = parseFloat(document.getElementById('mod-index').value);
+            
+            synth.harmonicity.value = harmRatio;
+            synth.modulationIndex.value = modIndex;
+            
+            // Trigger note
+            synth.triggerAttackRelease(freq, '8n');
+        }
+
+        // Animation loop
+        function animate(currentTime) {
+            animationId = requestAnimationFrame(animate);
+            
+            // Update FPS
+            frameCount++;
+            if (currentTime - fpsUpdateTime > 1000) {
+                const fps = Math.round(frameCount * 1000 / (currentTime - fpsUpdateTime));
+                document.getElementById('fps').textContent = fps;
+                frameCount = 0;
+                fpsUpdateTime = currentTime;
+            }
+            
+            // Apply orbit rotation
+            const orbitValue = document.getElementById('orbit-slider').value;
+            if (pointCloudGroup) {
+                pointCloudGroup.rotation.y = (orbitValue * Math.PI) / 180;
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // Event listeners
+        document.getElementById('coords-file').addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                showLoading(true);
+                try {
+                    coordinates = await loadJSON(e.target.files[0]);
+                    createPointCloud();
+                } catch (err) {
+                    console.error('Error loading coordinates:', err);
+                    alert('Error loading coordinates file');
+                }
+                showLoading(false);
+            }
+        });
+
+        document.getElementById('params-file').addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                try {
+                    fmParams = await loadJSON(e.target.files[0]);
+                    console.log('FM parameters loaded');
+                } catch (err) {
+                    console.error('Error loading parameters:', err);
+                    alert('Error loading parameters file');
+                }
+            }
+        });
+
+        document.getElementById('embeddings-file').addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                try {
+                    embeddings = await loadJSON(e.target.files[0]);
+                    console.log('Embeddings loaded');
+                } catch (err) {
+                    console.error('Error loading embeddings:', err);
+                    alert('Error loading embeddings file');
+                }
+            }
+        });
+
+        document.getElementById('colors-file').addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                showLoading(true);
+                try {
+                    colors = await loadJSON(e.target.files[0]);
+                    createPointCloud();
+                } catch (err) {
+                    console.error('Error loading colors:', err);
+                    alert('Error loading colors file');
+                }
+                showLoading(false);
+            }
+        });
+
+        document.getElementById('audio-toggle').addEventListener('click', async () => {
+            const button = document.getElementById('audio-toggle');
+            
+            if (!audioEnabled) {
+                if (!synth) {
+                    await initAudio();
+                }
+                audioEnabled = true;
+                button.textContent = 'Turn Audio Off';
+                button.classList.add('stop');
+            } else {
+                audioEnabled = false;
+                if (synth) {
+                    synth.triggerRelease();
+                }
+                button.textContent = 'Turn Audio On';
+                button.classList.remove('stop');
+            }
+        });
+
+        // Manual parameter changes
+        ['carrier-freq', 'harm-ratio', 'mod-index'].forEach(id => {
+            document.getElementById(id).addEventListener('change', updateSynth);
+        });
+
+        // Orbit slider
+        document.getElementById('orbit-slider').addEventListener('input', (e) => {
+            document.getElementById('orbit-value').textContent = `${e.target.value}°`;
+        });
+
+        // Zoom controls
+        document.getElementById('zoom-in').addEventListener('click', () => {
+            camera.position.z *= 0.8;
+            camera.position.z = Math.max(5, camera.position.z);
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            camera.position.z *= 1.2;
+            camera.position.z = Math.min(100, camera.position.z);
+        });
+
+        document.getElementById('zoom-reset').addEventListener('click', () => {
+            camera.position.set(0, 0, 30);
+            if (pointCloudGroup) {
+                pointCloudGroup.rotation.set(0, 0, 0);
+            }
+            document.getElementById('orbit-slider').value = 0;
+            document.getElementById('orbit-value').textContent = '0°';
+        });
+
+        function showLoading(show) {
+            const overlay = document.getElementById('loading-overlay');
+            if (show) {
+                overlay.classList.add('active');
+            } else {
+                overlay.classList.remove('active');
+            }
+        }
+
+        // Point size controls
+        document.getElementById('point-size').addEventListener('input', (e) => {
+            const size = parseFloat(e.target.value);
+            document.getElementById('point-size-value').textContent = size.toFixed(1);
+            
+            if (pointCloud && pointCloud.material) {
+                pointCloud.material.size = size;
+                pointCloud.material.needsUpdate = true;
+            }
+        });
+
+        document.getElementById('highlight-size').addEventListener('input', (e) => {
+            const size = parseFloat(e.target.value);
+            document.getElementById('highlight-size-value').textContent = size.toFixed(1);
+            
+            if (highlightMaterial) {
+                highlightMaterial.size = size;
+                highlightMaterial.needsUpdate = true;
+            }
+        });
+
+        // Initialize
+        initScene();
+        animate(0);
+        
+        console.log('SynthMaps initialized. Please load your data files.');
+    </script>
+</body>
+</html>
