@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from .layers import LinearEncoder, LinearDecoder, ResBlock, LinearResBlock, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
 from .ddsp import FMSynth
 from torchaudio.transforms import MelSpectrogram
+from torchaudio.functional import resample
 from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims, midi2frequency, scale
 from ..utils.misc import kl_scheduler, ema
@@ -2796,9 +2797,11 @@ class PlFMEmbedder(LightningModule):
             target_dur = transposition2duration(transposition.float())
             target_dur = target_dur[0]
             # apply the transposition
-            x_a = x_a.unsqueeze(1) # (batch_size, 1, n_samples)
-            x_a = torch.nn.functional.interpolate(x_a, scale_factor=target_dur, mode='linear')
-            x_a = x_a.squeeze(1) # (batch_size, n_samples)
+            # x_a = x_a.unsqueeze(1) # (batch_size, 1, n_samples)
+            # x_a = torch.nn.functional.interpolate(x_a, scale_factor=target_dur, mode='linear')
+            print(x_a.shape, self.sr, target_dur, int(self.sr * target_dur))
+            x_a = resample(x_a, self.sr, int(self.sr * target_dur), lowpass_filter_width=6)
+            # x_a = x_a.squeeze(1) # (batch_size, n_samples)
 
         # apply common augmentations: random slice, random phase flip, random noise
         inputs = [x, x_a]
