@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
     parser.add_argument("--dropout", type=float, default=0.0)
     # training params
-    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--lr_decay", type=float, default=0.75)

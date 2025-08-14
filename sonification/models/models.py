@@ -23,6 +23,7 @@ from auraloss.freq import MultiResolutionSTFTLoss
 from copy import deepcopy
 from collections import OrderedDict
 from sys import stderr
+import math
 
 
 class AE(nn.Module):
@@ -2630,6 +2631,9 @@ class PlFMEmbedder(LightningModule):
         self.args = args
 
         self.sr = args.sr
+        self.resample_base = getattr(args, "resample_base", 960)  # divides 48k well
+        if self.sr % self.resample_base != 0:
+            self.resample_base = math.gcd(self.sr, self.resample_base) or 1
         self.batch_size = args.batch_size
         self.warmup_epochs = args.warmup_epochs
         self.n_samples = args.length_samps
@@ -2794,13 +2798,15 @@ class PlFMEmbedder(LightningModule):
         if self.apply_transposition:
             # get a random number between -2 and 2 for pitch transposition
             transposition = torch.rand(1) * 4 - 2
-            target_dur = transposition2duration(transposition.float())
-            target_dur = target_dur[0]
+            target_dur = transposition2duration(transposition.float())[0]
+            # Quantize new_sr to keep gcd(orig,new) large
+            new_sr = int(round(self.sr * float(target_dur) / self.resample_base) * self.resample_base)
+            new_sr = max(1, new_sr)
             # apply the transposition
             # x_a = x_a.unsqueeze(1) # (batch_size, 1, n_samples)
             # x_a = torch.nn.functional.interpolate(x_a, scale_factor=target_dur, mode='linear')
-            print(x_a.shape, self.sr, target_dur, int(self.sr * target_dur))
-            x_a = resample(x_a, self.sr, int(self.sr * target_dur), lowpass_filter_width=6)
+            # print(x_a.shape, self.sr, target_dur, new_sr, new_sr / self.sr)
+            x_a = resample(x_a, self.sr, new_sr, lowpass_filter_width=128)
             # x_a = x_a.squeeze(1) # (batch_size, n_samples)
 
         # apply common augmentations: random slice, random phase flip, random noise
