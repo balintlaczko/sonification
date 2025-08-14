@@ -353,13 +353,6 @@
                 <div class="loading-spinner"></div>
             </div>
         </div>
-        <div id="controls-bottom">
-            <div class="slider-container">
-                <label>Camera Orbit:</label>
-                <input type="range" id="orbit-slider" class="slider" min="0" max="360" value="0">
-                <span id="orbit-value">0°</span>
-            </div>
-        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -394,7 +387,7 @@
         let lastTime = 0;
         let frameCount = 0;
         let fpsUpdateTime = 0;
-
+        
         // Initialize Three.js scene
         function initScene() {
             const container = document.getElementById('canvas-container');
@@ -446,11 +439,13 @@
             let isSelecting = false;
             let previousMousePosition = { x: 0, y: 0 };
             let dragStartPosition = { x: 0, y: 0 };
+            let rotationMode = null; // 'vertical' for Shift, 'horizontal' for Alt+Shift
             
             function onMouseDown(e) {
                 if (e.shiftKey) {
                     isDragging = true;
                     previousMousePosition = { x: e.clientX, y: e.clientY };
+                    rotationMode = e.altKey ? 'horizontal' : 'vertical';
                 } else {
                     isSelecting = true;
                     dragStartPosition = { x: e.clientX, y: e.clientY };
@@ -461,6 +456,7 @@
             function onMouseUp(e) {
                 isDragging = false;
                 isSelecting = false;
+                rotationMode = null;
             }
             
             renderer.domElement.addEventListener('mousemove', (e) => {
@@ -469,8 +465,28 @@
                     const deltaY = e.clientY - previousMousePosition.y;
                     
                     if (pointCloudGroup) {
-                        pointCloudGroup.rotation.y += deltaX * 0.01;
-                        pointCloudGroup.rotation.x += deltaY * 0.01;
+                        // Sensitivity (radians per pixel)
+                        const radPerPixel = 0.01;
+
+                        // Camera basis vectors in world space
+                        const dir = new THREE.Vector3();
+                        camera.getWorldDirection(dir);
+                        const right = new THREE.Vector3().crossVectors(dir, camera.up).normalize();
+                        const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+
+                        if (rotationMode === 'horizontal') {
+                            // Yaw: rotate around camera up (world space)
+                            const yawDelta = deltaX * radPerPixel;
+                            const qYawDelta = new THREE.Quaternion().setFromAxisAngle(up, yawDelta);
+                            // Apply in world space so it's view-relative
+                            pointCloudGroup.quaternion.premultiply(qYawDelta);
+                        } else {
+                            // Pitch: rotate around camera right (world space)
+                            const pitchDelta = deltaY * radPerPixel;
+                            const qPitchDelta = new THREE.Quaternion().setFromAxisAngle(right, pitchDelta);
+                            // Apply in world space so it's view-relative
+                            pointCloudGroup.quaternion.premultiply(qPitchDelta);
+                        }
                     }
                     
                     previousMousePosition = { x: e.clientX, y: e.clientY };
@@ -528,7 +544,8 @@
                 
                 // Apply group rotation
                 if (pointCloudGroup) {
-                    vector.applyEuler(pointCloudGroup.rotation);
+                    // Use quaternion to account for composed yaw/pitch
+                    vector.applyQuaternion(pointCloudGroup.quaternion);
                 }
                 
                 // Project to screen space
@@ -914,12 +931,7 @@
                 fpsUpdateTime = currentTime;
             }
             
-            // Apply orbit rotation
-            const orbitValue = document.getElementById('orbit-slider').value;
-            if (pointCloudGroup) {
-                pointCloudGroup.rotation.y = (orbitValue * Math.PI) / 180;
-            }
-            
+            // Rotation is applied interactively via quaternions on drag; just render
             renderer.render(scene, camera);
         }
 
@@ -1001,11 +1013,6 @@
             document.getElementById(id).addEventListener('change', updateSynth);
         });
 
-        // Orbit slider
-        document.getElementById('orbit-slider').addEventListener('input', (e) => {
-            document.getElementById('orbit-value').textContent = `${e.target.value}°`;
-        });
-
         // Zoom controls
         document.getElementById('zoom-in').addEventListener('click', () => {
             camera.position.z *= 0.8;
@@ -1021,9 +1028,8 @@
             camera.position.set(0, 0, 30);
             if (pointCloudGroup) {
                 pointCloudGroup.rotation.set(0, 0, 0);
+                pointCloudGroup.quaternion.identity();
             }
-            document.getElementById('orbit-slider').value = 0;
-            document.getElementById('orbit-value').textContent = '0°';
         });
 
         function showLoading(show) {
