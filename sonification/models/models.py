@@ -2764,7 +2764,7 @@ class PlFMEmbedder(LightningModule):
     
 
     def forward(self, x):
-        print("entering PlFMEmbedder forward")
+        # print("entering PlFMEmbedder forward")
         in_wf = x.unsqueeze(1)
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf)
@@ -2772,10 +2772,10 @@ class PlFMEmbedder(LightningModule):
         in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         # predict the embedding
         if self.training:
-            print("training, using the main model")
+            # print("training, using the main model")
             mu, logvar = self.model(in_spec)
         else:
-            print("not training, using the shadow model")
+            # print("not training, using the shadow model")
             # use the shadow model for inference
             mu, logvar = self.shadow(in_spec)
         return mu #+ logvar
