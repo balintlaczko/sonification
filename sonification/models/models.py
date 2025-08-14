@@ -2641,7 +2641,10 @@ class PlFMEmbedder(LightningModule):
         self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
         self.max_harm_ratio = args.max_harm_ratio
         self.max_mod_idx = args.max_mod_idx
+        self.num_views = args.num_views
         self.apply_transposition = args.apply_transposition > 0
+        self.transposition_range = args.transposition_range
+        self.noise_max_amp = args.noise_max_amp
         self.latent_size = args.latent_size
         self.center_momentum = args.center_momentum
         self.register_buffer("center", torch.zeros(1, self.latent_size, device=self.device))
@@ -2791,52 +2794,51 @@ class PlFMEmbedder(LightningModule):
 
         norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
         x = self.input_synth(freqs, ratios, indices).detach() # (batch_size, n_samples)
-        # copy to x_a
-        x_a = x.clone()
+        views = []
+        for _ in range(self.num_views):
+            # copy to x_a
+            x_a = x.clone()
 
-        # apply transposition augmentation for x_a
-        if self.apply_transposition:
-            # get a random number between -2 and 2 for pitch transposition
-            transposition = torch.rand(1) * 4 - 2
-            target_dur = transposition2duration(transposition.float())[0]
-            # Quantize new_sr to keep gcd(orig,new) large
-            new_sr = int(round(self.sr * float(target_dur) / self.resample_base) * self.resample_base)
-            new_sr = max(1, new_sr)
-            # apply the transposition
-            # x_a = x_a.unsqueeze(1) # (batch_size, 1, n_samples)
-            # x_a = torch.nn.functional.interpolate(x_a, scale_factor=target_dur, mode='linear')
-            # print(x_a.shape, self.sr, target_dur, new_sr, new_sr / self.sr)
-            x_a = resample(x_a, self.sr, new_sr, lowpass_filter_width=128)
-            # x_a = x_a.squeeze(1) # (batch_size, n_samples)
+            # apply transposition augmentation for x_a
+            if self.apply_transposition:
+                # get a random number between -2 and 2 for pitch transposition
+                transposition = torch.rand(1) * (2 * self.transposition_range) - self.transposition_range
+                target_dur = transposition2duration(transposition.float())[0]
+                # Quantize new_sr to keep gcd(orig,new) large
+                new_sr = int(round(self.sr * float(target_dur) / self.resample_base) * self.resample_base)
+                new_sr = max(1, new_sr)
+                # apply the transposition
+                # x_a = x_a.unsqueeze(1) # (batch_size, 1, n_samples)
+                # x_a = torch.nn.functional.interpolate(x_a, scale_factor=target_dur, mode='linear')
+                # print(x_a.shape, self.sr, target_dur, new_sr, new_sr / self.sr)
+                x_a = resample(x_a, self.sr, new_sr, lowpass_filter_width=128)
+                # x_a = x_a.squeeze(1) # (batch_size, n_samples)
 
-        # apply common augmentations: random slice, random phase flip, random noise
-        inputs = [x, x_a]
-        for i, x_x in enumerate(inputs):
+            # apply common augmentations: random slice, random phase flip, random noise
             # select a random slice of self.n_samples
-            start_idx = torch.randint(0, x_x.shape[-1] - self.n_samples, (1,))
-            x_x = x_x[:, start_idx:start_idx + self.n_samples]
+            start_idx = torch.randint(0, x_a.shape[-1] - self.n_samples, (1,))
+            x_a = x_a[:, start_idx:start_idx + self.n_samples]
             # add random phase flip
             phase_flip = torch.rand(self.batch_size, 1, device=self.device)
             phase_flip = torch.where(phase_flip > 0.5, 1, -1)
-            x_x = x_x * phase_flip
+            x_a = x_a * phase_flip
             # add random noise
-            noise = torch.randn_like(x_x, device=self.device)
+            noise = torch.randn_like(x_a, device=self.device)
             noise = (noise - noise.min()) / (noise.max() - noise.min())
             noise = noise * 2 - 1
-            noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
+            noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * self.noise_max_amp
             noise = noise * noise_coeff
-            x_x = x_x + noise
-            x_x = x_x.unsqueeze(1) # (batch_size, 1, n_samples)
-            inputs[i] = x_x
-        x, x_a = inputs
+            x_a = x_a + noise
+            # x_a = x_a.unsqueeze(1) # (batch_size, 1, n_samples)
+            # add to the views
+            views.append(x_a)
 
         # forward pass
+        # TEACHER
         # get the mel spectrograms
-        in_spec_x = self.mel_spectrogram(x.detach())
-        in_spec_x_a = self.mel_spectrogram(x_a.detach())
+        in_spec_x = self.mel_spectrogram(x.unsqueeze(1).detach())
         # normalize them
         in_spec_x = scale(in_spec_x, in_spec_x.min(), in_spec_x.max(), 0, 1)
-        in_spec_x_a = scale(in_spec_x_a, in_spec_x_a.min(), in_spec_x_a.max(), 0, 1)
         # predict the embeddings
         teacher_x, _ = self.shadow(in_spec_x)  # teacher output
         teacher_x = teacher_x.detach()  # detach the teacher output to avoid gradients flowing back to the shadow model
@@ -2845,20 +2847,30 @@ class PlFMEmbedder(LightningModule):
             self.teacher_temperature_ramp_num_epochs) + self.teacher_temperature_min if self.trainer.current_epoch > self.teacher_temperature_ramp_start_epoch else self.teacher_temperature_min
         # center and sharpen DINO-style
         teacher_x_centered = F.softmax((teacher_x - self.center) / current_teacher_temperature, dim=-1).detach()
-        student_x_a, _ = self.model(in_spec_x_a)
-        student_x_a = student_x_a / self.student_temperature
 
-        # calculate the loss
-        # cross entropy loss between teacher and student (DINO-style)
-        loss = torch.sum(-teacher_x_centered * F.log_softmax(student_x_a, dim=-1), dim=-1).mean()
+        # STUDENT
+        total_loss = 0.0
+        for x_a in views:
+            # get the mel spectrogram
+            in_spec_x_a = self.mel_spectrogram(x_a.unsqueeze(1).detach())
+            in_spec_x_a = scale(in_spec_x_a, in_spec_x_a.min(), in_spec_x_a.max(), 0, 1)
+
+            student_x_a, _ = self.model(in_spec_x_a)
+            student_x_a = student_x_a / self.student_temperature
+
+            # calculate the loss
+            # cross entropy loss between teacher and student (DINO-style)
+            loss = torch.sum(-teacher_x_centered * F.log_softmax(student_x_a, dim=-1), dim=-1)
+            total_loss += loss.mean()
+        total_loss /= len(views)  # average over the views
 
         # backward pass
         optimizer.zero_grad()
-        self.manual_backward(loss)
+        self.manual_backward(total_loss)
         self.clip_gradients(optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
 
         optimizer.step()
-        scheduler.step(loss.item())
+        scheduler.step(total_loss.item())
 
         # update the EMA
         self.ema_update()
@@ -2867,7 +2879,7 @@ class PlFMEmbedder(LightningModule):
 
         # log losses
         self.log_dict({
-            "loss": loss,
+            "loss": total_loss,
             "lr": scheduler.get_last_lr()[0],
             "teacher_temperature": current_teacher_temperature,
         }, prog_bar=True)

@@ -15,6 +15,7 @@ def main():
 
     # audio params
     parser.add_argument("--sr", type=int, default=48000)
+    parser.add_argument("--resample_base", type=int, default=960)  # divides 48k well
     parser.add_argument("--length_samps", type=int, default=8192)
     parser.add_argument("--n_fft", type=int, default=4096)
     parser.add_argument("--f_min", type=float, default=20)
@@ -24,7 +25,10 @@ def main():
     parser.add_argument("--normalized", type=int, default=1)
     parser.add_argument("--max_harm_ratio", type=int, default=6)
     parser.add_argument("--max_mod_idx", type=int, default=6)
+    parser.add_argument("--num_views", type=int, default=4)  # number of views for contrastive learning
     parser.add_argument("--apply_transposition", type=int, default=1)
+    parser.add_argument("--transposition_range", type=float, default=2.0)  # range for pitch transposition
+    parser.add_argument("--noise_max_amp", type=float, default=0.01)  # max amplitude for noise augmentation
     # model params
     parser.add_argument("--latent_size", type=int, default=16)
     parser.add_argument("--center_momentum", type=float, default=0.9)
@@ -43,7 +47,7 @@ def main():
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
     parser.add_argument("--dropout", type=float, default=0.0)
     # training params
-    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--lr_decay", type=float, default=0.75)
@@ -114,6 +118,7 @@ def main():
     # save hyperparameters
     hyperparams = dict(
         sr=args.sr,
+        resample_base=args.resample_base,
         length_samps=args.length_samps,
         n_fft=args.n_fft,
         f_min=args.f_min,
@@ -123,7 +128,10 @@ def main():
         normalized=args.normalized,
         max_harm_ratio=args.max_harm_ratio,
         max_mod_idx=args.max_mod_idx,
+        num_views=args.num_views,
         apply_transposition=args.apply_transposition,
+        transposition_range=args.transposition_range,
+        noise_max_amp=args.noise_max_amp,
         center_momentum=args.center_momentum,
         ema_decay_min=args.ema_decay_min,
         ema_decay_max=args.ema_decay_max,
