@@ -151,6 +151,7 @@
         .slider {
             flex: 1;
             -webkit-appearance: none;
+            appearance: none;
             height: 4px;
             border-radius: 2px;
             background: #444;
@@ -398,13 +399,17 @@
         let pointCloud, pointsGeometry;
         let highlightPoint, highlightGeometry, highlightMaterial; // Separate highlight point
         let raycaster, mouse;
+        let raycasterThreshold = 0.01; // Default threshold for raycaster
         let selectedPoint = null;
         let hoveredPoint = null;
         let pointCloudGroup; // Container for rotation
         let knnClassifier = null; // KNN for point selection
         let pointPositions2D = []; // Screen space positions for KNN
         let originalSizes = []; // Store original sizes for points
-        
+        let defaultCameraPosition = new THREE.Vector3(0, 0, 20);
+        let defaultPointSize = 0.2; // Default size for points
+        let defaultHighlightSize = 0.4; // Default size for highlight point
+
         // Data storage
         let coordinates = null;
         let fmParams = null;
@@ -453,7 +458,9 @@
                 0.1,
                 1000
             );
-            camera.position.set(0, 0, 30);
+            // set to default position
+            camera.position.copy(defaultCameraPosition);
+            camera.lookAt(0, 0, 0);
             
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(container.clientWidth, container.clientHeight);
@@ -470,7 +477,7 @@
             
             // Initialize raycaster for mouse interaction
             raycaster = new THREE.Raycaster();
-            raycaster.params.Points.threshold = 0.1; // Increased threshold for easier selection
+            raycaster.params.Points.threshold = raycasterThreshold;
             mouse = new THREE.Vector2();
             
             // Create a group to contain the point cloud for rotation
@@ -491,15 +498,20 @@
             renderer.domElement.addEventListener('mouseup', onMouseUp);
             renderer.domElement.addEventListener('wheel', onMouseWheel);
             
-            // Drag controls for rotation and selection
+            // Drag controls for rotation, panning and selection
             let isDragging = false;
+            let isPanning = false;
             let isSelecting = false;
             let previousMousePosition = { x: 0, y: 0 };
             let dragStartPosition = { x: 0, y: 0 };
             let rotationMode = null; // 'vertical' for Shift, 'horizontal' for Alt+Shift
             
             function onMouseDown(e) {
-                if (e.shiftKey) {
+                // Pan with Shift + Option(Alt) + Cmd
+                if (e.shiftKey && e.altKey && e.metaKey) {
+                    isPanning = true;
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                } else if (e.shiftKey) {
                     isDragging = true;
                     previousMousePosition = { x: e.clientX, y: e.clientY };
                     rotationMode = e.altKey ? 'horizontal' : 'vertical';
@@ -512,12 +524,36 @@
             
             function onMouseUp(e) {
                 isDragging = false;
+                isPanning = false;
                 isSelecting = false;
                 rotationMode = null;
             }
             
             renderer.domElement.addEventListener('mousemove', (e) => {
-                if (isDragging) {
+                if (isPanning) {
+                    // Translate the point cloud group parallel to the view plane
+                    const deltaX = e.clientX - previousMousePosition.x;
+                    const deltaY = e.clientY - previousMousePosition.y;
+                    const canvas = renderer.domElement;
+                    const distance = Math.abs(camera.position.z); // group is around world origin
+                    const vFov = THREE.MathUtils.degToRad(camera.fov);
+                    const viewHeight = 2 * Math.tan(vFov / 2) * distance;
+                    const worldPerPixelY =  - viewHeight / canvas.clientHeight;
+                    const worldPerPixelX = worldPerPixelY * camera.aspect;
+                    const dir = new THREE.Vector3();
+                    camera.getWorldDirection(dir);
+                    const right = new THREE.Vector3().crossVectors(dir, camera.up).normalize();
+                    const up = new THREE.Vector3().copy(camera.up).normalize();
+                    const moveX = -deltaX * worldPerPixelX; // left drag moves scene right
+                    const moveY = deltaY * worldPerPixelY;  // up drag moves scene up
+                    const displacement = new THREE.Vector3()
+                        .addScaledVector(right, moveX)
+                        .addScaledVector(up, moveY);
+                    if (pointCloudGroup) {
+                        pointCloudGroup.position.add(displacement);
+                    }
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                } else if (isDragging) {
                     const deltaX = e.clientX - previousMousePosition.x;
                     const deltaY = e.clientY - previousMousePosition.y;
                     
@@ -633,7 +669,7 @@
 
         function onMouseWheel(event) {
             event.preventDefault();
-            const zoomSpeed = 0.1;
+            const zoomSpeed = 0.01;
             
             if (event.deltaY < 0) {
                 camera.position.z *= (1 - zoomSpeed);
@@ -641,7 +677,7 @@
                 camera.position.z *= (1 + zoomSpeed);
             }
             
-            camera.position.z = Math.max(5, Math.min(100, camera.position.z));
+            camera.position.z = Math.max(5, Math.min(25, camera.position.z));
         }
 
         function onWindowResize() {
@@ -766,7 +802,7 @@
                     uMap: { value: texture },
                     uMin: { value: new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.min.z) },
                     uMax: { value: new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.max.z) },
-                    uSize: { value: 0.5 }
+                    uSize: { value: defaultPointSize }
                 },
                 transparent: false,
                 depthTest: true,
@@ -898,7 +934,7 @@
             highlightGeometry.setAttribute('color', new THREE.Float32BufferAttribute(color, 3));
             
             highlightMaterial = new THREE.PointsMaterial({
-                size: 1.0, // Default highlight size, will be updated by slider
+                size: defaultHighlightSize, // Default highlight size, will be updated by slider
                 vertexColors: true,
                 sizeAttenuation: true,
                 map: texture,
@@ -1062,6 +1098,24 @@
         }
 
         // Event listeners
+        window.addEventListener('DOMContentLoaded', function () {
+            // fetch defaultPointSize and populate slider and number box value with it
+            var val = (typeof defaultPointSize !== 'undefined') ? defaultPointSize : 0.2;
+            var input = document.getElementById('point-size');
+            var label = document.getElementById('point-size-value');
+            if (input) input.value = val;
+            if (label) label.textContent = Number(val).toFixed(1);
+
+            // fetch defaultHighlightSize
+            var highlightVal = (typeof defaultHighlightSize !== 'undefined') ? defaultHighlightSize : 0.4;
+            var highlightInput = document.getElementById('highlight-size');
+            var highlightLabel = document.getElementById('highlight-size-value');
+            if (highlightInput) highlightInput.value = highlightVal;
+            if (highlightLabel) highlightLabel.textContent = Number(highlightVal).toFixed(1);
+        });
+
+        
+
         document.getElementById('coords-file').addEventListener('change', async (e) => {
             if (e.target.files.length > 0) {
                 showLoading(true);
@@ -1151,10 +1205,13 @@
         });
 
         document.getElementById('zoom-reset').addEventListener('click', () => {
-            camera.position.set(0, 0, 30);
+            camera.position.copy(defaultCameraPosition);
+            camera.lookAt(0, 0, 0);
             if (pointCloudGroup) {
                 pointCloudGroup.rotation.set(0, 0, 0);
                 pointCloudGroup.quaternion.identity();
+                // reset position
+                pointCloudGroup.position.set(0, 0, 0);
             }
         });
 
