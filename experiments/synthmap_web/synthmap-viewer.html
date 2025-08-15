@@ -399,7 +399,7 @@
         let pointCloud, pointsGeometry;
         let highlightPoint, highlightGeometry, highlightMaterial; // Separate highlight point
         let raycaster, mouse;
-        let raycasterThreshold = 0.01; // Default threshold for raycaster
+        let raycasterThreshold = 0.02; // Default threshold for raycaster
         let selectedPoint = null;
         let hoveredPoint = null;
         let pointCloudGroup; // Container for rotation
@@ -683,7 +683,7 @@
                 camera.position.z *= (1 + zoomSpeed);
             }
             
-            camera.position.z = Math.max(5, Math.min(25, camera.position.z));
+            camera.position.z = Math.max(1, Math.min(25, camera.position.z));
         }
 
         function onWindowResize() {
@@ -953,6 +953,8 @@
             
             highlightPoint = new THREE.Points(highlightGeometry, highlightMaterial);
             highlightPoint.visible = false; // Hidden by default
+            // Always render highlight regardless of frustum to avoid disappearing when very close
+            highlightPoint.frustumCulled = false;
         }
 
         function updatePointHighlight(index) {
@@ -997,6 +999,10 @@
                 highlightGeometry.attributes.position.array[1] = position[1];
                 highlightGeometry.attributes.position.array[2] = position[2];
                 highlightGeometry.attributes.position.needsUpdate = true;
+                // Keep bounding volume in sync to avoid incorrect culling
+                if (highlightGeometry.computeBoundingSphere) {
+                    highlightGeometry.computeBoundingSphere();
+                }
                 
                 highlightGeometry.attributes.color.array[0] = color[0];
                 highlightGeometry.attributes.color.array[1] = color[1];
