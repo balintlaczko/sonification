@@ -607,6 +607,10 @@
             const x = ((clientX - rect.left) / rect.width) * 2 - 1;
             const y = -((clientY - rect.top) / rect.height) * 2 + 1;
             
+            // Ensure transforms are up-to-date before raycasting
+            if (pointCloudGroup) pointCloudGroup.updateMatrixWorld(true);
+            if (pointCloud) pointCloud.updateMatrixWorld(true);
+            
             // Method 1: Try raycasting first for direct hits
             raycaster.setFromCamera({ x, y }, camera);
             const intersects = raycaster.intersectObject(pointCloud);
@@ -642,10 +646,12 @@
                     vector.add(pointCloud.position);
                 }
                 
-                // Apply group rotation
+                // Apply group rotation and translation (panning)
                 if (pointCloudGroup) {
                     // Use quaternion to account for composed yaw/pitch
                     vector.applyQuaternion(pointCloudGroup.quaternion);
+                    // Include panning translation from the group
+                    vector.add(pointCloudGroup.position);
                 }
                 
                 // Project to screen space
@@ -754,6 +760,8 @@
             pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
             // Rename color attribute to avoid GLSL collisions in custom shader
             pointsGeometry.setAttribute('aColor', new THREE.Float32BufferAttribute(colorsArray, 3));
+            // Ensure accurate raycasting bounds
+            pointsGeometry.computeBoundingSphere();
             
             // Create size attribute for dynamic sizing
             const sizes = new Float32Array(parsedCoords.length);
