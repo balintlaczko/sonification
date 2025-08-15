@@ -20,7 +20,7 @@ import umap
 
 # %%
 ckpt_path = '../../ckpt/fm_embedder'
-ckpt_name = 'imv_v4'
+ckpt_name = 'imv_v4.3'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -215,14 +215,16 @@ if n > max_points:
 else:
     idx = np.arange(n)
 
-n_neighbors = 10
-emb = umap.UMAP(n_components=3, n_neighbors=n_neighbors, min_dist=0.1, random_state=0).fit_transform(Z[idx])
+n_neighbors = 20
+min_dist = 0.1  # minimum distance between points in UMAP
+metric = 'cosine'  # distance metric for UMAP
+emb = umap.UMAP(n_components=3, n_neighbors=n_neighbors, min_dist=min_dist, metric=metric, random_state=0).fit_transform(Z[idx])
 
 # Build RGB colors from dataframe x, y, z columns
 colors = df.iloc[idx][["x", "y", "z"]].to_numpy().astype(float)
 mins = colors.min(axis=0)
 maxs = colors.max(axis=0)
-den = np.where((maxs - mins) == 0, 1.0, (maxs - mins))
+den = np.where((maxs - mins) == 0, 0.8, (maxs - mins))
 colors = (colors - mins) / den  # normalize to [0, 1]
 
 fig = plt.figure(figsize=(7, 6))
@@ -263,16 +265,16 @@ print(f"Model embeddings saved to {json_path}")
 
 # %%
 # save the umap embedding to a json file
-umap_embedding = array2fluid_dataset(emb)
-umap_json_path = os.path.join(predictions_dir, f"umap_embeddings_{n_neighbors}.json")
-with open(umap_json_path, "w") as f:
-    json.dump(umap_embedding, f)
-print(f"UMAP embeddings saved to {umap_json_path}")
+# umap_embedding = array2fluid_dataset(emb)
+# umap_json_path = os.path.join(predictions_dir, f"umap_embeddings_{n_neighbors}.json")
+# with open(umap_json_path, "w") as f:
+#     json.dump(umap_embedding, f)
+# print(f"UMAP embeddings saved to {umap_json_path}")
 
 # %%
 # save the umap embedding to a json file
 umap_embedding = array2fluid_dataset(emb)
-umap_json_path = os.path.join(predictions_dir, f"umap_embeddings_3D_{n_neighbors}.json")
+umap_json_path = os.path.join(predictions_dir, f"umap_embeddings_3D_{n_neighbors}_min_dist_{min_dist}_metric_{metric}.json")
 with open(umap_json_path, "w") as f:
     json.dump(umap_embedding, f)
 print(f"UMAP embeddings saved to {umap_json_path}")
