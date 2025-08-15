@@ -431,9 +431,13 @@
         let dataBBox = null; // THREE.Box3 in data/original attribute space
         
     // Crop visualization (wireframe box shown during slider interaction)
-    let cropBoxGroup = null;      // Group containing fill + edges
+    let cropBoxGroup = null;      // Group containing fill + edges + grids + axes
     let cropBoxFill = null;       // Semi-transparent fill mesh
     let cropBoxEdges = null;      // Wireframe edges
+    let cropFaceGrids = [];       // 6 custom grid line meshes (one per face)
+    let gridDivisions = 8;        // Grid resolution per face (u and v)
+    let gridMaterial = null;      // Shared material for grids
+    let axisCornerGroups = [];    // 8 groups, each with 3 arrows + 3 labels
     let cropBoxHideTimer = null;  // Auto-hide timer
         
         // Initialize Three.js scene
@@ -1306,6 +1310,39 @@
                 );
                 cropBoxGroup.add(cropBoxEdges);
             }
+            // Create shared grid material
+            if (!gridMaterial) {
+                gridMaterial = new THREE.LineBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.35 });
+            }
+            // Create custom face grids (6 faces) if needed
+            if (cropFaceGrids.length === 0) {
+                for (let i = 0; i < 6; i++) {
+                    const grid = new THREE.LineSegments(new THREE.BufferGeometry(), gridMaterial);
+                    grid.renderOrder = 1; // draw on top of fill
+                    cropFaceGrids.push(grid);
+                    cropBoxGroup.add(grid);
+                }
+            }
+            // Create axis indicators for all 8 corners if needed
+            if (axisCornerGroups.length === 0) {
+                const colors = { x: 0xff5555, y: 0x55ff55, z: 0x5599ff };
+                for (let i = 0; i < 8; i++) {
+                    const g = new THREE.Group();
+                    const ax = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1, colors.x, 0.15, 0.08);
+                    const ay = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 1, colors.y, 0.15, 0.08);
+                    const az = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1, colors.z, 0.15, 0.08);
+                    const lx = createTextSprite('X', '#ff5555');
+                    const ly = createTextSprite('Y', '#55ff55');
+                    const lz = createTextSprite('Z', '#5599ff');
+                    g.add(ax); g.add(ay); g.add(az);
+                    g.add(lx); g.add(ly); g.add(lz);
+                    // stash helpers on group for updates
+                    g._axes = { ax, ay, az };
+                    g._labels = { lx, ly, lz };
+                    cropBoxGroup.add(g);
+                    axisCornerGroups.push(g);
+                }
+            }
         }
 
         function updateCropBox(show = true) {
@@ -1334,6 +1371,88 @@
             cropBoxEdges.geometry = edgeGeom;
             cropBoxEdges.position.set(cx, cy, cz);
 
+            // Update face grids geometry as even net per face
+            if (cropFaceGrids.length === 6) {
+                const faces = [
+                    { // Z-
+                        idx: 0, origin: new THREE.Vector3(minX, minY, minZ), u: new THREE.Vector3(dx, 0, 0), v: new THREE.Vector3(0, dy, 0), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // Z+
+                        idx: 1, origin: new THREE.Vector3(minX, minY, maxZ), u: new THREE.Vector3(dx, 0, 0), v: new THREE.Vector3(0, dy, 0), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // Y-
+                        idx: 2, origin: new THREE.Vector3(minX, minY, minZ), u: new THREE.Vector3(dx, 0, 0), v: new THREE.Vector3(0, 0, dz), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // Y+
+                        idx: 3, origin: new THREE.Vector3(minX, maxY, minZ), u: new THREE.Vector3(dx, 0, 0), v: new THREE.Vector3(0, 0, dz), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // X-
+                        idx: 4, origin: new THREE.Vector3(minX, minY, minZ), u: new THREE.Vector3(0, dy, 0), v: new THREE.Vector3(0, 0, dz), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // X+
+                        idx: 5, origin: new THREE.Vector3(maxX, minY, minZ), u: new THREE.Vector3(0, dy, 0), v: new THREE.Vector3(0, 0, dz), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                ];
+                const eps = Math.max(dx, dy, dz) * 0.002; // small offset to avoid z-fighting
+                for (const f of faces) {
+                    const geom = new THREE.BufferGeometry();
+                    const lines = [];
+                    const baseOrigin = f.origin.clone();
+                    // face normal for slight offset
+                    const n = new THREE.Vector3().crossVectors(f.u, f.v).normalize().multiplyScalar(Math.max(dx, dy, dz) * 0.002);
+                    // U-lines: lines parallel to u at v = t
+                    for (let i = 0; i <= f.uCount; i++) {
+                        const t = (f.uCount === 0) ? 0 : i / f.uCount;
+                        const start = baseOrigin.clone().addScaledVector(f.v, t).add(n);
+                        const end = start.clone().add(f.u);
+                        lines.push(start.x, start.y, start.z, end.x, end.y, end.z);
+                    }
+                    // V-lines: lines parallel to v at u = t
+                    for (let j = 0; j <= f.vCount; j++) {
+                        const t = (f.vCount === 0) ? 0 : j / f.vCount;
+                        const start = baseOrigin.clone().addScaledVector(f.u, t).add(n);
+                        const end = start.clone().add(f.v);
+                        lines.push(start.x, start.y, start.z, end.x, end.y, end.z);
+                    }
+                    const pos = new Float32Array(lines);
+                    geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+                    if (cropFaceGrids[f.idx].geometry) cropFaceGrids[f.idx].geometry.dispose();
+                    cropFaceGrids[f.idx].geometry = geom;
+                }
+            }
+
+            // Update axis indicators at all 8 corners
+            if (axisCornerGroups.length === 8) {
+                const corners = [
+                    new THREE.Vector3(minX, minY, minZ),
+                    new THREE.Vector3(maxX, minY, minZ),
+                    new THREE.Vector3(minX, maxY, minZ),
+                    new THREE.Vector3(maxX, maxY, minZ),
+                    new THREE.Vector3(minX, minY, maxZ),
+                    new THREE.Vector3(maxX, minY, maxZ),
+                    new THREE.Vector3(minX, maxY, maxZ),
+                    new THREE.Vector3(maxX, maxY, maxZ),
+                ];
+                const lenBase = Math.max(Math.min(dx, dy, dz) * 0.22, (dx + dy + dz) / 70);
+                const off = lenBase * 0.12;
+                const s = lenBase * 0.32;
+                for (let i = 0; i < 8; i++) {
+                    const g = axisCornerGroups[i];
+                    const c = corners[i];
+                    g.position.copy(c);
+                    g._axes.ax.setLength(lenBase, lenBase * 0.3, lenBase * 0.18);
+                    g._axes.ay.setLength(lenBase, lenBase * 0.3, lenBase * 0.18);
+                    g._axes.az.setLength(lenBase, lenBase * 0.3, lenBase * 0.18);
+                    g._labels.lx.position.set(lenBase + off, 0, 0);
+                    g._labels.ly.position.set(0, lenBase + off, 0);
+                    g._labels.lz.position.set(0, 0, lenBase + off);
+                    g._labels.lx.scale.set(s, s, 1);
+                    g._labels.ly.scale.set(s, s, 1);
+                    g._labels.lz.scale.set(s, s, 1);
+                    g.visible = show;
+                }
+            }
+
             // Match the point cloud transform so it aligns visually
             cropBoxGroup.scale.copy(pointCloud.scale);
             cropBoxGroup.position.copy(pointCloud.position);
@@ -1353,6 +1472,39 @@
             cropBoxHideTimer = setTimeout(() => {
                 if (cropBoxGroup) cropBoxGroup.visible = false;
             }, delayMs);
+        }
+
+        // Utility: create text label as a sprite
+        function createTextSprite(text, color = '#ffffff') {
+            const fontSize = 64;
+            const padding = 16;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+            const metrics = ctx.measureText(text);
+            const w = Math.ceil(metrics.width) + padding * 2;
+            const h = fontSize + padding * 2;
+            canvas.width = w;
+            canvas.height = h;
+            // redraw with proper resolution
+            const ctx2 = canvas.getContext('2d');
+            ctx2.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+            ctx2.textAlign = 'center';
+            ctx2.textBaseline = 'middle';
+            ctx2.fillStyle = color;
+            // subtle shadow for legibility
+            ctx2.shadowColor = 'rgba(0,0,0,0.6)';
+            ctx2.shadowBlur = 6;
+            ctx2.shadowOffsetX = 2;
+            ctx2.shadowOffsetY = 2;
+            ctx2.fillText(text, w / 2, h / 2);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+            const sprite = new THREE.Sprite(material);
+            // default scale; will be adjusted in update
+            sprite.scale.set(1, 1, 1);
+            return sprite;
         }
 
         // Initialize
