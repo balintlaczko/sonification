@@ -326,13 +326,13 @@
             <h3>View Controls</h3>
             <div class="parameter-control">
                 <label>Point Size:</label>
-                <input type="range" id="point-size" class="slider" min="0.1" max="2" value="0.5" step="0.1" style="width: 120px;">
-                <span id="point-size-value" class="parameter-value" style="width: 50px;">0.5</span>
+                <input type="range" id="point-size" class="slider" min="0.1" max="2" value="0.2" step="0.1" style="width: 120px;">
+                <span id="point-size-value" class="parameter-value" style="width: 50px;">0.2</span>
             </div>
             <div class="parameter-control">
                 <label>Highlight Size:</label>
-                <input type="range" id="highlight-size" class="slider" min="0.5" max="3" value="1.0" step="0.1" style="width: 120px;">
-                <span id="highlight-size-value" class="parameter-value" style="width: 50px;">1.0</span>
+                <input type="range" id="highlight-size" class="slider" min="0.3" max="3" value="0.4" step="0.1" style="width: 120px;">
+                <span id="highlight-size-value" class="parameter-value" style="width: 50px;">0.4</span>
             </div>
             <div class="zoom-controls" style="margin-top: 10px;">
                 <button class="zoom-button" id="zoom-in">+</button>
@@ -418,7 +418,7 @@
             
             // Initialize raycaster for mouse interaction
             raycaster = new THREE.Raycaster();
-            raycaster.params.Points.threshold = 0.5; // Increased threshold for easier selection
+            raycaster.params.Points.threshold = 0.1; // Increased threshold for easier selection
             mouse = new THREE.Vector2();
             
             // Create a group to contain the point cloud for rotation
