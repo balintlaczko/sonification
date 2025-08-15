@@ -340,13 +340,47 @@
                 <button class="zoom-button" id="zoom-reset">⟲</button>
             </div>
         </div>
+
+        <div class="control-group">
+            <h3>Crop Mesh (XYZ Ranges)</h3>
+            <div class="parameter-control">
+                <label>X Min:</label>
+                <input type="range" id="crop-x-min" class="slider" min="0" max="1" value="0" step="0.001" style="width: 120px;">
+                <span id="crop-x-min-value" class="parameter-value" style="width: 60px;">0.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>X Max:</label>
+                <input type="range" id="crop-x-max" class="slider" min="0" max="1" value="1" step="0.001" style="width: 120px;">
+                <span id="crop-x-max-value" class="parameter-value" style="width: 60px;">1.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>Y Min:</label>
+                <input type="range" id="crop-y-min" class="slider" min="0" max="1" value="0" step="0.001" style="width: 120px;">
+                <span id="crop-y-min-value" class="parameter-value" style="width: 60px;">0.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>Y Max:</label>
+                <input type="range" id="crop-y-max" class="slider" min="0" max="1" value="1" step="0.001" style="width: 120px;">
+                <span id="crop-y-max-value" class="parameter-value" style="width: 60px;">1.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>Z Min:</label>
+                <input type="range" id="crop-z-min" class="slider" min="0" max="1" value="0" step="0.001" style="width: 120px;">
+                <span id="crop-z-min-value" class="parameter-value" style="width: 60px;">0.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>Z Max:</label>
+                <input type="range" id="crop-z-max" class="slider" min="0" max="1" value="1" step="0.001" style="width: 120px;">
+                <span id="crop-z-max-value" class="parameter-value" style="width: 60px;">1.00</span>
+            </div>
+        </div>
     </div>
 
     <div id="main-container">
         <div id="canvas-container">
             <div id="info-display">
                 <div>Points loaded: <span id="point-count">0</span></div>
-                <div>Selected: <span id="selected-point">None</span></div>
+                <div>Selected: <span id="selected-point">None</div>
                 <div>FPS: <span id="fps">0</span></div>
             </div>
             <div id="loading-overlay">
@@ -387,6 +421,14 @@
         let lastTime = 0;
         let frameCount = 0;
         let fpsUpdateTime = 0;
+        
+        // Crop state
+        let cropRanges = {
+            x: { min: -Infinity, max: Infinity },
+            y: { min: -Infinity, max: Infinity },
+            z: { min: -Infinity, max: Infinity }
+        };
+        let dataBBox = null; // THREE.Box3 in data/original attribute space
         
         // Initialize Three.js scene
         function initScene() {
@@ -519,8 +561,14 @@
             const intersects = raycaster.intersectObject(pointCloud);
             
             if (intersects.length > 0) {
-                selectPoint(intersects[0].index);
-                return;
+                const parsedCoords = parseFluCoMaData(coordinates);
+                for (const hit of intersects) {
+                    const c = parsedCoords[hit.index]?.values;
+                    if (c && isPointInCrop(c)) {
+                        selectPoint(hit.index);
+                        return;
+                    }
+                }
             }
             
             // Method 2: Find nearest point in screen space
@@ -529,6 +577,7 @@
             let nearestIndex = -1;
             
             parsedCoords.forEach((coord, i) => {
+                if (!isPointInCrop(coord.values)) return; // skip cropped-out points
                 // Transform 3D point to screen space
                 const vector = new THREE.Vector3(
                     coord.values[0] || 0,
@@ -652,7 +701,8 @@
             
             pointsGeometry = new THREE.BufferGeometry();
             pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            pointsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colorsArray, 3));
+            // Rename color attribute to avoid GLSL collisions in custom shader
+            pointsGeometry.setAttribute('aColor', new THREE.Float32BufferAttribute(colorsArray, 3));
             
             // Create size attribute for dynamic sizing
             const sizes = new Float32Array(parsedCoords.length);
@@ -679,21 +729,10 @@
             
             const texture = new THREE.CanvasTexture(canvas);
             
-            // Use standard PointsMaterial with size attribute
-            const material = new THREE.PointsMaterial({
-                size: 0.5, // Default size, will be updated by slider
-                vertexColors: true,
-                sizeAttenuation: true,
-                map: texture,
-                alphaTest: 0.5,
-                transparent: true
-            });
-            
-            pointCloud = new THREE.Points(pointsGeometry, material);
-            
-            // Calculate proper bounding box and scale
+            // Compute bounding box, scaling and centering
             pointsGeometry.computeBoundingBox();
             const bbox = pointsGeometry.boundingBox;
+            dataBBox = bbox.clone();
             const center = new THREE.Vector3();
             bbox.getCenter(center);
             
@@ -705,9 +744,66 @@
             // Scale the point cloud to fit nicely in view
             const targetSize = 20; // Target size for the largest dimension
             const scale = maxDim > 0 ? targetSize / maxDim : 1;
-            pointCloud.scale.set(scale, scale, scale);
             
-            // Center the point cloud at origin
+            // Shader material with view-independent cropping (optimized)
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    uMap: { value: texture },
+                    uMin: { value: new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.min.z) },
+                    uMax: { value: new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.max.z) },
+                    uSize: { value: 0.5 }
+                },
+                transparent: false,
+                depthTest: true,
+                depthWrite: true,
+                blending: THREE.NoBlending,
+                vertexShader: `
+                    precision highp float;
+                    attribute vec3 aColor;
+                    varying vec3 vColor;
+                    uniform vec3 uMin;
+                    uniform vec3 uMax;
+                    uniform float uSize;
+                    void main() {
+                        vColor = aColor;
+                        vec3 pos = position;
+                        bool inRange = (pos.x >= uMin.x && pos.x <= uMax.x) &&
+                                       (pos.y >= uMin.y && pos.y <= uMax.y) &&
+                                       (pos.z >= uMin.z && pos.z <= uMax.z);
+                        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                        if (!inRange) {
+                            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+                            gl_PointSize = 0.0;
+                            return;
+                        }
+                        gl_Position = projectionMatrix * mvPosition;
+                        float size = uSize * (300.0 / max(1.0, -mvPosition.z));
+                        gl_PointSize = size;
+                    }
+                `,
+                fragmentShader: `
+                    precision mediump float;
+                    uniform sampler2D uMap;
+                    varying vec3 vColor;
+                    void main() {
+                        vec4 tex = texture2D(uMap, gl_PointCoord);
+                        if (tex.a < 0.5) discard;
+                        gl_FragColor = vec4(vColor, 1.0) * tex;
+                    }
+                `
+            });
+            
+            // Sync point size with UI default
+            const uiSizeEl = document.getElementById('point-size');
+            if (uiSizeEl && material.uniforms && material.uniforms.uSize) {
+                const uiSize = parseFloat(uiSizeEl.value);
+                if (!isNaN(uiSize)) material.uniforms.uSize.value = uiSize;
+            }
+            
+            pointCloud = new THREE.Points(pointsGeometry, material);
+            
+            // Apply transform after material creation
+            pointCloud.scale.set(scale, scale, scale);
             pointCloud.position.set(
                 -center.x * scale,
                 -center.y * scale,
@@ -716,6 +812,9 @@
             
             // Add to group instead of scene
             pointCloudGroup.add(pointCloud);
+            
+            // Initialize crop ranges and UI
+            initializeCropUI(bbox);
             
             // Update UI
             document.getElementById('point-count').textContent = parsedCoords.length;
@@ -806,8 +905,14 @@
             const parsedCoords = parseFluCoMaData(coordinates);
             
             if (parsedCoords[index]) {
-                // Get the position of the selected point
                 const coord = parsedCoords[index].values;
+                // Hide if cropped out
+                if (!isPointInCrop(coord)) {
+                    if (highlightPoint) highlightPoint.visible = false;
+                    selectedPoint = index;
+                    return;
+                }
+                // Get the position of the selected point
                 const position = new Float32Array([
                     coord[0] || 0,
                     coord[1] || 0,
@@ -1047,8 +1152,13 @@
             document.getElementById('point-size-value').textContent = size.toFixed(1);
             
             if (pointCloud && pointCloud.material) {
-                pointCloud.material.size = size;
-                pointCloud.material.needsUpdate = true;
+                const mat = pointCloud.material;
+                if (mat.uniforms && mat.uniforms.uSize) {
+                    mat.uniforms.uSize.value = size;
+                } else if ('size' in mat) {
+                    mat.size = size;
+                    mat.needsUpdate = true;
+                }
             }
         });
 
@@ -1061,6 +1171,89 @@
                 highlightMaterial.needsUpdate = true;
             }
         });
+
+        // Helpers for cropping
+        function isPointInCrop(values) {
+            const x = values[0] || 0;
+            const y = values[1] || 0;
+            const z = values[2] || 0;
+            return x >= cropRanges.x.min && x <= cropRanges.x.max &&
+                   y >= cropRanges.y.min && y <= cropRanges.y.max &&
+                   z >= cropRanges.z.min && z <= cropRanges.z.max;
+        }
+        
+        function initializeCropUI(bbox) {
+            // Default crop to full bbox
+            cropRanges.x.min = bbox.min.x; cropRanges.x.max = bbox.max.x;
+            cropRanges.y.min = bbox.min.y; cropRanges.y.max = bbox.max.y;
+            cropRanges.z.min = bbox.min.z; cropRanges.z.max = bbox.max.z;
+            
+            const inputs = [
+                { minId: 'crop-x-min', maxId: 'crop-x-max', valMinId: 'crop-x-min-value', valMaxId: 'crop-x-max-value', axis: 'x', min: bbox.min.x, max: bbox.max.x },
+                { minId: 'crop-y-min', maxId: 'crop-y-max', valMinId: 'crop-y-min-value', valMaxId: 'crop-y-max-value', axis: 'y', min: bbox.min.y, max: bbox.max.y },
+                { minId: 'crop-z-min', maxId: 'crop-z-max', valMinId: 'crop-z-min-value', valMaxId: 'crop-z-max-value', axis: 'z', min: bbox.min.z, max: bbox.max.z },
+            ];
+            
+            inputs.forEach(cfg => {
+                const minEl = document.getElementById(cfg.minId);
+                const maxEl = document.getElementById(cfg.maxId);
+                const minVal = document.getElementById(cfg.valMinId);
+                const maxVal = document.getElementById(cfg.valMaxId);
+                if (!minEl || !maxEl) return;
+                
+                const step = (cfg.max - cfg.min) / 1000 || 0.001;
+                minEl.min = cfg.min;
+                minEl.max = cfg.max;
+                minEl.step = step;
+                maxEl.min = cfg.min;
+                maxEl.max = cfg.max;
+                maxEl.step = step;
+                
+                // Set initial values
+                minEl.value = cfg.min;
+                maxEl.value = cfg.max;
+                if (minVal) minVal.textContent = Number(cfg.min).toFixed(2);
+                if (maxVal) maxVal.textContent = Number(cfg.max).toFixed(2);
+                
+                const update = () => {
+                    let minV = parseFloat(minEl.value);
+                    let maxV = parseFloat(maxEl.value);
+                    if (minV > maxV) {
+                        // Keep ranges sane: clamp
+                        const mid = (minV + maxV) / 2;
+                        minV = mid; maxV = mid;
+                        minEl.value = String(minV);
+                        maxEl.value = String(maxV);
+                    }
+                    cropRanges[cfg.axis].min = minV;
+                    cropRanges[cfg.axis].max = maxV;
+                    if (minVal) minVal.textContent = minV.toFixed(2);
+                    if (maxVal) maxVal.textContent = maxV.toFixed(2);
+                    // Update shader uniforms
+                    updateCropUniforms();
+                };
+                if (!minEl.dataset.initialized) {
+                    minEl.addEventListener('input', update);
+                    minEl.dataset.initialized = '1';
+                }
+                if (!maxEl.dataset.initialized) {
+                    maxEl.addEventListener('input', update);
+                    maxEl.dataset.initialized = '1';
+                }
+            });
+            
+            // Push initial uniforms
+            updateCropUniforms();
+        }
+        
+        function updateCropUniforms() {
+            if (!pointCloud) return;
+            const mat = pointCloud.material;
+            if (mat && mat.uniforms && mat.uniforms.uMin && mat.uniforms.uMax) {
+                mat.uniforms.uMin.value.set(cropRanges.x.min, cropRanges.y.min, cropRanges.z.min);
+                mat.uniforms.uMax.value.set(cropRanges.x.max, cropRanges.y.max, cropRanges.z.max);
+            }
+        }
 
         // Initialize
         initScene();
