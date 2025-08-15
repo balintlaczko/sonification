@@ -1,26 +1,21 @@
 # %%
 # imports
 
-import argparse
 import json
 import os
 import torch
-import random
 import numpy as np
 import pandas as pd
-from lightning.pytorch import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import WandbLogger
 from sonification.models.models import PlFMEmbedder
 from sonification.utils.misc import midi2frequency
-from sonification.utils.tensor import scale
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 import umap
+import matplotlib.pyplot as plt
+from sonification.utils.array import array2fluid_dataset
 
 # %%
 ckpt_path = '../../ckpt/fm_embedder'
-ckpt_name = 'imv_v4'
+ckpt_name = 'imv_v4.5'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -42,69 +37,6 @@ model = PlFMEmbedder(args)
 model.create_shadow_model()
 model.load_state_dict(ckpt['state_dict'])
 model.eval()
-
-# %%
-# test the model with a dummy input
-batch_size = 16
-x = torch.rand(batch_size, args.length_samps).to(model.device)  # (B, length_samps)
-y = model(x)
-print(f"Input shape: {x.shape}, Output shape: {y.shape}")
-
-# %%
-import matplotlib.pyplot as plt
-
-y_np = y.detach().cpu().numpy()
-
-def plot_overlay(y, max_lines=1024, alpha=0.12, lw=0.7, color='C0', show=True):
-    """
-    Plot a 1D array as a single line, or a batch of arrays as overlaid lines.
-
-    Args:
-        y: np.ndarray or array-like. If 1D, plots a single line.
-           If ND with shape (B, ...), flattens per-sample features and overlays B lines.
-        max_lines: Maximum number of lines to overlay (randomly sampled if exceeded).
-        alpha: Line alpha for overlaid lines.
-        lw: Line width.
-        color: Line color.
-        show: Whether to call plt.show().
-    Returns:
-        ax: The matplotlib Axes used for plotting.
-    """
-    y_np = np.asarray(y)
-
-    if y_np.ndim == 1:
-        idx = np.arange(y_np.shape[0])
-        fig, ax = plt.subplots()
-        ax.plot(idx, y_np, color=color, linewidth=lw)
-        ax.set_xlabel('Index')
-        ax.set_ylabel('Value')
-        ax.set_title('y (single line)')
-        fig.tight_layout()
-        if show:
-            plt.show()
-        return ax
-    else:
-        lines = y_np.reshape(y_np.shape[0], -1)
-        n = lines.shape[0]
-        if n > max_lines:
-            rng = np.random.default_rng(0)
-            sel = rng.choice(n, size=max_lines, replace=False)
-            lines = lines[sel]
-
-        idx = np.arange(lines.shape[1])
-        fig, ax = plt.subplots()
-        for i in range(lines.shape[0]):
-            ax.plot(idx, lines[i], color=color, alpha=alpha, linewidth=lw)
-        ax.set_xlabel('Feature Index')
-        ax.set_ylabel('Value')
-        ax.set_title(f'y (overlay {lines.shape[0]} lines)')
-        fig.tight_layout()
-        if show:
-            plt.show()
-        return ax
-
-# call the function
-plot_overlay(y_np)
 
 # %%
 # create a meshgrid of parameters to synthesize (SynthMaps style)
@@ -146,7 +78,7 @@ model.mel_spectrogram.to(device)  # move mel spectrogram to device
 
 # %%
 # iterate the dataframe in batches and synthesize
-batch_size = 32
+batch_size = 64
 n_batches = len(df) // batch_size + 1
 print(f"Number of batches: {n_batches}, batch size: {batch_size}")
 z_all = torch.zeros((len(df), args.latent_size), device=device)
@@ -171,12 +103,44 @@ with torch.no_grad():
 
 # %%
 z_all.shape  # (n_samples, latent_size)
-# %%
-plot_overlay(z_all.cpu().numpy(), max_lines=z_all.shape[0], alpha=0.12, lw=0.7, color='C1', show=True)
 
 # %%
-# UMAP 2D
-Z = z_all.detach().cpu().numpy()
+# standardize the embeddings
+z_mean = z_all.mean(dim=0, keepdim=True)
+z_std = z_all.std(dim=0, keepdim=True)
+z_all_standardized = (z_all - z_mean) / (z_std + 1e-6)  # avoid division by zero
+print(z_mean.shape, z_std.shape, z_all_standardized.shape)
+
+# %%
+# robustscale embeddings
+from sklearn.preprocessing import RobustScaler
+
+scaler = RobustScaler()
+z_all_robustscaled = scaler.fit_transform(z_all_standardized.detach().cpu().numpy())
+print(z_all_robustscaled.shape)
+
+# %%
+# create a PCA projection for z_all
+from sklearn.decomposition import PCA
+
+pca_dims = 16
+pca = PCA(n_components=pca_dims, whiten=True)
+z_all_pca = pca.fit_transform(z_all_robustscaled)
+# get the explained variance ratio
+explained_variance = pca.explained_variance_ratio_
+print(f"Explained variance ratio for PCA with {pca_dims} components: {explained_variance.sum() * 100:.2f}%")
+
+# %%
+# UMAP
+mode = 'pca'  # 'standardized', 'robustscaled', 'pca' or 'raw'
+if mode == 'standardized':
+    Z = z_all_standardized.detach().cpu().numpy()
+elif mode == 'robustscaled':
+    Z = z_all_robustscaled
+elif mode == 'pca':
+    Z = z_all_pca
+else:
+    Z = z_all.detach().cpu().numpy()
 n = Z.shape[0]
 max_points = 500000
 if n > max_points:
@@ -185,59 +149,39 @@ if n > max_points:
 else:
     idx = np.arange(n)
 
-n_neighbors = 10
-emb = umap.UMAP(n_components=2, n_neighbors=n_neighbors, min_dist=0.1, random_state=0).fit_transform(Z[idx])
+n_components = 3  # 3 for 3D UMAP
+n_neighbors = 200
+min_dist = 0.1  # minimum distance between points in UMAP
+metric = 'euclidean'  # distance metric for UMAP
+emb = umap.UMAP(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, metric=metric).fit_transform(Z[idx])
 
 # Build RGB colors from dataframe x, y, z columns
 colors = df.iloc[idx][["x", "y", "z"]].to_numpy().astype(float)
 mins = colors.min(axis=0)
 maxs = colors.max(axis=0)
-den = np.where((maxs - mins) == 0, 1.0, (maxs - mins))
+den = np.where((maxs - mins) == 0, 1, (maxs - mins))
 colors = (colors - mins) / den  # normalize to [0, 1]
+# scale them to [0, 0.7]
+colors *= 0.9
 
-plt.figure(figsize=(7, 6))
-plt.scatter(emb[:, 0], emb[:, 1], s=3, c=colors, alpha=0.7)
-plt.xlabel("UMAP-1")
-plt.ylabel("UMAP-2")
-plt.title(f"UMAP n_neighbors={n_neighbors}")
-plt.tight_layout()
-plt.show()
-
-# %%
-# UMAP 3D
-
-Z = z_all.detach().cpu().numpy()
-n = Z.shape[0]
-max_points = 500000
-if n > max_points:
-    rng = np.random.default_rng(0)
-    idx = rng.choice(n, size=max_points, replace=False)
-else:
-    idx = np.arange(n)
-
-n_neighbors = 10
-emb = umap.UMAP(n_components=3, n_neighbors=n_neighbors, min_dist=0.1, random_state=0).fit_transform(Z[idx])
-
-# Build RGB colors from dataframe x, y, z columns
-colors = df.iloc[idx][["x", "y", "z"]].to_numpy().astype(float)
-mins = colors.min(axis=0)
-maxs = colors.max(axis=0)
-den = np.where((maxs - mins) == 0, 1.0, (maxs - mins))
-colors = (colors - mins) / den  # normalize to [0, 1]
-
+plot_title = f"UMAP {mode}, {n_components}D, n_neighbors={n_neighbors}, min_dist={min_dist}, metric={metric}"
 fig = plt.figure(figsize=(7, 6))
-ax = fig.add_subplot(111, projection='3d')
-ax.scatter(emb[:, 0], emb[:, 1], emb[:, 2], s=3, c=colors, alpha=0.7)
-ax.set_xlabel("UMAP-1")
-ax.set_ylabel("UMAP-2")
-ax.set_zlabel("UMAP-3")
-ax.set_title(f"UMAP 3D n_neighbors={n_neighbors}")
+if n_components == 2:
+    ax = fig.add_subplot(111)
+    ax.scatter(emb[:, 0], emb[:, 1], s=3, c=colors, alpha=0.7)
+    ax.set_xlabel("UMAP-1")
+    ax.set_ylabel("UMAP-2")
+else:
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(emb[:, 0], emb[:, 1], emb[:, 2], s=3, c=colors, alpha=0.7)
+    ax.set_xlabel("UMAP-1")
+    ax.set_ylabel("UMAP-2")
+    ax.set_zlabel("UMAP-3")
+ax.set_title(plot_title)
 fig.tight_layout()
 plt.show()
 
 # %%
-from sonification.utils.array import array2fluid_dataset
-
 # create a directory for the predictions if it doesn't exist
 ckpt_dir = os.path.dirname(ckpt_path)
 predictions_dir = os.path.join(ckpt_dir, 'predictions')
@@ -262,17 +206,23 @@ with open(json_path, "w") as f:
 print(f"Model embeddings saved to {json_path}")
 
 # %%
-# save the umap embedding to a json file
-umap_embedding = array2fluid_dataset(emb)
-umap_json_path = os.path.join(predictions_dir, f"umap_embeddings_{n_neighbors}.json")
-with open(umap_json_path, "w") as f:
-    json.dump(umap_embedding, f)
-print(f"UMAP embeddings saved to {umap_json_path}")
+# if UMAP is 2D then add the x col from the df as the 3rd column
+if n_components == 2:
+    # scale x to the observed UMAP range
+    x_min = df['x'].min()
+    x_max = df['x'].max()
+    x = df.iloc[idx]['x'].to_numpy().astype(float)
+    x_norm = (x - x_min) / (x_max - x_min)  # scale to [0, 1]
+    umap_min = emb.min()
+    umap_max = emb.max()
+    x_scaled = (x_norm * (umap_max - umap_min)) + umap_min  # scale to UMAP range
+    # add x as the 3rd column
+    emb = np.hstack((emb, x_scaled.reshape(-1, 1)))
 
 # %%
 # save the umap embedding to a json file
 umap_embedding = array2fluid_dataset(emb)
-umap_json_path = os.path.join(predictions_dir, f"umap_embeddings_3D_{n_neighbors}.json")
+umap_json_path = os.path.join(predictions_dir, f"umap_embeddings_{mode}_{n_components}D_{n_neighbors}_min_dist_{min_dist}_metric_{metric}.json")
 with open(umap_json_path, "w") as f:
     json.dump(umap_embedding, f)
 print(f"UMAP embeddings saved to {umap_json_path}")

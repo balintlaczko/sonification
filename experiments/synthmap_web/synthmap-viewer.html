@@ -151,6 +151,7 @@
         .slider {
             flex: 1;
             -webkit-appearance: none;
+            appearance: none;
             height: 4px;
             border-radius: 2px;
             background: #444;
@@ -326,18 +327,52 @@
             <h3>View Controls</h3>
             <div class="parameter-control">
                 <label>Point Size:</label>
-                <input type="range" id="point-size" class="slider" min="0.1" max="2" value="0.5" step="0.1" style="width: 120px;">
-                <span id="point-size-value" class="parameter-value" style="width: 50px;">0.5</span>
+                <input type="range" id="point-size" class="slider" min="0.1" max="2" value="0.2" step="0.1" style="width: 120px;">
+                <span id="point-size-value" class="parameter-value" style="width: 50px;">0.2</span>
             </div>
             <div class="parameter-control">
                 <label>Highlight Size:</label>
-                <input type="range" id="highlight-size" class="slider" min="0.5" max="3" value="1.0" step="0.1" style="width: 120px;">
-                <span id="highlight-size-value" class="parameter-value" style="width: 50px;">1.0</span>
+                <input type="range" id="highlight-size" class="slider" min="0.3" max="3" value="0.4" step="0.1" style="width: 120px;">
+                <span id="highlight-size-value" class="parameter-value" style="width: 50px;">0.4</span>
             </div>
             <div class="zoom-controls" style="margin-top: 10px;">
                 <button class="zoom-button" id="zoom-in">+</button>
                 <button class="zoom-button" id="zoom-out">−</button>
                 <button class="zoom-button" id="zoom-reset">⟲</button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Crop Mesh (XYZ Ranges)</h3>
+            <div class="parameter-control">
+                <label>X Min:</label>
+                <input type="range" id="crop-x-min" class="slider" min="0" max="1" value="0" step="0.001" style="width: 120px;">
+                <span id="crop-x-min-value" class="parameter-value" style="width: 60px;">0.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>X Max:</label>
+                <input type="range" id="crop-x-max" class="slider" min="0" max="1" value="1" step="0.001" style="width: 120px;">
+                <span id="crop-x-max-value" class="parameter-value" style="width: 60px;">1.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>Y Min:</label>
+                <input type="range" id="crop-y-min" class="slider" min="0" max="1" value="0" step="0.001" style="width: 120px;">
+                <span id="crop-y-min-value" class="parameter-value" style="width: 60px;">0.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>Y Max:</label>
+                <input type="range" id="crop-y-max" class="slider" min="0" max="1" value="1" step="0.001" style="width: 120px;">
+                <span id="crop-y-max-value" class="parameter-value" style="width: 60px;">1.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>Z Min:</label>
+                <input type="range" id="crop-z-min" class="slider" min="0" max="1" value="0" step="0.001" style="width: 120px;">
+                <span id="crop-z-min-value" class="parameter-value" style="width: 60px;">0.00</span>
+            </div>
+            <div class="parameter-control">
+                <label>Z Max:</label>
+                <input type="range" id="crop-z-max" class="slider" min="0" max="1" value="1" step="0.001" style="width: 120px;">
+                <span id="crop-z-max-value" class="parameter-value" style="width: 60px;">1.00</span>
             </div>
         </div>
     </div>
@@ -346,7 +381,7 @@
         <div id="canvas-container">
             <div id="info-display">
                 <div>Points loaded: <span id="point-count">0</span></div>
-                <div>Selected: <span id="selected-point">None</span></div>
+                <div>Selected: <span id="selected-point">None</div>
                 <div>FPS: <span id="fps">0</span></div>
             </div>
             <div id="loading-overlay">
@@ -364,13 +399,17 @@
         let pointCloud, pointsGeometry;
         let highlightPoint, highlightGeometry, highlightMaterial; // Separate highlight point
         let raycaster, mouse;
+        let raycasterThreshold = 0.02; // Default threshold for raycaster
         let selectedPoint = null;
         let hoveredPoint = null;
         let pointCloudGroup; // Container for rotation
         let knnClassifier = null; // KNN for point selection
         let pointPositions2D = []; // Screen space positions for KNN
         let originalSizes = []; // Store original sizes for points
-        
+        let defaultCameraPosition = new THREE.Vector3(0, 0, 20);
+        let defaultPointSize = 0.2; // Default size for points
+        let defaultHighlightSize = 0.4; // Default size for highlight point
+
         // Data storage
         let coordinates = null;
         let fmParams = null;
@@ -388,6 +427,24 @@
         let frameCount = 0;
         let fpsUpdateTime = 0;
         
+        // Crop state
+        let cropRanges = {
+            x: { min: -Infinity, max: Infinity },
+            y: { min: -Infinity, max: Infinity },
+            z: { min: -Infinity, max: Infinity }
+        };
+        let dataBBox = null; // THREE.Box3 in data/original attribute space
+        
+    // Crop visualization (wireframe box shown during slider interaction)
+    let cropBoxGroup = null;      // Group containing fill + edges + grids + axes
+    let cropBoxFill = null;       // Semi-transparent fill mesh
+    let cropBoxEdges = null;      // Wireframe edges
+    let cropFaceGrids = [];       // 6 custom grid line meshes (one per face)
+    let gridDivisions = 8;        // Grid resolution per face (u and v)
+    let gridMaterial = null;      // Shared material for grids
+    let axisCornerGroups = [];    // 8 groups, each with 3 arrows + 3 labels
+    let cropBoxHideTimer = null;  // Auto-hide timer
+        
         // Initialize Three.js scene
         function initScene() {
             const container = document.getElementById('canvas-container');
@@ -401,7 +458,9 @@
                 0.1,
                 1000
             );
-            camera.position.set(0, 0, 30);
+            // set to default position
+            camera.position.copy(defaultCameraPosition);
+            camera.lookAt(0, 0, 0);
             
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(container.clientWidth, container.clientHeight);
@@ -418,13 +477,18 @@
             
             // Initialize raycaster for mouse interaction
             raycaster = new THREE.Raycaster();
-            raycaster.params.Points.threshold = 0.5; // Increased threshold for easier selection
+            raycaster.params.Points.threshold = raycasterThreshold;
             mouse = new THREE.Vector2();
             
             // Create a group to contain the point cloud for rotation
             pointCloudGroup = new THREE.Group();
             scene.add(pointCloudGroup);
             
+            // Prepare crop box group inside the same rotating container
+            cropBoxGroup = new THREE.Group();
+            cropBoxGroup.visible = false;
+            pointCloudGroup.add(cropBoxGroup);
+
             // Initialize highlight point (will be added when needed)
             createHighlightPoint();
             
@@ -434,15 +498,20 @@
             renderer.domElement.addEventListener('mouseup', onMouseUp);
             renderer.domElement.addEventListener('wheel', onMouseWheel);
             
-            // Drag controls for rotation and selection
+            // Drag controls for rotation, panning and selection
             let isDragging = false;
+            let isPanning = false;
             let isSelecting = false;
             let previousMousePosition = { x: 0, y: 0 };
             let dragStartPosition = { x: 0, y: 0 };
             let rotationMode = null; // 'vertical' for Shift, 'horizontal' for Alt+Shift
             
             function onMouseDown(e) {
-                if (e.shiftKey) {
+                // Pan with Shift + Option(Alt) + Cmd
+                if (e.shiftKey && e.altKey && e.metaKey) {
+                    isPanning = true;
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                } else if (e.shiftKey) {
                     isDragging = true;
                     previousMousePosition = { x: e.clientX, y: e.clientY };
                     rotationMode = e.altKey ? 'horizontal' : 'vertical';
@@ -455,12 +524,36 @@
             
             function onMouseUp(e) {
                 isDragging = false;
+                isPanning = false;
                 isSelecting = false;
                 rotationMode = null;
             }
             
             renderer.domElement.addEventListener('mousemove', (e) => {
-                if (isDragging) {
+                if (isPanning) {
+                    // Translate the point cloud group parallel to the view plane
+                    const deltaX = e.clientX - previousMousePosition.x;
+                    const deltaY = e.clientY - previousMousePosition.y;
+                    const canvas = renderer.domElement;
+                    const distance = Math.abs(camera.position.z); // group is around world origin
+                    const vFov = THREE.MathUtils.degToRad(camera.fov);
+                    const viewHeight = 2 * Math.tan(vFov / 2) * distance;
+                    const worldPerPixelY =  - viewHeight / canvas.clientHeight;
+                    const worldPerPixelX = worldPerPixelY * camera.aspect;
+                    const dir = new THREE.Vector3();
+                    camera.getWorldDirection(dir);
+                    const right = new THREE.Vector3().crossVectors(dir, camera.up).normalize();
+                    const up = new THREE.Vector3().copy(camera.up).normalize();
+                    const moveX = -deltaX * worldPerPixelX; // left drag moves scene right
+                    const moveY = deltaY * worldPerPixelY;  // up drag moves scene up
+                    const displacement = new THREE.Vector3()
+                        .addScaledVector(right, moveX)
+                        .addScaledVector(up, moveY);
+                    if (pointCloudGroup) {
+                        pointCloudGroup.position.add(displacement);
+                    }
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                } else if (isDragging) {
                     const deltaX = e.clientX - previousMousePosition.x;
                     const deltaY = e.clientY - previousMousePosition.y;
                     
@@ -514,13 +607,23 @@
             const x = ((clientX - rect.left) / rect.width) * 2 - 1;
             const y = -((clientY - rect.top) / rect.height) * 2 + 1;
             
+            // Ensure transforms are up-to-date before raycasting
+            if (pointCloudGroup) pointCloudGroup.updateMatrixWorld(true);
+            if (pointCloud) pointCloud.updateMatrixWorld(true);
+            
             // Method 1: Try raycasting first for direct hits
             raycaster.setFromCamera({ x, y }, camera);
             const intersects = raycaster.intersectObject(pointCloud);
             
             if (intersects.length > 0) {
-                selectPoint(intersects[0].index);
-                return;
+                const parsedCoords = parseFluCoMaData(coordinates);
+                for (const hit of intersects) {
+                    const c = parsedCoords[hit.index]?.values;
+                    if (c && isPointInCrop(c)) {
+                        selectPoint(hit.index);
+                        return;
+                    }
+                }
             }
             
             // Method 2: Find nearest point in screen space
@@ -529,6 +632,7 @@
             let nearestIndex = -1;
             
             parsedCoords.forEach((coord, i) => {
+                if (!isPointInCrop(coord.values)) return; // skip cropped-out points
                 // Transform 3D point to screen space
                 const vector = new THREE.Vector3(
                     coord.values[0] || 0,
@@ -542,10 +646,12 @@
                     vector.add(pointCloud.position);
                 }
                 
-                // Apply group rotation
+                // Apply group rotation and translation (panning)
                 if (pointCloudGroup) {
                     // Use quaternion to account for composed yaw/pitch
                     vector.applyQuaternion(pointCloudGroup.quaternion);
+                    // Include panning translation from the group
+                    vector.add(pointCloudGroup.position);
                 }
                 
                 // Project to screen space
@@ -569,7 +675,7 @@
 
         function onMouseWheel(event) {
             event.preventDefault();
-            const zoomSpeed = 0.1;
+            const zoomSpeed = 0.01;
             
             if (event.deltaY < 0) {
                 camera.position.z *= (1 - zoomSpeed);
@@ -577,7 +683,7 @@
                 camera.position.z *= (1 + zoomSpeed);
             }
             
-            camera.position.z = Math.max(5, Math.min(100, camera.position.z));
+            camera.position.z = Math.max(1, Math.min(25, camera.position.z));
         }
 
         function onWindowResize() {
@@ -652,7 +758,10 @@
             
             pointsGeometry = new THREE.BufferGeometry();
             pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            pointsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colorsArray, 3));
+            // Rename color attribute to avoid GLSL collisions in custom shader
+            pointsGeometry.setAttribute('aColor', new THREE.Float32BufferAttribute(colorsArray, 3));
+            // Ensure accurate raycasting bounds
+            pointsGeometry.computeBoundingSphere();
             
             // Create size attribute for dynamic sizing
             const sizes = new Float32Array(parsedCoords.length);
@@ -679,21 +788,10 @@
             
             const texture = new THREE.CanvasTexture(canvas);
             
-            // Use standard PointsMaterial with size attribute
-            const material = new THREE.PointsMaterial({
-                size: 0.5, // Default size, will be updated by slider
-                vertexColors: true,
-                sizeAttenuation: true,
-                map: texture,
-                alphaTest: 0.5,
-                transparent: true
-            });
-            
-            pointCloud = new THREE.Points(pointsGeometry, material);
-            
-            // Calculate proper bounding box and scale
+            // Compute bounding box, scaling and centering
             pointsGeometry.computeBoundingBox();
             const bbox = pointsGeometry.boundingBox;
+            dataBBox = bbox.clone();
             const center = new THREE.Vector3();
             bbox.getCenter(center);
             
@@ -705,9 +803,66 @@
             // Scale the point cloud to fit nicely in view
             const targetSize = 20; // Target size for the largest dimension
             const scale = maxDim > 0 ? targetSize / maxDim : 1;
-            pointCloud.scale.set(scale, scale, scale);
             
-            // Center the point cloud at origin
+            // Shader material with view-independent cropping (optimized)
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    uMap: { value: texture },
+                    uMin: { value: new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.min.z) },
+                    uMax: { value: new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.max.z) },
+                    uSize: { value: defaultPointSize }
+                },
+                transparent: false,
+                depthTest: true,
+                depthWrite: true,
+                blending: THREE.NoBlending,
+                vertexShader: `
+                    precision highp float;
+                    attribute vec3 aColor;
+                    varying vec3 vColor;
+                    uniform vec3 uMin;
+                    uniform vec3 uMax;
+                    uniform float uSize;
+                    void main() {
+                        vColor = aColor;
+                        vec3 pos = position;
+                        bool inRange = (pos.x >= uMin.x && pos.x <= uMax.x) &&
+                                       (pos.y >= uMin.y && pos.y <= uMax.y) &&
+                                       (pos.z >= uMin.z && pos.z <= uMax.z);
+                        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                        if (!inRange) {
+                            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+                            gl_PointSize = 0.0;
+                            return;
+                        }
+                        gl_Position = projectionMatrix * mvPosition;
+                        float size = uSize * (300.0 / max(1.0, -mvPosition.z));
+                        gl_PointSize = size;
+                    }
+                `,
+                fragmentShader: `
+                    precision mediump float;
+                    uniform sampler2D uMap;
+                    varying vec3 vColor;
+                    void main() {
+                        vec4 tex = texture2D(uMap, gl_PointCoord);
+                        if (tex.a < 0.5) discard;
+                        gl_FragColor = vec4(vColor, 1.0) * tex;
+                    }
+                `
+            });
+            
+            // Sync point size with UI default
+            const uiSizeEl = document.getElementById('point-size');
+            if (uiSizeEl && material.uniforms && material.uniforms.uSize) {
+                const uiSize = parseFloat(uiSizeEl.value);
+                if (!isNaN(uiSize)) material.uniforms.uSize.value = uiSize;
+            }
+            
+            pointCloud = new THREE.Points(pointsGeometry, material);
+            
+            // Apply transform after material creation
+            pointCloud.scale.set(scale, scale, scale);
             pointCloud.position.set(
                 -center.x * scale,
                 -center.y * scale,
@@ -716,6 +871,15 @@
             
             // Add to group instead of scene
             pointCloudGroup.add(pointCloud);
+            
+            // Ensure crop box follows the same transforms
+            if (cropBoxGroup) {
+                cropBoxGroup.scale.copy(pointCloud.scale);
+                cropBoxGroup.position.copy(pointCloud.position);
+            }
+
+            // Initialize crop ranges and UI
+            initializeCropUI(bbox);
             
             // Update UI
             document.getElementById('point-count').textContent = parsedCoords.length;
@@ -778,7 +942,7 @@
             highlightGeometry.setAttribute('color', new THREE.Float32BufferAttribute(color, 3));
             
             highlightMaterial = new THREE.PointsMaterial({
-                size: 1.0, // Default highlight size, will be updated by slider
+                size: defaultHighlightSize, // Default highlight size, will be updated by slider
                 vertexColors: true,
                 sizeAttenuation: true,
                 map: texture,
@@ -789,6 +953,8 @@
             
             highlightPoint = new THREE.Points(highlightGeometry, highlightMaterial);
             highlightPoint.visible = false; // Hidden by default
+            // Always render highlight regardless of frustum to avoid disappearing when very close
+            highlightPoint.frustumCulled = false;
         }
 
         function updatePointHighlight(index) {
@@ -806,8 +972,14 @@
             const parsedCoords = parseFluCoMaData(coordinates);
             
             if (parsedCoords[index]) {
-                // Get the position of the selected point
                 const coord = parsedCoords[index].values;
+                // Hide if cropped out
+                if (!isPointInCrop(coord)) {
+                    if (highlightPoint) highlightPoint.visible = false;
+                    selectedPoint = index;
+                    return;
+                }
+                // Get the position of the selected point
                 const position = new Float32Array([
                     coord[0] || 0,
                     coord[1] || 0,
@@ -827,6 +999,10 @@
                 highlightGeometry.attributes.position.array[1] = position[1];
                 highlightGeometry.attributes.position.array[2] = position[2];
                 highlightGeometry.attributes.position.needsUpdate = true;
+                // Keep bounding volume in sync to avoid incorrect culling
+                if (highlightGeometry.computeBoundingSphere) {
+                    highlightGeometry.computeBoundingSphere();
+                }
                 
                 highlightGeometry.attributes.color.array[0] = color[0];
                 highlightGeometry.attributes.color.array[1] = color[1];
@@ -936,6 +1112,24 @@
         }
 
         // Event listeners
+        window.addEventListener('DOMContentLoaded', function () {
+            // fetch defaultPointSize and populate slider and number box value with it
+            var val = (typeof defaultPointSize !== 'undefined') ? defaultPointSize : 0.2;
+            var input = document.getElementById('point-size');
+            var label = document.getElementById('point-size-value');
+            if (input) input.value = val;
+            if (label) label.textContent = Number(val).toFixed(1);
+
+            // fetch defaultHighlightSize
+            var highlightVal = (typeof defaultHighlightSize !== 'undefined') ? defaultHighlightSize : 0.4;
+            var highlightInput = document.getElementById('highlight-size');
+            var highlightLabel = document.getElementById('highlight-size-value');
+            if (highlightInput) highlightInput.value = highlightVal;
+            if (highlightLabel) highlightLabel.textContent = Number(highlightVal).toFixed(1);
+        });
+
+        
+
         document.getElementById('coords-file').addEventListener('change', async (e) => {
             if (e.target.files.length > 0) {
                 showLoading(true);
@@ -1025,10 +1219,13 @@
         });
 
         document.getElementById('zoom-reset').addEventListener('click', () => {
-            camera.position.set(0, 0, 30);
+            camera.position.copy(defaultCameraPosition);
+            camera.lookAt(0, 0, 0);
             if (pointCloudGroup) {
                 pointCloudGroup.rotation.set(0, 0, 0);
                 pointCloudGroup.quaternion.identity();
+                // reset position
+                pointCloudGroup.position.set(0, 0, 0);
             }
         });
 
@@ -1047,8 +1244,13 @@
             document.getElementById('point-size-value').textContent = size.toFixed(1);
             
             if (pointCloud && pointCloud.material) {
-                pointCloud.material.size = size;
-                pointCloud.material.needsUpdate = true;
+                const mat = pointCloud.material;
+                if (mat.uniforms && mat.uniforms.uSize) {
+                    mat.uniforms.uSize.value = size;
+                } else if ('size' in mat) {
+                    mat.size = size;
+                    mat.needsUpdate = true;
+                }
             }
         });
 
@@ -1061,6 +1263,320 @@
                 highlightMaterial.needsUpdate = true;
             }
         });
+
+        // Helpers for cropping
+        function isPointInCrop(values) {
+            const x = values[0] || 0;
+            const y = values[1] || 0;
+            const z = values[2] || 0;
+            return x >= cropRanges.x.min && x <= cropRanges.x.max &&
+                   y >= cropRanges.y.min && y <= cropRanges.y.max &&
+                   z >= cropRanges.z.min && z <= cropRanges.z.max;
+        }
+        
+        function initializeCropUI(bbox) {
+            // Default crop to full bbox
+            cropRanges.x.min = bbox.min.x; cropRanges.x.max = bbox.max.x;
+            cropRanges.y.min = bbox.min.y; cropRanges.y.max = bbox.max.y;
+            cropRanges.z.min = bbox.min.z; cropRanges.z.max = bbox.max.z;
+            
+            const inputs = [
+                { minId: 'crop-x-min', maxId: 'crop-x-max', valMinId: 'crop-x-min-value', valMaxId: 'crop-x-max-value', axis: 'x', min: bbox.min.x, max: bbox.max.x },
+                { minId: 'crop-y-min', maxId: 'crop-y-max', valMinId: 'crop-y-min-value', valMaxId: 'crop-y-max-value', axis: 'y', min: bbox.min.y, max: bbox.max.y },
+                { minId: 'crop-z-min', maxId: 'crop-z-max', valMinId: 'crop-z-min-value', valMaxId: 'crop-z-max-value', axis: 'z', min: bbox.min.z, max: bbox.max.z },
+            ];
+            
+            inputs.forEach(cfg => {
+                const minEl = document.getElementById(cfg.minId);
+                const maxEl = document.getElementById(cfg.maxId);
+                const minVal = document.getElementById(cfg.valMinId);
+                const maxVal = document.getElementById(cfg.valMaxId);
+                if (!minEl || !maxEl) return;
+                
+                const step = (cfg.max - cfg.min) / 1000 || 0.001;
+                minEl.min = cfg.min;
+                minEl.max = cfg.max;
+                minEl.step = step;
+                maxEl.min = cfg.min;
+                maxEl.max = cfg.max;
+                maxEl.step = step;
+                
+                // Set initial values
+                minEl.value = cfg.min;
+                maxEl.value = cfg.max;
+                if (minVal) minVal.textContent = Number(cfg.min).toFixed(2);
+                if (maxVal) maxVal.textContent = Number(cfg.max).toFixed(2);
+                
+                const update = () => {
+                    let minV = parseFloat(minEl.value);
+                    let maxV = parseFloat(maxEl.value);
+                    if (minV > maxV) {
+                        // Keep ranges sane: clamp
+                        const mid = (minV + maxV) / 2;
+                        minV = mid; maxV = mid;
+                        minEl.value = String(minV);
+                        maxEl.value = String(maxV);
+                    }
+                    cropRanges[cfg.axis].min = minV;
+                    cropRanges[cfg.axis].max = maxV;
+                    if (minVal) minVal.textContent = minV.toFixed(2);
+                    if (maxVal) maxVal.textContent = maxV.toFixed(2);
+                    // Update shader uniforms
+                    updateCropUniforms();
+                    // Show crop box while interacting
+                    showCropBoxDuringInteraction();
+                };
+                if (!minEl.dataset.initialized) {
+                    minEl.addEventListener('input', update);
+                    // Hide shortly after committing the change
+                    minEl.addEventListener('change', () => scheduleHideCropBox());
+                    minEl.dataset.initialized = '1';
+                }
+                if (!maxEl.dataset.initialized) {
+                    maxEl.addEventListener('input', update);
+                    // Hide shortly after committing the change
+                    maxEl.addEventListener('change', () => scheduleHideCropBox());
+                    maxEl.dataset.initialized = '1';
+                }
+            });
+            
+            // Push initial uniforms
+            updateCropUniforms();
+            // Prepare initial (hidden) crop box geometry to match current ranges
+            updateCropBox(false);
+        }
+        
+        function updateCropUniforms() {
+            if (!pointCloud) return;
+            const mat = pointCloud.material;
+            if (mat && mat.uniforms && mat.uniforms.uMin && mat.uniforms.uMax) {
+                mat.uniforms.uMin.value.set(cropRanges.x.min, cropRanges.y.min, cropRanges.z.min);
+                mat.uniforms.uMax.value.set(cropRanges.x.max, cropRanges.y.max, cropRanges.z.max);
+            }
+        }
+
+        // --- Crop box visualization helpers ---
+        function ensureCropBoxParts() {
+            if (!cropBoxGroup) {
+                cropBoxGroup = new THREE.Group();
+                cropBoxGroup.visible = false;
+                pointCloudGroup.add(cropBoxGroup);
+            }
+            if (!cropBoxFill) {
+                cropBoxFill = new THREE.Mesh(
+                    new THREE.BoxGeometry(1, 1, 1),
+                    new THREE.MeshBasicMaterial({
+                        color: 0xffa500,
+                        transparent: true,
+                        opacity: 0.08,
+                        depthWrite: false
+                    })
+                );
+                cropBoxGroup.add(cropBoxFill);
+            }
+            if (!cropBoxEdges) {
+                cropBoxEdges = new THREE.LineSegments(
+                    new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+                    new THREE.LineBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.9 })
+                );
+                cropBoxGroup.add(cropBoxEdges);
+            }
+            // Create shared grid material
+            if (!gridMaterial) {
+                gridMaterial = new THREE.LineBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.35 });
+            }
+            // Create custom face grids (6 faces) if needed
+            if (cropFaceGrids.length === 0) {
+                for (let i = 0; i < 6; i++) {
+                    const grid = new THREE.LineSegments(new THREE.BufferGeometry(), gridMaterial);
+                    grid.renderOrder = 1; // draw on top of fill
+                    cropFaceGrids.push(grid);
+                    cropBoxGroup.add(grid);
+                }
+            }
+            // Create axis indicators for all 8 corners if needed
+            if (axisCornerGroups.length === 0) {
+                const colors = { x: 0xff5555, y: 0x55ff55, z: 0x5599ff };
+                for (let i = 0; i < 8; i++) {
+                    const g = new THREE.Group();
+                    const ax = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1, colors.x, 0.15, 0.08);
+                    const ay = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 1, colors.y, 0.15, 0.08);
+                    const az = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1, colors.z, 0.15, 0.08);
+                    const lx = createTextSprite('X', '#ff5555');
+                    const ly = createTextSprite('Y', '#55ff55');
+                    const lz = createTextSprite('Z', '#5599ff');
+                    g.add(ax); g.add(ay); g.add(az);
+                    g.add(lx); g.add(ly); g.add(lz);
+                    // stash helpers on group for updates
+                    g._axes = { ax, ay, az };
+                    g._labels = { lx, ly, lz };
+                    cropBoxGroup.add(g);
+                    axisCornerGroups.push(g);
+                }
+            }
+        }
+
+        function updateCropBox(show = true) {
+            if (!pointCloud) return;
+            ensureCropBoxParts();
+
+            // Compute box dimensions and center in original data space
+            const minX = cropRanges.x.min, maxX = cropRanges.x.max;
+            const minY = cropRanges.y.min, maxY = cropRanges.y.max;
+            const minZ = cropRanges.z.min, maxZ = cropRanges.z.max;
+            const dx = Math.max(1e-6, maxX - minX);
+            const dy = Math.max(1e-6, maxY - minY);
+            const dz = Math.max(1e-6, maxZ - minZ);
+            const cx = (minX + maxX) / 2;
+            const cy = (minY + maxY) / 2;
+            const cz = (minZ + maxZ) / 2;
+
+            // Rebuild geometries to match current size
+            const geom = new THREE.BoxGeometry(dx, dy, dz);
+            if (cropBoxFill.geometry) cropBoxFill.geometry.dispose();
+            cropBoxFill.geometry = geom;
+            cropBoxFill.position.set(cx, cy, cz);
+
+            const edgeGeom = new THREE.EdgesGeometry(geom);
+            if (cropBoxEdges.geometry) cropBoxEdges.geometry.dispose();
+            cropBoxEdges.geometry = edgeGeom;
+            cropBoxEdges.position.set(cx, cy, cz);
+
+            // Update face grids geometry as even net per face
+            if (cropFaceGrids.length === 6) {
+                const faces = [
+                    { // Z-
+                        idx: 0, origin: new THREE.Vector3(minX, minY, minZ), u: new THREE.Vector3(dx, 0, 0), v: new THREE.Vector3(0, dy, 0), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // Z+
+                        idx: 1, origin: new THREE.Vector3(minX, minY, maxZ), u: new THREE.Vector3(dx, 0, 0), v: new THREE.Vector3(0, dy, 0), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // Y-
+                        idx: 2, origin: new THREE.Vector3(minX, minY, minZ), u: new THREE.Vector3(dx, 0, 0), v: new THREE.Vector3(0, 0, dz), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // Y+
+                        idx: 3, origin: new THREE.Vector3(minX, maxY, minZ), u: new THREE.Vector3(dx, 0, 0), v: new THREE.Vector3(0, 0, dz), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // X-
+                        idx: 4, origin: new THREE.Vector3(minX, minY, minZ), u: new THREE.Vector3(0, dy, 0), v: new THREE.Vector3(0, 0, dz), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                    { // X+
+                        idx: 5, origin: new THREE.Vector3(maxX, minY, minZ), u: new THREE.Vector3(0, dy, 0), v: new THREE.Vector3(0, 0, dz), uCount: gridDivisions, vCount: gridDivisions
+                    },
+                ];
+                const eps = Math.max(dx, dy, dz) * 0.002; // small offset to avoid z-fighting
+                for (const f of faces) {
+                    const geom = new THREE.BufferGeometry();
+                    const lines = [];
+                    const baseOrigin = f.origin.clone();
+                    // face normal for slight offset
+                    const n = new THREE.Vector3().crossVectors(f.u, f.v).normalize().multiplyScalar(Math.max(dx, dy, dz) * 0.002);
+                    // U-lines: lines parallel to u at v = t
+                    for (let i = 0; i <= f.uCount; i++) {
+                        const t = (f.uCount === 0) ? 0 : i / f.uCount;
+                        const start = baseOrigin.clone().addScaledVector(f.v, t).add(n);
+                        const end = start.clone().add(f.u);
+                        lines.push(start.x, start.y, start.z, end.x, end.y, end.z);
+                    }
+                    // V-lines: lines parallel to v at u = t
+                    for (let j = 0; j <= f.vCount; j++) {
+                        const t = (f.vCount === 0) ? 0 : j / f.vCount;
+                        const start = baseOrigin.clone().addScaledVector(f.u, t).add(n);
+                        const end = start.clone().add(f.v);
+                        lines.push(start.x, start.y, start.z, end.x, end.y, end.z);
+                    }
+                    const pos = new Float32Array(lines);
+                    geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+                    if (cropFaceGrids[f.idx].geometry) cropFaceGrids[f.idx].geometry.dispose();
+                    cropFaceGrids[f.idx].geometry = geom;
+                }
+            }
+
+            // Update axis indicators at all 8 corners
+            if (axisCornerGroups.length === 8) {
+                const corners = [
+                    new THREE.Vector3(minX, minY, minZ),
+                    new THREE.Vector3(maxX, minY, minZ),
+                    new THREE.Vector3(minX, maxY, minZ),
+                    new THREE.Vector3(maxX, maxY, minZ),
+                    new THREE.Vector3(minX, minY, maxZ),
+                    new THREE.Vector3(maxX, minY, maxZ),
+                    new THREE.Vector3(minX, maxY, maxZ),
+                    new THREE.Vector3(maxX, maxY, maxZ),
+                ];
+                const lenBase = Math.max(Math.min(dx, dy, dz) * 0.22, (dx + dy + dz) / 70);
+                const off = lenBase * 0.12;
+                const s = lenBase * 0.32;
+                for (let i = 0; i < 8; i++) {
+                    const g = axisCornerGroups[i];
+                    const c = corners[i];
+                    g.position.copy(c);
+                    g._axes.ax.setLength(lenBase, lenBase * 0.3, lenBase * 0.18);
+                    g._axes.ay.setLength(lenBase, lenBase * 0.3, lenBase * 0.18);
+                    g._axes.az.setLength(lenBase, lenBase * 0.3, lenBase * 0.18);
+                    g._labels.lx.position.set(lenBase + off, 0, 0);
+                    g._labels.ly.position.set(0, lenBase + off, 0);
+                    g._labels.lz.position.set(0, 0, lenBase + off);
+                    g._labels.lx.scale.set(s, s, 1);
+                    g._labels.ly.scale.set(s, s, 1);
+                    g._labels.lz.scale.set(s, s, 1);
+                    g.visible = show;
+                }
+            }
+
+            // Match the point cloud transform so it aligns visually
+            cropBoxGroup.scale.copy(pointCloud.scale);
+            cropBoxGroup.position.copy(pointCloud.position);
+            cropBoxGroup.visible = show;
+        }
+
+        function showCropBoxDuringInteraction() {
+            updateCropBox(true);
+            if (cropBoxHideTimer) clearTimeout(cropBoxHideTimer);
+            cropBoxHideTimer = setTimeout(() => {
+                if (cropBoxGroup) cropBoxGroup.visible = false;
+            }, 3000);
+        }
+
+        function scheduleHideCropBox(delayMs = 3000) {
+            if (cropBoxHideTimer) clearTimeout(cropBoxHideTimer);
+            cropBoxHideTimer = setTimeout(() => {
+                if (cropBoxGroup) cropBoxGroup.visible = false;
+            }, delayMs);
+        }
+
+        // Utility: create text label as a sprite
+        function createTextSprite(text, color = '#ffffff') {
+            const fontSize = 64;
+            const padding = 16;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+            const metrics = ctx.measureText(text);
+            const w = Math.ceil(metrics.width) + padding * 2;
+            const h = fontSize + padding * 2;
+            canvas.width = w;
+            canvas.height = h;
+            // redraw with proper resolution
+            const ctx2 = canvas.getContext('2d');
+            ctx2.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+            ctx2.textAlign = 'center';
+            ctx2.textBaseline = 'middle';
+            ctx2.fillStyle = color;
+            // subtle shadow for legibility
+            ctx2.shadowColor = 'rgba(0,0,0,0.6)';
+            ctx2.shadowBlur = 6;
+            ctx2.shadowOffsetX = 2;
+            ctx2.shadowOffsetY = 2;
+            ctx2.fillText(text, w / 2, h / 2);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+            const sprite = new THREE.Sprite(material);
+            // default scale; will be adjusted in update
+            sprite.scale.set(1, 1, 1);
+            return sprite;
+        }
 
         // Initialize
         initScene();
