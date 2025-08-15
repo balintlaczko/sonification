@@ -430,6 +430,12 @@
         };
         let dataBBox = null; // THREE.Box3 in data/original attribute space
         
+    // Crop visualization (wireframe box shown during slider interaction)
+    let cropBoxGroup = null;      // Group containing fill + edges
+    let cropBoxFill = null;       // Semi-transparent fill mesh
+    let cropBoxEdges = null;      // Wireframe edges
+    let cropBoxHideTimer = null;  // Auto-hide timer
+        
         // Initialize Three.js scene
         function initScene() {
             const container = document.getElementById('canvas-container');
@@ -467,6 +473,11 @@
             pointCloudGroup = new THREE.Group();
             scene.add(pointCloudGroup);
             
+            // Prepare crop box group inside the same rotating container
+            cropBoxGroup = new THREE.Group();
+            cropBoxGroup.visible = false;
+            pointCloudGroup.add(cropBoxGroup);
+
             // Initialize highlight point (will be added when needed)
             createHighlightPoint();
             
@@ -813,6 +824,12 @@
             // Add to group instead of scene
             pointCloudGroup.add(pointCloud);
             
+            // Ensure crop box follows the same transforms
+            if (cropBoxGroup) {
+                cropBoxGroup.scale.copy(pointCloud.scale);
+                cropBoxGroup.position.copy(pointCloud.position);
+            }
+
             // Initialize crop ranges and UI
             initializeCropUI(bbox);
             
@@ -1231,19 +1248,27 @@
                     if (maxVal) maxVal.textContent = maxV.toFixed(2);
                     // Update shader uniforms
                     updateCropUniforms();
+                    // Show crop box while interacting
+                    showCropBoxDuringInteraction();
                 };
                 if (!minEl.dataset.initialized) {
                     minEl.addEventListener('input', update);
+                    // Hide shortly after committing the change
+                    minEl.addEventListener('change', () => scheduleHideCropBox());
                     minEl.dataset.initialized = '1';
                 }
                 if (!maxEl.dataset.initialized) {
                     maxEl.addEventListener('input', update);
+                    // Hide shortly after committing the change
+                    maxEl.addEventListener('change', () => scheduleHideCropBox());
                     maxEl.dataset.initialized = '1';
                 }
             });
             
             // Push initial uniforms
             updateCropUniforms();
+            // Prepare initial (hidden) crop box geometry to match current ranges
+            updateCropBox(false);
         }
         
         function updateCropUniforms() {
@@ -1253,6 +1278,81 @@
                 mat.uniforms.uMin.value.set(cropRanges.x.min, cropRanges.y.min, cropRanges.z.min);
                 mat.uniforms.uMax.value.set(cropRanges.x.max, cropRanges.y.max, cropRanges.z.max);
             }
+        }
+
+        // --- Crop box visualization helpers ---
+        function ensureCropBoxParts() {
+            if (!cropBoxGroup) {
+                cropBoxGroup = new THREE.Group();
+                cropBoxGroup.visible = false;
+                pointCloudGroup.add(cropBoxGroup);
+            }
+            if (!cropBoxFill) {
+                cropBoxFill = new THREE.Mesh(
+                    new THREE.BoxGeometry(1, 1, 1),
+                    new THREE.MeshBasicMaterial({
+                        color: 0xffa500,
+                        transparent: true,
+                        opacity: 0.08,
+                        depthWrite: false
+                    })
+                );
+                cropBoxGroup.add(cropBoxFill);
+            }
+            if (!cropBoxEdges) {
+                cropBoxEdges = new THREE.LineSegments(
+                    new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+                    new THREE.LineBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.9 })
+                );
+                cropBoxGroup.add(cropBoxEdges);
+            }
+        }
+
+        function updateCropBox(show = true) {
+            if (!pointCloud) return;
+            ensureCropBoxParts();
+
+            // Compute box dimensions and center in original data space
+            const minX = cropRanges.x.min, maxX = cropRanges.x.max;
+            const minY = cropRanges.y.min, maxY = cropRanges.y.max;
+            const minZ = cropRanges.z.min, maxZ = cropRanges.z.max;
+            const dx = Math.max(1e-6, maxX - minX);
+            const dy = Math.max(1e-6, maxY - minY);
+            const dz = Math.max(1e-6, maxZ - minZ);
+            const cx = (minX + maxX) / 2;
+            const cy = (minY + maxY) / 2;
+            const cz = (minZ + maxZ) / 2;
+
+            // Rebuild geometries to match current size
+            const geom = new THREE.BoxGeometry(dx, dy, dz);
+            if (cropBoxFill.geometry) cropBoxFill.geometry.dispose();
+            cropBoxFill.geometry = geom;
+            cropBoxFill.position.set(cx, cy, cz);
+
+            const edgeGeom = new THREE.EdgesGeometry(geom);
+            if (cropBoxEdges.geometry) cropBoxEdges.geometry.dispose();
+            cropBoxEdges.geometry = edgeGeom;
+            cropBoxEdges.position.set(cx, cy, cz);
+
+            // Match the point cloud transform so it aligns visually
+            cropBoxGroup.scale.copy(pointCloud.scale);
+            cropBoxGroup.position.copy(pointCloud.position);
+            cropBoxGroup.visible = show;
+        }
+
+        function showCropBoxDuringInteraction() {
+            updateCropBox(true);
+            if (cropBoxHideTimer) clearTimeout(cropBoxHideTimer);
+            cropBoxHideTimer = setTimeout(() => {
+                if (cropBoxGroup) cropBoxGroup.visible = false;
+            }, 3000);
+        }
+
+        function scheduleHideCropBox(delayMs = 3000) {
+            if (cropBoxHideTimer) clearTimeout(cropBoxHideTimer);
+            cropBoxHideTimer = setTimeout(() => {
+                if (cropBoxGroup) cropBoxGroup.visible = false;
+            }, delayMs);
         }
 
         // Initialize
