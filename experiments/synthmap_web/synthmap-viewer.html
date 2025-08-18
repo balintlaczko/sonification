@@ -362,6 +362,11 @@
                 <input type="range" id="highlight-size" class="slider" min="0.3" max="3" value="0.4" step="0.1" style="width: 120px;">
                 <span id="highlight-size-value" class="parameter-value" style="width: 50px;">0.4</span>
             </div>
+            <div class="parameter-control">
+                <label>Trajectory Line Width:</label>
+                <input type="range" id="trajectory-linewidth" class="slider" min="0.02" max="2" value="0.12" step="0.02" style="width: 120px;">
+                <span id="trajectory-linewidth-value" class="parameter-value" style="width: 50px;">0.12</span>
+            </div>
             <div class="zoom-controls" style="margin-top: 10px;">
                 <button class="zoom-button" id="zoom-in">+</button>
                 <button class="zoom-button" id="zoom-out">−</button>
@@ -442,8 +447,9 @@
     let trajB = null; // index of B
     let trajectoryIndices = []; // array of point indices along the path
     let trajectoryGroup = null; // container for trajectory visuals
-    let trajectoryLine = null; // THREE.Line for connecting segments
-    let trajectoryPoints = null; // THREE.Points for nodes
+    let trajectorySegmentsGroup = null; // Group of cylinder segments for thick line
+    let trajectoryPoints = null; // THREE.Points for nodes (sprite-like)
+    let trajectoryPointMaterial = null; // material for nodes
     let isTrajectoryPlaying = false;
     let trajectoryTimer = null;
     let parsedEmbeddingsCache = null; // cached embedding vectors as arrays
@@ -1301,6 +1307,21 @@
                 highlightMaterial.size = size;
                 highlightMaterial.needsUpdate = true;
             }
+            // update trajectory node size to match
+            if (trajectoryPointMaterial) {
+                trajectoryPointMaterial.size = size;
+                trajectoryPointMaterial.needsUpdate = true;
+            }
+        });
+
+        // Line width control for trajectory
+        document.getElementById('trajectory-linewidth').addEventListener('input', (e) => {
+            const v = parseFloat(e.target.value);
+            document.getElementById('trajectory-linewidth-value').textContent = v.toFixed(2);
+            // re-render segments with new width if trajectory exists
+            if (trajectoryIndices && trajectoryIndices.length > 1) {
+                renderTrajectory();
+            }
         });
 
         // Trajectory UI events
@@ -1489,8 +1510,15 @@
         function renderTrajectory() {
             ensureTrajectoryGroup();
             // Clear previous visuals
-            if (trajectoryLine) { trajectoryGroup.remove(trajectoryLine); trajectoryLine.geometry.dispose(); }
-            if (trajectoryPoints) { trajectoryGroup.remove(trajectoryPoints); trajectoryPoints.geometry.dispose(); }
+            if (trajectorySegmentsGroup) {
+                trajectorySegmentsGroup.children.forEach(ch => {
+                    if (ch.geometry) ch.geometry.dispose();
+                    if (ch.material) ch.material.dispose?.();
+                });
+                trajectoryGroup.remove(trajectorySegmentsGroup);
+                trajectorySegmentsGroup = null;
+            }
+            if (trajectoryPoints) { trajectoryGroup.remove(trajectoryPoints); trajectoryPoints.geometry.dispose(); trajectoryPoints = null; }
 
             const parsedCoords = parseFluCoMaData(coordinates);
             const posList = [];
@@ -1505,27 +1533,71 @@
                     posList.push(pv[0]||0, pv[1]||0, pv[2]||0, v[0]||0, v[1]||0, v[2]||0);
                 }
             }
-            // Line
-            const lineGeom = new THREE.BufferGeometry();
-            lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(posList), 3));
-            trajectoryLine = new THREE.LineSegments(
-                lineGeom,
-                new THREE.LineBasicMaterial({ color: 0x0066ff, transparent: true, opacity: 0.95, depthTest: false, linewidth: 40 })
-            );
-            trajectoryLine.renderOrder = 2;
-            trajectoryGroup.add(trajectoryLine);
-            // Nodes
-            // const nodeGeom = new THREE.BufferGeometry();
-            // nodeGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(nodePos), 3));
-            // const nodeMat = new THREE.PointsMaterial({ color: 0xffaa00, size: Math.max(defaultHighlightSize, (pointCloud?.material?.uniforms?.uSize?.value || defaultPointSize) * 1.2), sizeAttenuation: true, depthTest: false, transparent: true });
-            // trajectoryPoints = new THREE.Points(nodeGeom, nodeMat);
-            // trajectoryPoints.renderOrder = 3;
-            // trajectoryGroup.add(trajectoryPoints);
+            // Thick line rendered as cylinders between consecutive nodes
+            const width = parseFloat(document.getElementById('trajectory-linewidth').value) || 0.12;
+            trajectorySegmentsGroup = new THREE.Group();
+            const cylMat = new THREE.MeshBasicMaterial({ color: 0x0066ff, transparent: true, opacity: 0.95, depthTest: true });
+            for (let idx = 1; idx < trajectoryIndices.length; idx++) {
+                const a = parsedCoords[trajectoryIndices[idx - 1]]?.values || [0,0,0];
+                const b = parsedCoords[trajectoryIndices[idx]]?.values || [0,0,0];
+                const pa = new THREE.Vector3(a[0]||0, a[1]||0, a[2]||0);
+                const pb = new THREE.Vector3(b[0]||0, b[1]||0, b[2]||0);
+                const dir = new THREE.Vector3().subVectors(pb, pa);
+                const len = Math.max(1e-6, dir.length());
+                const geom = new THREE.CylinderGeometry(width, width, len, 8, 1, true);
+                // orient cylinder along dir
+                const mid = new THREE.Vector3().addVectors(pa, pb).multiplyScalar(0.5);
+                const cyl = new THREE.Mesh(geom, cylMat);
+                // rotate: default cylinder aligns with Y-axis; compute quaternion from up to dir
+                const up = new THREE.Vector3(0,1,0);
+                const q = new THREE.Quaternion().setFromUnitVectors(up, dir.clone().normalize());
+                cyl.quaternion.copy(q);
+                cyl.position.copy(mid);
+                trajectorySegmentsGroup.add(cyl);
+            }
+            trajectoryGroup.add(trajectorySegmentsGroup);
+
+            // Nodes: sprite-like points with original colors and highlight size
+            if (originalColors) {
+                const nodeGeom = new THREE.BufferGeometry();
+                const nodePositions = new Float32Array(nodePos);
+                nodeGeom.setAttribute('position', new THREE.BufferAttribute(nodePositions, 3));
+                // Each node color from originalColors per point index
+                const nodeColors = new Float32Array(trajectoryIndices.length * 3);
+                for (let ni = 0; ni < trajectoryIndices.length; ni++) {
+                    const ci = trajectoryIndices[ni] * 3;
+                    nodeColors[ni*3] = originalColors[ci] ?? 1.0;
+                    nodeColors[ni*3+1] = originalColors[ci+1] ?? 1.0;
+                    nodeColors[ni*3+2] = originalColors[ci+2] ?? 0.0;
+                }
+                nodeGeom.setAttribute('color', new THREE.BufferAttribute(nodeColors, 3));
+
+                // Reuse the same circular sprite texture as highlight
+                trajectoryPointMaterial = new THREE.PointsMaterial({
+                    size: highlightMaterial?.size || defaultHighlightSize,
+                    vertexColors: true,
+                    sizeAttenuation: true,
+                    map: highlightMaterial?.map || null,
+                    alphaTest: 0.5,
+                    transparent: true,
+                    depthTest: false
+                });
+                trajectoryPoints = new THREE.Points(nodeGeom, trajectoryPointMaterial);
+                trajectoryPoints.renderOrder = 3;
+                trajectoryGroup.add(trajectoryPoints);
+            }
         }
 
         function clearTrajectory() {
             trajectoryIndices = [];
-            if (trajectoryLine) { trajectoryGroup.remove(trajectoryLine); trajectoryLine.geometry.dispose(); trajectoryLine = null; }
+            if (trajectorySegmentsGroup) {
+                trajectorySegmentsGroup.children.forEach(ch => {
+                    if (ch.geometry) ch.geometry.dispose();
+                    if (ch.material) ch.material.dispose?.();
+                });
+                trajectoryGroup.remove(trajectorySegmentsGroup);
+                trajectorySegmentsGroup = null;
+            }
             if (trajectoryPoints) { trajectoryGroup.remove(trajectoryPoints); trajectoryPoints.geometry.dispose(); trajectoryPoints = null; }
             stopTrajectoryPlayback();
         }
