@@ -324,6 +324,33 @@
         </div>
 
         <div class="control-group">
+            <h3>Trajectory</h3>
+            <div class="parameter-control">
+                <label>A (start): <span id="traj-a-label">None</span></label>
+                <button id="set-traj-a" class="button" style="padding:6px 10px;">Set A = Selected</button>
+            </div>
+            <div class="parameter-control">
+                <label>B (end): <span id="traj-b-label">None</span></label>
+                <button id="set-traj-b" class="button" style="padding:6px 10px;">Set B = Selected</button>
+            </div>
+            <div class="parameter-control">
+                <label>Steps:</label>
+                <input type="range" id="trajectory-steps" class="slider" min="2" max="200" step="1" value="30" style="width: 120px;">
+                <span id="trajectory-steps-value" class="parameter-value" style="width: 50px;">30</span>
+            </div>
+            <div class="parameter-control">
+                <label>Rate (notes/s):</label>
+                <input type="range" id="trajectory-rate" class="slider" min="0.5" max="20" step="0.5" value="4" style="width: 120px;">
+                <span id="trajectory-rate-value" class="parameter-value" style="width: 50px;">4.0</span>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap: wrap;">
+                <button id="compute-trajectory" class="button">Compute Trajectory</button>
+                <button id="play-trajectory" class="button">Play</button>
+                <button id="clear-trajectory" class="button stop">Clear</button>
+            </div>
+        </div>
+
+        <div class="control-group">
             <h3>View Controls</h3>
             <div class="parameter-control">
                 <label>Point Size:</label>
@@ -409,6 +436,17 @@
         let defaultCameraPosition = new THREE.Vector3(0, 0, 20);
         let defaultPointSize = 0.2; // Default size for points
         let defaultHighlightSize = 0.4; // Default size for highlight point
+
+    // Trajectory state
+    let trajA = null; // index of A
+    let trajB = null; // index of B
+    let trajectoryIndices = []; // array of point indices along the path
+    let trajectoryGroup = null; // container for trajectory visuals
+    let trajectoryLine = null; // THREE.Line for connecting segments
+    let trajectoryPoints = null; // THREE.Points for nodes
+    let isTrajectoryPlaying = false;
+    let trajectoryTimer = null;
+    let parsedEmbeddingsCache = null; // cached embedding vectors as arrays
 
         // Data storage
         let coordinates = null;
@@ -1160,6 +1198,7 @@
             if (e.target.files.length > 0) {
                 try {
                     embeddings = await loadJSON(e.target.files[0]);
+                    parsedEmbeddingsCache = parseFluCoMaData(embeddings).map(e => e.values);
                     console.log('Embeddings loaded');
                 } catch (err) {
                     console.error('Error loading embeddings:', err);
@@ -1264,6 +1303,34 @@
             }
         });
 
+        // Trajectory UI events
+        document.getElementById('trajectory-steps').addEventListener('input', (e) => {
+            document.getElementById('trajectory-steps-value').textContent = String(e.target.value);
+        });
+        document.getElementById('trajectory-rate').addEventListener('input', (e) => {
+            const v = parseFloat(e.target.value);
+            document.getElementById('trajectory-rate-value').textContent = v.toFixed(1);
+        });
+        document.getElementById('set-traj-a').addEventListener('click', () => {
+            if (selectedPoint == null) { alert('Select a point first.'); return; }
+            trajA = selectedPoint;
+            document.getElementById('traj-a-label').textContent = `Index ${trajA}`;
+        });
+        document.getElementById('set-traj-b').addEventListener('click', () => {
+            if (selectedPoint == null) { alert('Select a point first.'); return; }
+            trajB = selectedPoint;
+            document.getElementById('traj-b-label').textContent = `Index ${trajB}`;
+        });
+        document.getElementById('compute-trajectory').addEventListener('click', () => {
+            computeAndRenderTrajectory();
+        });
+        document.getElementById('clear-trajectory').addEventListener('click', () => {
+            clearTrajectory();
+        });
+        document.getElementById('play-trajectory').addEventListener('click', () => {
+            toggleTrajectoryPlayback();
+        });
+
         // Helpers for cropping
         function isPointInCrop(values) {
             const x = values[0] || 0;
@@ -1344,6 +1411,153 @@
             updateCropUniforms();
             // Prepare initial (hidden) crop box geometry to match current ranges
             updateCropBox(false);
+        }
+
+        // Ensure trajectory visuals group exists and follows point cloud transform
+        function ensureTrajectoryGroup() {
+            if (!trajectoryGroup) {
+                trajectoryGroup = new THREE.Group();
+                if (pointCloudGroup) pointCloudGroup.add(trajectoryGroup);
+            }
+            if (pointCloud) {
+                trajectoryGroup.scale.copy(pointCloud.scale);
+                trajectoryGroup.position.copy(pointCloud.position);
+            }
+        }
+
+        function getEmbeddingVec(index) {
+            if (!parsedEmbeddingsCache) return null;
+            return parsedEmbeddingsCache[index] || null;
+        }
+
+        function linearInterpolateEmbeddings(a, b, steps) {
+            const res = [];
+            if (!a || !b || steps < 2) return res;
+            for (let i = 0; i < steps; i++) {
+                const t = steps === 1 ? 1 : i / (steps - 1);
+                const v = new Array(a.length);
+                for (let d = 0; d < a.length; d++) v[d] = a[d] * (1 - t) + b[d] * t;
+                res.push(v);
+            }
+            return res;
+        }
+
+        function nearestEmbeddingIndex(vec) {
+            if (!parsedEmbeddingsCache) return -1;
+            let best = -1, bestDist = Infinity;
+            for (let i = 0; i < parsedEmbeddingsCache.length; i++) {
+                const e = parsedEmbeddingsCache[i];
+                let s = 0;
+                for (let d = 0; d < vec.length; d++) {
+                    const diff = vec[d] - e[d];
+                    s += diff * diff;
+                }
+                if (s < bestDist) { bestDist = s; best = i; }
+            }
+            return best;
+        }
+
+        function uniqueConsecutive(arr) {
+            if (!arr || arr.length === 0) return [];
+            const out = [arr[0]];
+            for (let i = 1; i < arr.length; i++) {
+                if (arr[i] !== arr[i - 1]) out.push(arr[i]);
+            }
+            return out;
+        }
+
+        function computeAndRenderTrajectory() {
+            if (!coordinates || !embeddings) {
+                alert('Load coordinates and embeddings first.');
+                return;
+            }
+            if (trajA == null || trajB == null) {
+                alert('Set both A and B.');
+                return;
+            }
+            const steps = parseInt(document.getElementById('trajectory-steps').value, 10) || 30;
+            const a = getEmbeddingVec(trajA);
+            const b = getEmbeddingVec(trajB);
+            if (!a || !b) { alert('Missing embeddings for A or B.'); return; }
+            const interps = linearInterpolateEmbeddings(a, b, steps);
+            const indices = interps.map(v => nearestEmbeddingIndex(v));
+            trajectoryIndices = uniqueConsecutive(indices).filter(i => i >= 0);
+            if (trajectoryIndices.length === 0) { alert('Trajectory is empty.'); return; }
+            renderTrajectory();
+        }
+
+        function renderTrajectory() {
+            ensureTrajectoryGroup();
+            // Clear previous visuals
+            if (trajectoryLine) { trajectoryGroup.remove(trajectoryLine); trajectoryLine.geometry.dispose(); }
+            if (trajectoryPoints) { trajectoryGroup.remove(trajectoryPoints); trajectoryPoints.geometry.dispose(); }
+
+            const parsedCoords = parseFluCoMaData(coordinates);
+            const posList = [];
+            const nodePos = [];
+            for (let idx = 0; idx < trajectoryIndices.length; idx++) {
+                const i = trajectoryIndices[idx];
+                const v = parsedCoords[i]?.values || [0,0,0];
+                nodePos.push(v[0]||0, v[1]||0, v[2]||0);
+                if (idx > 0) {
+                    const prevIdx = trajectoryIndices[idx - 1];
+                    const pv = parsedCoords[prevIdx]?.values || [0,0,0];
+                    posList.push(pv[0]||0, pv[1]||0, pv[2]||0, v[0]||0, v[1]||0, v[2]||0);
+                }
+            }
+            // Line
+            const lineGeom = new THREE.BufferGeometry();
+            lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(posList), 3));
+            trajectoryLine = new THREE.LineSegments(
+                lineGeom,
+                new THREE.LineBasicMaterial({ color: 0x0066ff, transparent: true, opacity: 0.95, depthTest: false, linewidth: 40 })
+            );
+            trajectoryLine.renderOrder = 2;
+            trajectoryGroup.add(trajectoryLine);
+            // Nodes
+            // const nodeGeom = new THREE.BufferGeometry();
+            // nodeGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(nodePos), 3));
+            // const nodeMat = new THREE.PointsMaterial({ color: 0xffaa00, size: Math.max(defaultHighlightSize, (pointCloud?.material?.uniforms?.uSize?.value || defaultPointSize) * 1.2), sizeAttenuation: true, depthTest: false, transparent: true });
+            // trajectoryPoints = new THREE.Points(nodeGeom, nodeMat);
+            // trajectoryPoints.renderOrder = 3;
+            // trajectoryGroup.add(trajectoryPoints);
+        }
+
+        function clearTrajectory() {
+            trajectoryIndices = [];
+            if (trajectoryLine) { trajectoryGroup.remove(trajectoryLine); trajectoryLine.geometry.dispose(); trajectoryLine = null; }
+            if (trajectoryPoints) { trajectoryGroup.remove(trajectoryPoints); trajectoryPoints.geometry.dispose(); trajectoryPoints = null; }
+            stopTrajectoryPlayback();
+        }
+
+        function stopTrajectoryPlayback() {
+            if (trajectoryTimer) { clearInterval(trajectoryTimer); trajectoryTimer = null; }
+            isTrajectoryPlaying = false;
+            const btn = document.getElementById('play-trajectory');
+            if (btn) btn.textContent = 'Play';
+        }
+
+        function toggleTrajectoryPlayback() {
+            if (isTrajectoryPlaying) { stopTrajectoryPlayback(); return; }
+            if (!trajectoryIndices || trajectoryIndices.length === 0) { alert('Compute a trajectory first.'); return; }
+            const rate = parseFloat(document.getElementById('trajectory-rate').value) || 4; // notes per second
+            const intervalMs = Math.max(10, 1000 / rate);
+            let i = 0;
+            isTrajectoryPlaying = true;
+            const btn = document.getElementById('play-trajectory');
+            if (btn) btn.textContent = 'Stop';
+            // Immediate first note
+            selectPoint(trajectoryIndices[i]);
+            i++;
+            trajectoryTimer = setInterval(() => {
+                if (!isTrajectoryPlaying) return;
+                if (i >= trajectoryIndices.length) {
+                    stopTrajectoryPlayback();
+                    return;
+                }
+                selectPoint(trajectoryIndices[i]);
+                i++;
+            }, intervalMs);
         }
         
         function updateCropUniforms() {
