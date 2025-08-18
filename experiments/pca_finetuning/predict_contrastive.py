@@ -12,10 +12,12 @@ from tqdm import tqdm
 import umap
 import matplotlib.pyplot as plt
 from sonification.utils.array import array2fluid_dataset
+from sklearn.preprocessing import RobustScaler
+from sklearn.decomposition import PCA
 
 # %%
 ckpt_path = '../../ckpt/fm_embedder'
-ckpt_name = 'imv_v4.5'
+ckpt_name = 'imv_v4.9'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -113,17 +115,15 @@ print(z_mean.shape, z_std.shape, z_all_standardized.shape)
 
 # %%
 # robustscale embeddings
-from sklearn.preprocessing import RobustScaler
 
 scaler = RobustScaler()
-z_all_robustscaled = scaler.fit_transform(z_all_standardized.detach().cpu().numpy())
+z_all_robustscaled = scaler.fit_transform(z_all.detach().cpu().numpy())
 print(z_all_robustscaled.shape)
 
 # %%
 # create a PCA projection for z_all
-from sklearn.decomposition import PCA
 
-pca_dims = 16
+pca_dims = 6
 pca = PCA(n_components=pca_dims, whiten=True)
 z_all_pca = pca.fit_transform(z_all_robustscaled)
 # get the explained variance ratio
@@ -132,7 +132,7 @@ print(f"Explained variance ratio for PCA with {pca_dims} components: {explained_
 
 # %%
 # UMAP
-mode = 'pca'  # 'standardized', 'robustscaled', 'pca' or 'raw'
+mode = 'robustscaled'  # 'standardized', 'robustscaled', 'pca' or 'raw'
 if mode == 'standardized':
     Z = z_all_standardized.detach().cpu().numpy()
 elif mode == 'robustscaled':
@@ -150,8 +150,8 @@ else:
     idx = np.arange(n)
 
 n_components = 3  # 3 for 3D UMAP
-n_neighbors = 200
-min_dist = 0.1  # minimum distance between points in UMAP
+n_neighbors = 10
+min_dist = 0.2  # minimum distance between points in UMAP
 metric = 'euclidean'  # distance metric for UMAP
 emb = umap.UMAP(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, metric=metric).fit_transform(Z[idx])
 
