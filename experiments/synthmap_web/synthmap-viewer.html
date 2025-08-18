@@ -326,6 +326,13 @@
         <div class="control-group">
             <h3>Trajectory</h3>
             <div class="parameter-control">
+                <label>Trajectory Space:</label>
+                <select id="trajectory-space" style="flex:1; background:#1a1a1a; color:#e0e0e0; border:1px solid #444; border-radius:4px; padding:6px;">
+                    <option value="embedding" selected>Model Embeddings</option>
+                    <option value="fm">FM Parameters</option>
+                </select>
+            </div>
+            <div class="parameter-control">
                 <label>A (start): <span id="traj-a-label">None</span></label>
                 <button id="set-traj-a" class="button" style="padding:6px 10px;">Set A = Selected</button>
             </div>
@@ -453,6 +460,7 @@
     let isTrajectoryPlaying = false;
     let trajectoryTimer = null;
     let parsedEmbeddingsCache = null; // cached embedding vectors as arrays
+    let parsedFmParamsCache = null;   // cached fm parameter vectors as arrays
 
         // Data storage
         let coordinates = null;
@@ -1192,6 +1200,7 @@
             if (e.target.files.length > 0) {
                 try {
                     fmParams = await loadJSON(e.target.files[0]);
+                    parsedFmParamsCache = parseFluCoMaData(fmParams).map(e => e.values);
                     console.log('FM parameters loaded');
                 } catch (err) {
                     console.error('Error loading parameters:', err);
@@ -1297,6 +1306,13 @@
                     mat.needsUpdate = true;
                 }
             }
+            // keep trajectory node size halfway between point and highlight sizes
+            const hl = parseFloat(document.getElementById('highlight-size').value) || 0.4;
+            const midpoint = (size + hl) / 2;
+            if (trajectoryPointMaterial) {
+                trajectoryPointMaterial.size = midpoint;
+                trajectoryPointMaterial.needsUpdate = true;
+            }
         });
 
         document.getElementById('highlight-size').addEventListener('input', (e) => {
@@ -1307,9 +1323,11 @@
                 highlightMaterial.size = size;
                 highlightMaterial.needsUpdate = true;
             }
-            // update trajectory node size to match
+            // update trajectory node size to midpoint(pointSize, highlightSize)
+            const pt = parseFloat(document.getElementById('point-size').value) || 0.2;
+            const midpoint = (pt + size) / 2;
             if (trajectoryPointMaterial) {
-                trajectoryPointMaterial.size = size;
+                trajectoryPointMaterial.size = midpoint;
                 trajectoryPointMaterial.needsUpdate = true;
             }
         });
@@ -1451,6 +1469,11 @@
             return parsedEmbeddingsCache[index] || null;
         }
 
+        function getFmParamsVec(index) {
+            if (!parsedFmParamsCache) return null;
+            return parsedFmParamsCache[index] || null;
+        }
+
         function linearInterpolateEmbeddings(a, b, steps) {
             const res = [];
             if (!a || !b || steps < 2) return res;
@@ -1463,13 +1486,15 @@
             return res;
         }
 
-        function nearestEmbeddingIndex(vec) {
-            if (!parsedEmbeddingsCache) return -1;
+        function nearestIndexInSpace(vec, space) {
+            const cache = (space === 'fm') ? parsedFmParamsCache : parsedEmbeddingsCache;
+            if (!cache) return -1;
             let best = -1, bestDist = Infinity;
-            for (let i = 0; i < parsedEmbeddingsCache.length; i++) {
-                const e = parsedEmbeddingsCache[i];
+            for (let i = 0; i < cache.length; i++) {
+                const e = cache[i];
                 let s = 0;
-                for (let d = 0; d < vec.length; d++) {
+                const L = Math.min(vec.length, e.length);
+                for (let d = 0; d < L; d++) {
                     const diff = vec[d] - e[d];
                     s += diff * diff;
                 }
@@ -1488,20 +1513,20 @@
         }
 
         function computeAndRenderTrajectory() {
-            if (!coordinates || !embeddings) {
-                alert('Load coordinates and embeddings first.');
-                return;
-            }
+            const space = (document.getElementById('trajectory-space')?.value || 'embedding');
+            if (!coordinates) { alert('Load coordinates first.'); return; }
+            if (space === 'embedding' && !parsedEmbeddingsCache) { alert('Load embeddings first.'); return; }
+            if (space === 'fm' && !parsedFmParamsCache) { alert('Load FM parameters first.'); return; }
             if (trajA == null || trajB == null) {
                 alert('Set both A and B.');
                 return;
             }
             const steps = parseInt(document.getElementById('trajectory-steps').value, 10) || 30;
-            const a = getEmbeddingVec(trajA);
-            const b = getEmbeddingVec(trajB);
-            if (!a || !b) { alert('Missing embeddings for A or B.'); return; }
+            const a = space === 'fm' ? getFmParamsVec(trajA) : getEmbeddingVec(trajA);
+            const b = space === 'fm' ? getFmParamsVec(trajB) : getEmbeddingVec(trajB);
+            if (!a || !b) { alert('Missing vectors for A or B in selected space.'); return; }
             const interps = linearInterpolateEmbeddings(a, b, steps);
-            const indices = interps.map(v => nearestEmbeddingIndex(v));
+            const indices = interps.map(v => nearestIndexInSpace(v, space));
             trajectoryIndices = uniqueConsecutive(indices).filter(i => i >= 0);
             if (trajectoryIndices.length === 0) { alert('Trajectory is empty.'); return; }
             renderTrajectory();
@@ -1536,7 +1561,7 @@
             // Thick line rendered as cylinders between consecutive nodes
             const width = parseFloat(document.getElementById('trajectory-linewidth').value) || 0.12;
             trajectorySegmentsGroup = new THREE.Group();
-            const cylMat = new THREE.MeshBasicMaterial({ color: 0x0066ff, transparent: true, opacity: 0.95, depthTest: true });
+            const cylMat = new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.95, depthTest: true });
             for (let idx = 1; idx < trajectoryIndices.length; idx++) {
                 const a = parsedCoords[trajectoryIndices[idx - 1]]?.values || [0,0,0];
                 const b = parsedCoords[trajectoryIndices[idx]]?.values || [0,0,0];
@@ -1573,8 +1598,11 @@
                 nodeGeom.setAttribute('color', new THREE.BufferAttribute(nodeColors, 3));
 
                 // Reuse the same circular sprite texture as highlight
+                const pointSizeVal = parseFloat(document.getElementById('point-size').value) || defaultPointSize;
+                const highlightSizeVal = parseFloat(document.getElementById('highlight-size').value) || defaultHighlightSize;
+                const nodeSize = (pointSizeVal + highlightSizeVal) / 2;
                 trajectoryPointMaterial = new THREE.PointsMaterial({
-                    size: highlightMaterial?.size || defaultHighlightSize,
+                    size: nodeSize,
                     vertexColors: true,
                     sizeAttenuation: true,
                     map: highlightMaterial?.map || null,
