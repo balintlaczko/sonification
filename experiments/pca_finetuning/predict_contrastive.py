@@ -16,6 +16,7 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.decomposition import PCA
 
 # %%
+# grab checkpoint
 ckpt_path = '../../ckpt/fm_embedder'
 ckpt_name = 'imv_v4.9'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
