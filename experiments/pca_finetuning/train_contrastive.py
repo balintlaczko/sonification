@@ -27,10 +27,10 @@ def main():
     parser.add_argument("--max_mod_idx", type=int, default=14)
     parser.add_argument("--num_views", type=int, default=8)  # number of views for contrastive learning
     parser.add_argument("--apply_transposition", type=int, default=1)
-    parser.add_argument("--transposition_range", type=float, default=6.0)  # range for pitch transposition
+    parser.add_argument("--transposition_range", type=float, default=3.0)  # range for pitch transposition: 3 == -3 —> +3
     parser.add_argument("--noise_max_amp", type=float, default=0.01)  # max amplitude for noise augmentation
     # model params
-    parser.add_argument("--latent_size", type=int, default=16)
+    parser.add_argument("--latent_size", type=int, default=8)
     parser.add_argument("--center_momentum", type=float, default=0.9)
     parser.add_argument("--ema_decay_min", type=float, default=0.996)
     parser.add_argument("--ema_decay_max", type=float, default=0.999)
@@ -40,7 +40,7 @@ def main():
     parser.add_argument("--teacher_temperature_min", type=float, default=0.04)
     parser.add_argument("--teacher_temperature_max", type=float, default=0.07)
     parser.add_argument("--teacher_temperature_ramp_start_epoch", type=int, default=0)
-    parser.add_argument("--teacher_temperature_ramp_num_epochs", type=int, default=300)
+    parser.add_argument("--teacher_temperature_ramp_num_epochs", type=int, default=500)
     parser.add_argument("--encoder_channels", type=int, default=128)
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 5])
     parser.add_argument("--encoder_n_res_block", type=int, default=24)
@@ -54,9 +54,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_embedder")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v4.6")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v4.9")
     parser.add_argument("--logdir", type=str, default="./logs/fm_embedder")
-    parser.add_argument("--comment", type=str, default="transp 6 | dim 16 | teacher 0.04-0.07")
+    parser.add_argument("--comment", type=str, default="transp 3 | dim 8 | teacher 0.04-0.07")
     
     args = parser.parse_args()
 
