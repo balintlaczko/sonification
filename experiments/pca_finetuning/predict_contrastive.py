@@ -123,7 +123,7 @@ print(z_all_robustscaled.shape)
 # %%
 # create a PCA projection for z_all
 
-pca_dims = 6
+pca_dims = 7
 pca = PCA(n_components=pca_dims, whiten=True)
 z_all_pca = pca.fit_transform(z_all_robustscaled)
 # get the explained variance ratio
@@ -150,8 +150,8 @@ else:
     idx = np.arange(n)
 
 n_components = 3  # 3 for 3D UMAP
-n_neighbors = 10
-min_dist = 0.2  # minimum distance between points in UMAP
+n_neighbors = 5
+min_dist = 0.1  # minimum distance between points in UMAP
 metric = 'euclidean'  # distance metric for UMAP
 emb = umap.UMAP(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, metric=metric).fit_transform(Z[idx])
 
