@@ -1,24 +1,21 @@
 # %%
 # imports
 
-import argparse
 import os
 import torch
-import random
 import numpy as np
 import pandas as pd
-from lightning.pytorch import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import WandbLogger
 from sonification.models.models import PlFMFactorVAE
 from sonification.utils.misc import midi2frequency
 from sonification.utils.tensor import scale
-from torch.utils.data import DataLoader
 from tqdm import tqdm
+from pythonosc import dispatcher, osc_server, udp_client
+import nn_tilde
+from torchaudio.transforms import MelSpectrogram
 
 # %%
 ckpt_path = '../../ckpt/fm_vae'
-ckpt_name = 'imv_v3.2'
+ckpt_name = 'imv_v3.5'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -89,7 +86,7 @@ model.mel_spectrogram.to(device)  # move mel spectrogram to device
 
 # %%
 # iterate the dataframe in batches and synthesize
-batch_size = 32
+batch_size = 64
 n_batches = len(df) // batch_size + 1
 print(f"Number of batches: {n_batches}, batch size: {batch_size}")
 z_min_all = torch.ones(args.latent_size) * 1000
@@ -127,7 +124,6 @@ z_min_all, z_max_all
 
 # %%
 # set up an OSC server to receive latent codes from Max and send back the synth parameters
-from pythonosc import dispatcher, osc_server, udp_client
 
 client = udp_client.SimpleUDPClient("127.0.0.1", 12345)
 
@@ -197,8 +193,6 @@ def _midi2frequency(
 
 # %%
 # export as nn_tilde
-import nn_tilde
-from torchaudio.transforms import MelSpectrogram
 
 class ExportFMModelNNTilde(nn_tilde.Module):
     def __init__(self, fm_lightning_model):
