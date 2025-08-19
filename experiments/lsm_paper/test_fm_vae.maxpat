@@ -10,9 +10,23 @@
 		}
 ,
 		"classnamespace" : "box",
-		"rect" : [ 34.0, 100.0, 1660.0, 983.0 ],
+		"rect" : [ -66.0, -993.0, 1852.0, 959.0 ],
 		"gridsize" : [ 15.0, 15.0 ],
+		"assistshowspatchername" : 0,
+		"commentary" : "",
+		"showcommentary" : 0,
 		"boxes" : [ 			{
+				"box" : 				{
+					"id" : "obj-81",
+					"maxclass" : "comment",
+					"numinlets" : 1,
+					"numoutlets" : 0,
+					"patching_rect" : [ 851.0, 862.0, 55.0, 20.0 ],
+					"text" : "fm_vae3"
+				}
+
+			}
+, 			{
 				"box" : 				{
 					"id" : "obj-80",
 					"maxclass" : "message",
@@ -72,7 +86,6 @@
 			}
 , 			{
 				"box" : 				{
-					"basictuning" : 440,
 					"data" : 					{
 						"clips" : [ 							{
 								"absolutepath" : "32 bell church a.wav",
@@ -88,19 +101,14 @@
  ]
 					}
 ,
-					"followglobaltempo" : 0,
-					"formantcorrection" : 0,
 					"id" : "obj-78",
 					"maxclass" : "playlist~",
 					"mode" : "basic",
 					"numinlets" : 1,
 					"numoutlets" : 5,
-					"originallength" : [ 0.0, "ticks" ],
-					"originaltempo" : 120.0,
 					"outlettype" : [ "signal", "signal", "signal", "", "dictionary" ],
 					"parameter_enable" : 0,
 					"patching_rect" : [ 1447.0, 146.0, 150.0, 30.0 ],
-					"pitchcorrection" : 0,
 					"quality" : "basic",
 					"saved_attribute_attributes" : 					{
 						"candicane2" : 						{
@@ -132,8 +140,7 @@
 						}
 
 					}
-,
-					"timestretch" : [ 0 ]
+
 				}
 
 			}
@@ -393,17 +400,6 @@
 			}
 , 			{
 				"box" : 				{
-					"id" : "obj-60",
-					"maxclass" : "comment",
-					"numinlets" : 1,
-					"numoutlets" : 0,
-					"patching_rect" : [ 855.0, 904.0, 31.0, 20.0 ],
-					"text" : "v3.2"
-				}
-
-			}
-, 			{
-				"box" : 				{
 					"id" : "obj-53",
 					"maxclass" : "newobj",
 					"numinlets" : 1,
@@ -449,7 +445,7 @@
 					"outlettype" : [ "", "" ],
 					"parameter_enable" : 0,
 					"patching_rect" : [ 500.0, 994.0, 589.0, 207.0 ],
-					"setminmax" : [ -10.617448806762695, 4.323880672454834 ],
+					"setminmax" : [ -12.268400192260742, 4.946502685546875 ],
 					"setstyle" : 1,
 					"shadowalpha" : 1.0,
 					"signed" : 1,
@@ -601,7 +597,6 @@
 			}
 , 			{
 				"box" : 				{
-					"basictuning" : 440,
 					"data" : 					{
 						"clips" : [ 							{
 								"absolutepath" : "gbell.aif",
@@ -617,19 +612,14 @@
  ]
 					}
 ,
-					"followglobaltempo" : 0,
-					"formantcorrection" : 0,
 					"id" : "obj-54",
 					"maxclass" : "playlist~",
 					"mode" : "basic",
 					"numinlets" : 1,
 					"numoutlets" : 5,
-					"originallength" : [ 0.0, "ticks" ],
-					"originaltempo" : 120.0,
 					"outlettype" : [ "signal", "signal", "signal", "", "dictionary" ],
 					"parameter_enable" : 0,
 					"patching_rect" : [ 1599.0, 146.0, 150.0, 30.0 ],
-					"pitchcorrection" : 0,
 					"quality" : "basic",
 					"saved_attribute_attributes" : 					{
 						"candicane2" : 						{
@@ -661,8 +651,7 @@
 						}
 
 					}
-,
-					"timestretch" : [ 0 ]
+
 				}
 
 			}
