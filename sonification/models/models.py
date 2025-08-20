@@ -2252,8 +2252,12 @@ class PlFMFactorVAE(LightningModule):
         in_wf_slice = x.unsqueeze(1)
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf_slice.detach())
-        # normalize it
-        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # normalize per sample (and channel) over spatial dims (H, W)
+        reduce_dims = (2, 3)
+        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+        in_spec = (in_spec - mins) / den
         # encode with the VAE
         self.model.eval()
         mu_2, logvar_2 = self.model.encode(in_spec)
