@@ -1546,8 +1546,12 @@ class PlFMParamEstimator(LightningModule):
         # forward pass
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf_slice.detach())
-        # normalize it
-        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # normalize per sample (and channel) over spatial dims (H, W)
+        reduce_dims = (2, 3)
+        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+        in_spec = (in_spec - mins) / den
         # predict the params
         norm_predicted_params = self.model(in_spec)
         # scale the predicted params
@@ -2110,8 +2114,12 @@ class PlFMFactorVAE(LightningModule):
         in_wf = x.unsqueeze(1)
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf)
-        # normalize it
-        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # normalize per sample (and channel) over spatial dims (H, W)
+        reduce_dims = (2, 3)
+        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+        in_spec = (in_spec - mins) / den
         # predict the params
         norm_predicted_params, mu, logvar, z = self.model(in_spec)
         # scale the predicted params
@@ -2156,8 +2164,12 @@ class PlFMFactorVAE(LightningModule):
         # forward pass
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf_slice.detach())
-        # normalize it
-        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # normalize per sample (and channel) over spatial dims (H, W)
+        reduce_dims = (2, 3)
+        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+        in_spec = (in_spec - mins) / den
         # predict the params
         norm_predicted_params, mu, logvar, z = self.model(in_spec)
         # scale the predicted params
@@ -2768,8 +2780,12 @@ class PlFMEmbedder(LightningModule):
         in_wf = x.unsqueeze(1)
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf)
-        # normalize it
-        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        # normalize per sample (and channel) over spatial dims (H, W)
+        reduce_dims = (2, 3)
+        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+        in_spec = (in_spec - mins) / den
         # predict the embedding
         if self.training:
             # print("training, using the main model")
@@ -2837,8 +2853,12 @@ class PlFMEmbedder(LightningModule):
         # TEACHER
         # get the mel spectrograms
         in_spec_x = self.mel_spectrogram(x.unsqueeze(1).detach())
-        # normalize them
-        in_spec_x = scale(in_spec_x, in_spec_x.min(), in_spec_x.max(), 0, 1)
+        # normalize per sample (and channel) over spatial dims (H, W)
+        reduce_dims = (2, 3)
+        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+        in_spec = (in_spec - mins) / den
         # predict the embeddings
         teacher_x, _ = self.shadow(in_spec_x)  # teacher output
         teacher_x = teacher_x.detach()  # detach the teacher output to avoid gradients flowing back to the shadow model
