@@ -132,10 +132,11 @@ def square_over_bg_falloff(
     y: int,
     img_size: int = 64,
     square_size: int = 2,
-    falloff_mult: int = 0.1
+    falloff_mult: int = 0.1,
+    color: list = None,
 ) -> torch.Tensor:
     """
-    Create a binary image of a square over a black background with a falloff.
+    Create an image of a square over a black background with a falloff.
 
     Args:
         x (int): The x coordinate of the top-left corner of the square.
@@ -143,6 +144,7 @@ def square_over_bg_falloff(
         img_size (int, optional): The size of each side of the image. Defaults to 512.
         square_size (int, optional): The size of each side of the square. Defaults to 50.
         falloff_mult (int, optional): The falloff multiplier. Defaults to 0.5.
+        color (list, optional): A color vector to multiply the image with. If None, single-channel images are generated. Defaults to None.
 
     Returns:
         torch.Tensor: _description_
@@ -160,8 +162,11 @@ def square_over_bg_falloff(
     v_length = torch.norm(v_to_square, dim=0)
     falloff = 1 - torch.clip(scale(v_length, 0, img_size,
                              0, img_size, exp=falloff_mult) / img_size, 0, 1)
+    img = torch.clip(img + falloff, 0, 1)
+    if color != None:
+        img = img.unsqueeze(-1) * torch.tensor(color)
 
-    return torch.clip(img + falloff, 0, 1)
+    return img
 
 
 def matrix2binary(matrix: np.ndarray) -> np.ndarray:
