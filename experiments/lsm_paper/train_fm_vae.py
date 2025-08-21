@@ -97,11 +97,22 @@ def main():
     )
     if args.contrastive_regularization:
         # the triplet data for contrastive regularization
-        fm_triplet_dataset = FMTripletDataset(json_path=args.contrastive_dataset_path)
+        fm_triplet_dataset = FMTripletDataset(
+            json_path=args.contrastive_dataset_path,
+            sr=args.sr,
+            n_samples=args.n_samples,
+            n_fft=args.n_fft,
+            f_min=args.f_min,
+            f_max=args.f_max,
+            n_mels=args.n_mels,
+            power=args.power,
+            normalized=args.normalized > 0
+            )
         fm_triplet_dataloader = DataLoader(
             fm_triplet_dataset,
             batch_size=args.batch_size,
-            shuffle=True
+            shuffle=True,
+            num_workers=16,
         )
 
     # create model
