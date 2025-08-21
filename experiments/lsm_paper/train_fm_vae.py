@@ -100,7 +100,7 @@ def main():
         fm_triplet_dataset = FMTripletDataset(
             json_path=args.contrastive_dataset_path,
             sr=args.sr,
-            n_samples=args.n_samples,
+            n_samples=args.length_samps,
             n_fft=args.n_fft,
             f_min=args.f_min,
             f_max=args.f_max,
