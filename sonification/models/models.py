@@ -2029,6 +2029,11 @@ class PlFMFactorVAE(LightningModule):
         self.tc_weight_min = args.tc_weight_min
         self.tc_start_epoch = args.tc_start_epoch
         self.tc_warmup_epochs = args.tc_warmup_epochs
+        self.contrastive_regularization = args.contrastive_regularization > 0
+        self.contrastive_weight_max = args.contrastive_weight_max
+        self.contrastive_weight_min = args.contrastive_weight_min
+        self.contrastive_start_epoch = args.contrastive_start_epoch
+        self.contrastive_warmup_epochs = args.contrastive_warmup_epochs
 
         # learning rates
         self.lr_vae = args.lr_vae
@@ -2141,6 +2146,9 @@ class PlFMFactorVAE(LightningModule):
 
         # get the batch
         epoch_idx = self.trainer.current_epoch
+        triplet_batch = None
+        if self.contrastive_regularization:
+            _, triplet_batch = batch
 
         norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
         x = self.input_synth(freqs, ratios, indices).detach()
@@ -2178,7 +2186,6 @@ class PlFMFactorVAE(LightningModule):
         predicted_freqs = predicted_params[:, 0].unsqueeze(1).repeat(1, self.sr)
         predicted_ratios = predicted_params[:, 1].unsqueeze(1).repeat(1, self.sr)
         predicted_indices = predicted_params[:, 2].unsqueeze(1).repeat(1, self.sr)
-
         # generate the output
         y = self.output_synth(predicted_freqs, predicted_ratios, predicted_indices)
         out_wf = y.unsqueeze(1)
@@ -2220,8 +2227,24 @@ class PlFMFactorVAE(LightningModule):
             self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
         scaled_vae_tc_loss = vae_tc_loss * tc_scale
 
+        # VAE contrastive loss
+        triplet_loss, scaled_triplet_loss = 0, 0
+        if self.contrastive_regularization:
+            # get triplet data
+            anchor_spec, positive_spec, negative_spec = triplet_batch
+            # encode with the VAE
+            anchor_z = self.model.reparameterize(*self.model.encode(anchor_spec))
+            positive_z = self.model.reparameterize(*self.model.encode(positive_spec))
+            negative_z = self.model.reparameterize(*self.model.encode(negative_spec))
+            # calculate triplet loss
+            triplet_loss = F.triplet_margin_loss(anchor_z, positive_z, negative_z, margin=1.0, p=2)
+            triplet_loss_scale = (self.triplet_weight_max - self.triplet_weight_min) * \
+                min(1.0, (epoch_idx - self.triplet_start_epoch) /
+                    self.triplet_warmup_epochs) + self.triplet_weight_min if epoch_idx > self.triplet_start_epoch else self.triplet_weight_min
+            scaled_triplet_loss = triplet_loss * triplet_loss_scale
+
         # VAE loss
-        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
+        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss + scaled_triplet_loss
 
         # VAE backward pass
         vae_optimizer.zero_grad()
@@ -2291,12 +2314,14 @@ class PlFMFactorVAE(LightningModule):
             "vae_mss_loss": mss_loss,
             "vae_kld_loss": kld_loss,
             "vae_tc_loss": vae_tc_loss,
+            "vae_triplet_loss": triplet_loss,
             "d_tc_loss": d_tc_loss,
             "lr_vae": vae_scheduler.get_last_lr()[0],
             "lr_d": d_scheduler.get_last_lr()[0],
             "vae_param_loss_weight": self.param_loss_weight,
             "vae_kld_scale": kld_scale,
             "vae_tc_scale": tc_scale,
+            "vae_triplet_scale": triplet_loss_scale,
         },
         prog_bar=True)
 
