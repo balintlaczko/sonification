@@ -2238,9 +2238,9 @@ class PlFMFactorVAE(LightningModule):
             negative_z = self.model.reparameterize(*self.model.encode(negative_spec))
             # calculate triplet loss
             triplet_loss = F.triplet_margin_loss(anchor_z, positive_z, negative_z, margin=1.0, p=2)
-            triplet_loss_scale = (self.triplet_weight_max - self.triplet_weight_min) * \
-                min(1.0, (epoch_idx - self.triplet_start_epoch) /
-                    self.triplet_warmup_epochs) + self.triplet_weight_min if epoch_idx > self.triplet_start_epoch else self.triplet_weight_min
+            triplet_loss_scale = (self.contrastive_weight_max - self.contrastive_weight_min) * \
+                min(1.0, (epoch_idx - self.contrastive_start_epoch) /
+                    self.contrastive_warmup_epochs) + self.contrastive_weight_min if epoch_idx > self.contrastive_start_epoch else self.contrastive_weight_min
             scaled_triplet_loss = triplet_loss * triplet_loss_scale
 
         # VAE loss
