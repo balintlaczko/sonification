@@ -10,6 +10,7 @@ from sonification.models.models import PlFMFactorVAE
 from sonification.datasets import FMTripletDataset
 from torch.utils.data import DataLoader
 import wandb
+import torch.multiprocessing as mp
 
 def main():
     parser = argparse.ArgumentParser()
@@ -41,7 +42,7 @@ def main():
     parser.add_argument("--d_num_layers", type=int, default=5)
 
     # training params
-    parser.add_argument("--batch_size", type=int, default=512)
+    parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     # reconstruction loss params
     parser.add_argument("--param_loss_weight_start", type=int, default=150)
@@ -89,8 +90,6 @@ def main():
     print(f"Logging to {logdir}")
     args.logdir = logdir
 
-    # device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-
     # a dummy dataloader for the fm synth data
     dataloader = DataLoader(
         range(args.steps_per_epoch * args.batch_size),
@@ -109,13 +108,15 @@ def main():
             n_mels=args.n_mels,
             power=args.power,
             normalized=args.normalized > 0,
-            device='cpu' # needs to be cpu for subprocesses
+            device='cuda'
             )
         fm_triplet_dataloader = DataLoader(
             fm_triplet_dataset,
             batch_size=args.batch_size,
             shuffle=True,
-            num_workers=16,
+            num_workers=24,
+            persistent_workers=True,
+            pin_memory=True,
         )
 
     # create model
@@ -180,6 +181,7 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method('spawn', force=True)
     fix_seed = 2025
     random.seed(fix_seed)
     torch.manual_seed(fix_seed)
