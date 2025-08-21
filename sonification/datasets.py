@@ -432,9 +432,9 @@ class FMTripletDataset(Dataset):
 
     def _params_to_spec(self, params):
         # Convert parameter dict to a mel spectrogram tensor
-        freq = torch.tensor([params["carrier"]]).unsqueeze(1).repeat(1, self.n_samples)
-        harm_ratio = torch.tensor([params["harmRatio"]]).unsqueeze(1).repeat(1, self.n_samples)
-        mod_index = torch.tensor([params["modIndex"]]).unsqueeze(1).repeat(1, self.n_samples)
+        freq = torch.tensor([params["carrier"]]).unsqueeze(1).repeat(1, self.n_samples).to(self.device)
+        harm_ratio = torch.tensor([params["harmRatio"]]).unsqueeze(1).repeat(1, self.n_samples).to(self.device)
+        mod_index = torch.tensor([params["modIndex"]]).unsqueeze(1).repeat(1, self.n_samples).to(self.device)
 
         audio = self.fm_synth(freq, harm_ratio, mod_index).detach()
         mel_spec = self.mel_spectrogram(audio.unsqueeze(1))

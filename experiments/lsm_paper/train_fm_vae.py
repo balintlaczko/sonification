@@ -25,7 +25,7 @@ def main():
     parser.add_argument("--normalized", type=int, default=1)
     parser.add_argument("--max_harm_ratio", type=int, default=6)
     parser.add_argument("--max_mod_idx", type=int, default=6)
-    parser.add_argument("--contrastive_dataset_path", type=str, default=".data/fm_triplet/fm-synth-study-2025-08-20_15_46_36.json")
+    parser.add_argument("--contrastive_dataset_path", type=str, default="data/fm_triplet/fm-synth-study-2025-08-20_15_46_36.json")
 
     # model params
     parser.add_argument("--latent_size", type=int, default=16)
