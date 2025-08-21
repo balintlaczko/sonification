@@ -407,40 +407,21 @@ class FmSynthDataset(Dataset):
 
 
 class FMTripletDataset(Dataset):
-    def __init__(self, json_path, sr=48000, n_samples=8192, n_fft=4096, f_min=20, f_max=16000, n_mels=512, power=1, normalized=True, device='cpu'):
+    def __init__(self, json_path, sr=48000, n_samples=48000, device='cpu'):
         with open(json_path, 'r') as f:
             self.triplets = json.load(f)
 
         self.sr = sr
         self.n_samples = n_samples
         self.device = torch.device(device)
-        # self.fm_synth = FMSynth(sr=self.sr).to(self.device)
-        # self.mel_spectrogram = MelSpectrogram(
-        #     sample_rate=self.sr,
-        #     n_fft=n_fft,
-        #     n_mels=n_mels,
-        #     f_min=f_min,
-        #     f_max=f_max,
-        #     power=power,
-        #     normalized=normalized
-        # ).to(self.device)
-        # self.fm_synth.eval()
-        # self.mel_spectrogram.eval()
 
     def __len__(self):
         return self.triplets["totalTrials"]
 
-    def _params_to_sig(self, params):
-        # Convert parameter dict to a mel spectrogram tensor
-        freq = torch.tensor([params["carrier"]]).unsqueeze(1).repeat(1, self.n_samples).to(self.device)
-        harm_ratio = torch.tensor([params["harmRatio"]]).unsqueeze(1).repeat(1, self.n_samples).to(self.device)
-        mod_index = torch.tensor([params["modIndex"]]).unsqueeze(1).repeat(1, self.n_samples).to(self.device)
-
-        # audio = self.fm_synth(freq, harm_ratio, mod_index).detach()
-        # mel_spec = self.mel_spectrogram(audio.unsqueeze(1))
-        # # mel_spec = scale(mel_spec, mel_spec.min(), mel_spec.max(), 0, 1)
-        # mel_spec = (mel_spec - mel_spec.min()) / (mel_spec.max() - mel_spec.min()).clamp_min(torch.finfo(mel_spec.dtype).eps)
-        # return mel_spec.squeeze(0)
+    def _get_params(self, params):
+        freq = torch.tensor([params["carrier"]]).to(self.device)
+        harm_ratio = torch.tensor([params["harmRatio"]]).to(self.device)
+        mod_index = torch.tensor([params["modIndex"]]).to(self.device)
 
         # stack them
         stacked_params = torch.stack([freq, harm_ratio, mod_index], dim=0)
@@ -450,9 +431,9 @@ class FMTripletDataset(Dataset):
         triplet_data = self.triplets["data"][idx]
 
         # Synthesize spectrograms for A, B, and X
-        params_a = self._params_to_sig(triplet_data["A"])
-        params_b = self._params_to_sig(triplet_data["B"])
-        params_x = self._params_to_sig(triplet_data["X"])
+        params_a = self._get_params(triplet_data["A"])
+        params_b = self._get_params(triplet_data["B"])
+        params_x = self._get_params(triplet_data["X"])
 
         # The user chose whether X is closer to A or B.
         # This defines our Anchor, Positive, and Negative.

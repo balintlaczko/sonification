@@ -10,7 +10,6 @@ from sonification.models.models import PlFMFactorVAE
 from sonification.datasets import FMTripletDataset
 from torch.utils.data import DataLoader
 import wandb
-import torch.multiprocessing as mp
 
 def main():
     parser = argparse.ArgumentParser()
@@ -42,7 +41,7 @@ def main():
     parser.add_argument("--d_num_layers", type=int, default=5)
 
     # training params
-    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     # reconstruction loss params
     parser.add_argument("--param_loss_weight_start", type=int, default=150)
@@ -64,10 +63,10 @@ def main():
     parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
     # contrastive loss params
     parser.add_argument("--contrastive_regularization", type=int, default=1, help="Use contrastive regularization (default: 0 = no contrastive regularization)")
-    parser.add_argument("--contrastive_weight_max", type=float, default=0.1, help="Maximum weight for contrastive loss")
+    parser.add_argument("--contrastive_weight_max", type=float, default=1, help="Maximum weight for contrastive loss")
     parser.add_argument("--contrastive_weight_min", type=float, default=0.01, help="Minimum weight for contrastive loss")
-    parser.add_argument("--contrastive_start_epoch", type=int, default=0, help="The epoch at which to start the contrastive warmup from contrastive_weight_min to contrastive_weight_max")
-    parser.add_argument("--contrastive_warmup_epochs", type=int, default=100, help="The number of epochs to warmup the contrastive weight")
+    parser.add_argument("--contrastive_start_epoch", type=int, default=1000, help="The epoch at which to start the contrastive warmup from contrastive_weight_min to contrastive_weight_max")
+    parser.add_argument("--contrastive_warmup_epochs", type=int, default=3000, help="The number of epochs to warmup the contrastive weight")
     # optimizer params
     parser.add_argument("--lr_vae", type=float, default=0.001)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
@@ -100,14 +99,8 @@ def main():
         # the triplet data for contrastive regularization
         fm_triplet_dataset = FMTripletDataset(
             json_path=args.contrastive_dataset_path,
-            # sr=args.sr,
-            # n_samples=args.length_samps,
-            # n_fft=args.n_fft,
-            # f_min=args.f_min,
-            # f_max=args.f_max,
-            # n_mels=args.n_mels,
-            # power=args.power,
-            # normalized=args.normalized > 0,
+            sr=args.sr,
+            n_samples=args.sr, # generate a full second, later it will be cut to size via augmentation
             device='cpu'
             )
         fm_triplet_dataloader = DataLoader(
@@ -180,7 +173,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # mp.set_start_method('spawn', force=True)
     fix_seed = 2025
     random.seed(fix_seed)
     torch.manual_seed(fix_seed)

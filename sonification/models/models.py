@@ -2231,39 +2231,34 @@ class PlFMFactorVAE(LightningModule):
         triplet_loss, scaled_triplet_loss = 0, 0
         if self.contrastive_regularization:
             # get triplet data
-            anchor_params, positive_params, negative_params = triplet_batch
-            print(anchor_params.shape, positive_params.shape, negative_params.shape)
-
-            triplet_waveforms = [None, None, None]
-
+            anchor_params, positive_params, negative_params = triplet_batch # (B, 3, 1) (B, 3, 1) (B, 3, 1)
+            anchor_params = anchor_params.repeat(1, 1, self.sr) # (B, 3, ds_n_samps)
+            positive_params = positive_params.repeat(1, 1, self.sr)
+            negative_params = negative_params.repeat(1, 1, self.sr)
+            # create waveforms with the usual augmentations
+            triplet_specs = [None, None, None]
             for idx, params in enumerate([anchor_params, positive_params, negative_params]):
-                freqs, ratios, indices = params[:, 0], params[:, 1], params[:, 2]
-                print(freqs.shape, ratios.shape, indices.shape)
+                freqs, ratios, indices = params[:, 0], params[:, 1], params[:, 2] # (B, 1, ds_n_samps) (B, 1, ds_n_samps) (B, 1, ds_n_samps)
                 # generate the waveform
-                _x = self.input_synth(freqs, ratios, indices).detach()
-                print(_x.shape)
-
-            # x = self.input_synth(freqs, ratios, indices).detach()
-            # in_wf = x.unsqueeze(1)
-            # # select a random slice of self.n_samples
-            # start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
-            # x = x[:, start_idx:start_idx + self.n_samples]
-            # # add random phase flip
-            # phase_flip = torch.rand(self.batch_size, 1, device=self.device)
-            # phase_flip = torch.where(phase_flip > 0.5, 1, -1)
-            # x = x * phase_flip
-            # # add random noise
-            # noise = torch.randn_like(x, device=self.device)
-            # noise = (noise - noise.min()) / (noise.max() - noise.min())
-            # noise = noise * 2 - 1
-            # noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
-            # noise = noise * noise_coeff
-            # x = x + noise
-            # in_wf_slice = x.unsqueeze(1)
-
-
-
+                _x = self.input_synth(freqs, ratios, indices).detach() # (B, 1, ds_n_samps)
+                _x = _x.squeeze(1)  # remove the channel dimension
+                # select a random slice of self.n_samples
+                start_idx = torch.randint(0, _x.shape[-1] - self.n_samples, (1,))
+                _x = _x[:, start_idx:start_idx + self.n_samples]
+                # add random phase flip
+                phase_flip = torch.rand(self.batch_size, 1, device=self.device)
+                phase_flip = torch.where(phase_flip > 0.5, 1, -1)
+                _x = _x * phase_flip
+                # add random noise
+                noise = torch.randn_like(_x, device=self.device)
+                noise = (noise - noise.min()) / (noise.max() - noise.min())
+                noise = noise * 2 - 1
+                noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
+                noise = noise * noise_coeff
+                _x = _x + noise
+                triplet_specs[idx] = self.mel_spectrogram(_x.unsqueeze(1).detach())
             # encode with the VAE
+            anchor_spec, positive_spec, negative_spec = triplet_specs
             anchor_z = self.model.reparameterize(*self.model.encode(anchor_spec))
             positive_z = self.model.reparameterize(*self.model.encode(positive_spec))
             negative_z = self.model.reparameterize(*self.model.encode(negative_spec))
