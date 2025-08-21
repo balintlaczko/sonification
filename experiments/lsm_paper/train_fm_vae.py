@@ -62,11 +62,11 @@ def main():
     parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
     # contrastive loss params
-    parser.add_argument("--contrastive_regularization", type=int, default=0, help="Use contrastive regularization (default: 0 = no contrastive regularization)")
+    parser.add_argument("--contrastive_regularization", type=int, default=1, help="Use contrastive regularization (default: 0 = no contrastive regularization)")
     parser.add_argument("--contrastive_weight_max", type=float, default=0.1, help="Maximum weight for contrastive loss")
     parser.add_argument("--contrastive_weight_min", type=float, default=0.01, help="Minimum weight for contrastive loss")
     parser.add_argument("--contrastive_start_epoch", type=int, default=0, help="The epoch at which to start the contrastive warmup from contrastive_weight_min to contrastive_weight_max")
-    parser.add_argument("--contrastive_warmup_epochs", type=int, default=1, help="The number of epochs to warmup the contrastive weight")
+    parser.add_argument("--contrastive_warmup_epochs", type=int, default=100, help="The number of epochs to warmup the contrastive weight")
     # optimizer params
     parser.add_argument("--lr_vae", type=float, default=0.001)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
