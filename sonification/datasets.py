@@ -407,13 +407,13 @@ class FmSynthDataset(Dataset):
 
 
 class FMTripletDataset(Dataset):
-    def __init__(self, json_path, sr=48000, n_samples=8192, n_fft=4096, f_min=20, f_max=16000, n_mels=512, power=1, normalized=True):
+    def __init__(self, json_path, sr=48000, n_samples=8192, n_fft=4096, f_min=20, f_max=16000, n_mels=512, power=1, normalized=True, device='cpu'):
         with open(json_path, 'r') as f:
             self.triplets = json.load(f)
 
         self.sr = sr
         self.n_samples = n_samples
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+        self.device = torch.device(device)
         self.fm_synth = FMSynth(sr=self.sr).to(self.device)
         self.mel_spectrogram = MelSpectrogram(
             sample_rate=self.sr,

@@ -89,6 +89,8 @@ def main():
     print(f"Logging to {logdir}")
     args.logdir = logdir
 
+    # device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+
     # a dummy dataloader for the fm synth data
     dataloader = DataLoader(
         range(args.steps_per_epoch * args.batch_size),
@@ -106,7 +108,8 @@ def main():
             f_max=args.f_max,
             n_mels=args.n_mels,
             power=args.power,
-            normalized=args.normalized > 0
+            normalized=args.normalized > 0,
+            device='cpu' # needs to be cpu for subprocesses
             )
         fm_triplet_dataloader = DataLoader(
             fm_triplet_dataset,
