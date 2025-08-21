@@ -5,15 +5,14 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from .utils.matrix import square_over_bg, square_over_bg_falloff
-# , transposition2duration  # , fm_synth_2
 from .utils.dsp import midi2frequency, db2amp
 from .models.ddsp import Sinewave, FMSynth
 from torchaudio.transforms import MelSpectrogram
 from torchaudio.functional import amplitude_to_DB
 from sklearn.preprocessing import MinMaxScaler
-# import json
-# from tqdm import tqdm
-# from librosa import resample
+import json
+from .models.ddsp import FMSynth
+from .utils.tensor import midi2frequency
 
 
 class Amanis_RG_dataset(Dataset):
@@ -353,6 +352,7 @@ class Sinewave_dataset(Dataset):
             print("Transforming dataset with external scaler")
             print(self.flag)
             print(self.scaler)
+            self.scaler_fitted = False # TODO: ugly fix, please fix
             all_tensors = self.__getitem__(
                 np.arange(len(self.df)))  # (B, C=1, n_mels)
             all_tensors = all_tensors.squeeze(1).numpy()  # (B, n_mels)
@@ -362,6 +362,7 @@ class Sinewave_dataset(Dataset):
             self.scaler_fitted = True
             print("Scaler transformed")
         elif self.flag in ['train', 'all']:
+            self.scaler_fitted = False # TODO: ugly fix, please fix
             all_tensors = self.__getitem__(
                 np.arange(len(self.df)))  # (B, C=1, n_mels)
             all_tensors = all_tensors.squeeze(1).numpy()  # (B, n_mels)
@@ -403,3 +404,63 @@ class FmSynthDataset(Dataset):
                                mod_index_col_id].unsqueeze(-1).repeat(1, nsamps)
         fm_synth = self.synth(carr_freq, harm_ratio, mod_index)
         return fm_synth
+
+
+class FMTripletDataset(Dataset):
+    def __init__(self, json_path, sr=48000, n_samples=8192, n_fft=4096, f_min=20, f_max=16000, n_mels=512, power=1, normalized=True):
+        with open(json_path, 'r') as f:
+            self.triplets = json.load(f)
+
+        self.sr = sr
+        self.n_samples = n_samples
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+        self.fm_synth = FMSynth(sr=self.sr).to(self.device)
+        self.mel_spectrogram = MelSpectrogram(
+            sample_rate=self.sr,
+            n_fft=n_fft,
+            n_mels=n_mels,
+            f_min=f_min,
+            f_max=f_max,
+            power=power,
+            normalized=normalized
+        ).to(self.device)
+        self.fm_synth.eval()
+        self.mel_spectrogram.eval()
+
+    def __len__(self):
+        return self.triplets["totalTrials"]
+
+    def _params_to_spec(self, params):
+        # Convert parameter dict to a mel spectrogram tensor
+        freq = torch.tensor([params["carrier"]]).unsqueeze(1).repeat(1, self.n_samples)
+        harm_ratio = torch.tensor([params["harmRatio"]]).unsqueeze(1).repeat(1, self.n_samples)
+        mod_index = torch.tensor([params["modIndex"]]).unsqueeze(1).repeat(1, self.n_samples)
+
+        audio = self.fm_synth(freq, harm_ratio, mod_index).detach()
+        mel_spec = self.mel_spectrogram(audio.unsqueeze(1))
+        # mel_spec = scale(mel_spec, mel_spec.min(), mel_spec.max(), 0, 1)
+        mel_spec = (mel_spec - mel_spec.min()) / (mel_spec.max() - mel_spec.min()).clamp_min(torch.finfo(mel_spec.dtype).eps)
+        return mel_spec.squeeze(0)
+
+    def __getitem__(self, idx):
+        triplet_data = self.triplets["data"][idx]
+
+        # Synthesize spectrograms for A, B, and X
+        spec_a = self._params_to_spec(triplet_data["A"])
+        spec_b = self._params_to_spec(triplet_data["B"])
+        spec_x = self._params_to_spec(triplet_data["X"])
+
+        # The user chose whether X is closer to A or B.
+        # This defines our Anchor, Positive, and Negative.
+        if triplet_data["choice"] == "A":
+            # Anchor is X, Positive is A, Negative is B
+            anchor = spec_x
+            positive = spec_a
+            negative = spec_b
+        else: # choice == "B"
+            # Anchor is X, Positive is B, Negative is A
+            anchor = spec_x
+            positive = spec_b
+            negative = spec_a
+
+        return anchor, positive, negative
