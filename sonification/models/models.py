@@ -2000,7 +2000,9 @@ class PlFMFactorVAE(LightningModule):
         self.n_samples = args.length_samps
         self.n_fft = args.n_fft
         self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
+        self.min_harm_ratio = args.min_harm_ratio
         self.max_harm_ratio = args.max_harm_ratio
+        self.min_mod_idx = args.min_mod_idx
         self.max_mod_idx = args.max_mod_idx
         self.latent_size = args.latent_size
         self.logdir = args.logdir
@@ -2082,10 +2084,10 @@ class PlFMFactorVAE(LightningModule):
         pitches = scale(pitches_norm, 0, 1, 38, 86)
         freqs = midi2frequency(pitches)
         ratios_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
-        ratios = ratios_norm * self.max_harm_ratio
+        ratios = scale(ratios_norm, 0, 1, self.min_harm_ratio, self.max_harm_ratio)
         ratios = torch.clip(ratios, 0.1, self.max_harm_ratio) # avoid zero ratios
         indices_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
-        indices = indices_norm * self.max_mod_idx
+        indices = scale(indices_norm, 0, 1, self.min_mod_idx, self.max_mod_idx)
         indices = torch.clip(indices, 0.1, self.max_mod_idx) # avoid zero indices
         # stack norm params together
         norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1)
@@ -2108,8 +2110,8 @@ class PlFMFactorVAE(LightningModule):
         # scale to the correct range
         pitches = scale(pitches, 0, 1, 38, 86)
         freqs = midi2frequency(pitches)
-        ratios = scale(ratios, 0, 1, 0, self.max_harm_ratio)
-        indices = scale(indices, 0, 1, 0, self.max_mod_idx)
+        ratios = scale(ratios, 0, 1, self.min_harm_ratio, self.max_harm_ratio)
+        indices = scale(indices, 0, 1, self.min_mod_idx, self.max_mod_idx)
         # re-stack them
         out = torch.cat([freqs.unsqueeze(1), ratios.unsqueeze(1), indices.unsqueeze(1)], dim=1)
         return out
@@ -2119,12 +2121,14 @@ class PlFMFactorVAE(LightningModule):
         in_wf = x.unsqueeze(1)
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf)
-        # normalize per sample (and channel) over spatial dims (H, W)
-        reduce_dims = (2, 3)
-        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
-        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
-        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
-        in_spec = (in_spec - mins) / den
+        # # normalize per sample (and channel) over spatial dims (H, W)
+        # reduce_dims = (2, 3)
+        # mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+        # maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+        # den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+        # in_spec = (in_spec - mins) / den
+        # normalize it
+        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         # predict the params
         norm_predicted_params, mu, logvar, z = self.model(in_spec)
         # scale the predicted params
@@ -2172,12 +2176,14 @@ class PlFMFactorVAE(LightningModule):
         # forward pass
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf_slice.detach())
-        # normalize per sample (and channel) over spatial dims (H, W)
-        reduce_dims = (2, 3)
-        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
-        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
-        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
-        in_spec = (in_spec - mins) / den
+        # # normalize per sample (and channel) over spatial dims (H, W)
+        # reduce_dims = (2, 3)
+        # mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+        # maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+        # den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+        # in_spec = (in_spec - mins) / den
+        # normalize it
+        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         # predict the params
         norm_predicted_params, mu, logvar, z = self.model(in_spec)
         # scale the predicted params
@@ -2228,7 +2234,7 @@ class PlFMFactorVAE(LightningModule):
         scaled_vae_tc_loss = vae_tc_loss * tc_scale
 
         # VAE contrastive loss
-        triplet_loss, scaled_triplet_loss = 0, 0
+        triplet_loss, scaled_triplet_loss, triplet_loss_scale = 0, 0, 0
         if self.contrastive_regularization:
             # get triplet data
             anchor_params, positive_params, negative_params = triplet_batch # (B, 3, 1) (B, 3, 1) (B, 3, 1)
@@ -2256,7 +2262,10 @@ class PlFMFactorVAE(LightningModule):
                 noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
                 noise = noise * noise_coeff
                 _x = _x + noise
-                triplet_specs[idx] = self.mel_spectrogram(_x.unsqueeze(1).detach())
+                spectrogram = self.mel_spectrogram(_x.unsqueeze(1).detach())
+                # normalize it
+                spectrogram = scale(spectrogram, spectrogram.min(), spectrogram.max(), 0, 1)
+                triplet_specs[idx] = spectrogram
             # encode with the VAE
             anchor_spec, positive_spec, negative_spec = triplet_specs
             anchor_z = self.model.reparameterize(*self.model.encode(anchor_spec))
@@ -2301,12 +2310,14 @@ class PlFMFactorVAE(LightningModule):
         in_wf_slice = x.unsqueeze(1)
         # get the mel spectrogram
         in_spec = self.mel_spectrogram(in_wf_slice.detach())
-        # normalize per sample (and channel) over spatial dims (H, W)
-        reduce_dims = (2, 3)
-        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
-        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
-        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
-        in_spec = (in_spec - mins) / den
+        # # normalize per sample (and channel) over spatial dims (H, W)
+        # reduce_dims = (2, 3)
+        # mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+        # maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+        # den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+        # in_spec = (in_spec - mins) / den
+        # normalize it
+        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         # encode with the VAE
         self.model.eval()
         mu_2, logvar_2 = self.model.encode(in_spec)

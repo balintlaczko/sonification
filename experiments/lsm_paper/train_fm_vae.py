@@ -23,8 +23,10 @@ def main():
     parser.add_argument("--n_mels", type=int, default=512)
     parser.add_argument("--power", type=float, default=1)
     parser.add_argument("--normalized", type=int, default=1)
-    parser.add_argument("--max_harm_ratio", type=int, default=6)
-    parser.add_argument("--max_mod_idx", type=int, default=6)
+    parser.add_argument("--min_harm_ratio", type=float, default=0.1)
+    parser.add_argument("--max_harm_ratio", type=float, default=10)
+    parser.add_argument("--min_mod_idx", type=float, default=0.1)
+    parser.add_argument("--max_mod_idx", type=float, default=10)
     parser.add_argument("--contrastive_dataset_path", type=str, default="data/fm_triplet/fm-synth-study-2025-08-20_15_46_36.json")
 
     # model params
@@ -44,42 +46,42 @@ def main():
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     # reconstruction loss params
-    parser.add_argument("--param_loss_weight_start", type=int, default=150)
-    parser.add_argument("--param_loss_weight_end", type=int, default=150)
+    parser.add_argument("--param_loss_weight_start", type=int, default=50)
+    parser.add_argument("--param_loss_weight_end", type=int, default=50)
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
-    parser.add_argument("--recon_weight", type=int, default=1)
+    parser.add_argument("--recon_weight", type=int, default=10)
     parser.add_argument('--target_recon_loss', type=float, default=0.01, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float, default=1, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.1, help='kld weight at the start of the warmup')
+    parser.add_argument('--kld_weight_min', type=float, default=0.01, help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=1000, help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=10000, help='the number of epochs to warmup the kld weight')
     # tc loss params
-    parser.add_argument('--tc_weight_max', type=float, default=10, help='tc weight at the end of the warmup')
-    parser.add_argument('--tc_weight_min', type=float, default=0, help='tc weight at the start of the warmup')
-    parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
+    parser.add_argument('--tc_weight_max', type=float, default=6, help='tc weight at the end of the warmup')
+    parser.add_argument('--tc_weight_min', type=float, default=0.01, help='tc weight at the start of the warmup')
+    parser.add_argument('--tc_start_epoch', type=int, default=1000, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
+    parser.add_argument('--tc_warmup_epochs', type=int, default=1000, help='the number of epochs to warmup the tc weight')
     # contrastive loss params
     parser.add_argument("--contrastive_regularization", type=int, default=1, help="Use contrastive regularization (default: 0 = no contrastive regularization)")
     parser.add_argument("--contrastive_weight_max", type=float, default=1, help="Maximum weight for contrastive loss")
     parser.add_argument("--contrastive_weight_min", type=float, default=0.01, help="Minimum weight for contrastive loss")
     parser.add_argument("--contrastive_start_epoch", type=int, default=1000, help="The epoch at which to start the contrastive warmup from contrastive_weight_min to contrastive_weight_max")
-    parser.add_argument("--contrastive_warmup_epochs", type=int, default=3000, help="The number of epochs to warmup the contrastive weight")
+    parser.add_argument("--contrastive_warmup_epochs", type=int, default=1000, help="The number of epochs to warmup the contrastive weight")
     # optimizer params
-    parser.add_argument("--lr_vae", type=float, default=0.001)
+    parser.add_argument("--lr_vae", type=float, default=0.0001)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
-    parser.add_argument("--lr_d", type=float, default=0.0001)
+    parser.add_argument("--lr_d", type=float, default=0.00001)
     parser.add_argument("--lr_decay_d", type=float, default=0.75)
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v4")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v4.8")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="like v3.2 but with contrastive regularization")
-    
+    parser.add_argument("--comment", type=str, default="define min synth param ranges, harm/mod up to 10, stronger contrastive weight, less param loss weight, more mss, no tc at start")
+
     args = parser.parse_args()
 
     # change relative path to absolute path
@@ -95,7 +97,8 @@ def main():
         batch_size=args.batch_size,
         shuffle=True
     )
-    if args.contrastive_regularization:
+    fm_triplet_dataloader = None
+    if args.contrastive_regularization > 0:
         # the triplet data for contrastive regularization
         fm_triplet_dataset = FMTripletDataset(
             json_path=args.contrastive_dataset_path,
