@@ -323,6 +323,22 @@
             border-radius: 4px;
             text-align: center;
         }
+        .global-data-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 10px 20px 5px;
+            margin: -10px 0 20px; /* tighten spacing under title */
+            background: #fafafa;
+        }
+        .global-data-section .stats { /* compact stats inside header */
+            margin: 0;
+            padding: 10px 15px;
+        }
         
         .tab-container {
             display: flex;
@@ -467,6 +483,20 @@
 <body>
     <div class="container">
         <h1>FM Synth Perceptual Similarity Study</h1>
+        <!-- Global data controls moved from Visualization tab -->
+        <div class="global-data-section">
+            <div class="stats">
+                <strong>Data points:</strong> <span id="data-count">0</span> |
+                <strong>Unique sounds:</strong> <span id="unique-sounds">0</span>
+            </div>
+            <div class="button-group" style="margin:0;">
+                <button onclick="exportData()" class="secondary-btn">Export Data</button>
+                <button onclick="importData()" class="secondary-btn">Import Data</button>
+                <button onclick="showDataInConsole()" class="secondary-btn">View in Console</button>
+                <button onclick="clearAllData()" class="secondary-btn danger-btn">Clear All Data</button>
+                <input type="file" id="file-input" style="display:none;" accept=".json">
+            </div>
+        </div>
         
         <div class="tab-container">
             <div class="tab active" onclick="switchTab('test')">Test FM Synth</div>
@@ -538,32 +568,17 @@
             <div class="choice-buttons">
                 <button class="choice-btn" onclick="recordChoice('A')">More like A</button>
                 <button class="choice-btn" onclick="recordChoice('B')">More like B</button>
-                <button class="choice-btn secondary-btn" onclick="generateNewTriplet()" style="background-color: #666;">Can't decide</button>
                 <button class="choice-btn" onclick="recordABSimilarity()" style="background-color: #9C27B0;">A and B are more similar</button>
+                <button class="choice-btn secondary-btn" onclick="generateNewTriplet()" style="background-color: #666;">Can't decide</button>
             </div>
             
-            <div class="button-group">
-                <button onclick="generateNewTriplet()" class="secondary-btn">New Triplet</button>
-                <button onclick="playAllSounds()" class="secondary-btn">Play All (A→B→X)</button>
-            </div>
         </div>
         
         <!-- Visualization Tab -->
         <div id="visualization-tab" class="tab-content">
             <h2>Timbre Space Visualization</h2>
-            
-            <div class="stats">
-                <strong>Data points:</strong> <span id="data-count">0</span> | 
-                <strong>Unique sounds:</strong> <span id="unique-sounds">0</span>
-            </div>
-            
             <div class="button-group">
                 <button onclick="updateVisualization()">Update Visualization</button>
-                <button onclick="exportData()" class="secondary-btn">Export Data</button>
-                <button onclick="importData()" class="secondary-btn">Import Data</button>
-                <button onclick="showDataInConsole()" class="secondary-btn">View in Console</button>
-                <button onclick="clearAllData()" class="secondary-btn danger-btn">Clear All Data</button>
-                <input type="file" id="file-input" style="display: none;" accept=".json">
             </div>
             
             <div class="assignment-cards-container">
@@ -862,16 +877,6 @@
                 card.classList.remove('active');
             });
             document.getElementById(`sound-${sound.toLowerCase()}`).classList.add('active');
-        }
-        
-        function playAllSounds() {
-            if (!currentTriplet) {
-                generateNewTriplet();
-            }
-            
-            playTripletSound('A');
-            setTimeout(() => playTripletSound('B'), 700);
-            setTimeout(() => playTripletSound('X'), 1400);
         }
         
         function recordChoice(choice) {
@@ -1973,10 +1978,10 @@
             });
             document.getElementById(`${tabName}-tab`).classList.add('active');
             
-            // Update visualization if switching to that tab
-            if (tabName === 'visualization') {
-                updateVisualization();
-            }
+            // // Update visualization if switching to that tab
+            // if (tabName === 'visualization') {
+            //     updateVisualization();
+            // }
         }
         
         // Data management
@@ -2217,12 +2222,55 @@
             const reader = new FileReader();
             reader.onload = function(event) {
                 try {
-                    const importedData = JSON.parse(event.target.result);
-                    studyData = [...studyData, ...importedData];
+                    const raw = JSON.parse(event.target.result);
+                    // Support the exported format (object with data array) and legacy plain array
+                    let newTrials;
+                    if (Array.isArray(raw)) {
+                        newTrials = raw;
+                    } else if (raw && Array.isArray(raw.data)) {
+                        newTrials = raw.data;
+                    } else {
+                        throw new Error('Unrecognized JSON format: expected an array or an object with a data[] property');
+                    }
+
+                    // Optional: de-duplicate by timestamp + choice + A/B/X params signature
+                    const existingKeys = new Set(
+                        studyData.map(t => {
+                            const keyParts = ['A','B','X'].map(k => t[k] ? `${t[k].carrier}|${t[k].harmRatio}|${t[k].modIndex}` : '');
+                            return `${t.timestamp||''}|${t.choice||''}|${keyParts.join('||')}`;
+                        })
+                    );
+                    const filteredNew = newTrials.filter(t => {
+                        if (!t || !t.A || !t.B || !t.X) return false; // basic validation
+                        const keyParts = ['A','B','X'].map(k => t[k] ? `${t[k].carrier}|${t[k].harmRatio}|${t[k].modIndex}` : '');
+                        const key = `${t.timestamp||''}|${t.choice||''}|${keyParts.join('||')}`;
+                        if (existingKeys.has(key)) return false;
+                        existingKeys.add(key);
+                        return true;
+                    });
+
+                    const beforeCount = studyData.length;
+                    studyData = studyData.concat(filteredNew);
                     localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
-                    
-                    document.getElementById('trial-count').textContent = studyData.length;
-                    alert(`Imported ${importedData.length} trials successfully!`);
+
+                    // Update counts in UI if elements exist
+                    const trialCountEl = document.getElementById('trial-count');
+                    if (trialCountEl) trialCountEl.textContent = studyData.length;
+                    const dataCountEl = document.getElementById('data-count');
+                    if (dataCountEl) dataCountEl.textContent = studyData.length;
+                    const uniqueSoundsEl = document.getElementById('unique-sounds');
+                    if (uniqueSoundsEl) {
+                        const soundSet = new Set();
+                        studyData.forEach(tr => ['A','B','X'].forEach(role => {
+                            if (tr[role]) {
+                                soundSet.add(`${tr[role].carrier}|${tr[role].harmRatio}|${tr[role].modIndex}`);
+                            }
+                        }));
+                        uniqueSoundsEl.textContent = soundSet.size;
+                    }
+
+                    const importedCount = filteredNew.length;
+                    alert(`Imported ${importedCount} new trials successfully (ignored ${newTrials.length - importedCount} duplicates). Total now: ${studyData.length}`);
                 } catch (err) {
                     alert('Error importing data: ' + err.message);
                 }
@@ -2461,7 +2509,7 @@
             if (tabName === 'visualization') {
                 setTimeout(() => {
                     resizeCanvas();
-                    updateVisualization();
+                    // updateVisualization();
                 }, 10);
             }
         }
