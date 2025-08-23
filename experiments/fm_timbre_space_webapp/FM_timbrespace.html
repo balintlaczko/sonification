@@ -577,6 +577,41 @@
             <div class="button-group">
                 <button onclick="updateVisualization()">Update Visualization</button>
             </div>
+            <!-- Visualization Method Controls (inlined from previous dynamic insertion) -->
+            <div class="control-group" style="margin: 20px 0;">
+                <label for="viz-method">Visualization Method:</label>
+                <select id="viz-method" onchange="updateVisualizationMethod()">
+                    <option value="mds">Classical MDS</option>
+                    <option value="force">Force-Directed</option>
+                    <option value="hybrid">Hybrid MDS+Force</option>
+                </select>
+                <span id="viz-info" style="margin-left: 10px; color: #666; font-size: 12px;"></span>
+            </div>
+
+            <div id="force-params" class="control-group" style="margin: 20px 0; display: none;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 400px;">
+                    <div>
+                        <label for="force-iterations">Iterations:</label>
+                        <input type="number" id="force-iterations" min="100" max="2000" value="500" step="100"
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">100-2000</div>
+                    </div>
+                    <div>
+                        <label for="force-learning-rate">Learning Rate:</label>
+                        <input type="number" id="force-learning-rate" min="0.01" max="0.5" value="0.1" step="0.01"
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">0.01-0.5</div>
+                    </div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <label for="force-initialization">Starting Positions:</label>
+                    <select id="force-initialization" style="width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-left: 10px;">
+                        <option value="mds">Initialize with MDS</option>
+                        <option value="current">Use Current Positions</option>
+                    </select>
+                    <div style="font-size: 12px; color: #666; margin-top: 4px;">Choose starting positions for force-directed layout</div>
+                </div>
+            </div>
             
             <div class="assignment-cards-container">
                 <div class="assignment-card" id="assignment-card-a">
@@ -1192,82 +1227,7 @@
             return combined;
         }
 
-        // Add UI controls for visualization method
-        function addVisualizationControls() {
-            const controls = document.createElement('div');
-            
-            controls.innerHTML = `
-                <div class="control-group" style="margin: 20px 0;">
-                    <label for="viz-method">Visualization Method:</label>
-                    <select id="viz-method" onchange="updateVisualizationMethod()">
-                        <option value="mds">Classical MDS</option>
-                        <option value="force">Force-Directed</option>
-                        <option value="hybrid">Hybrid MDS+Force</option>
-                    </select>
-                    <span id="viz-info" style="margin-left: 10px; color: #666; font-size: 12px;"></span>
-                </div>
-                
-                <div id="force-params" class="control-group" style="margin: 20px 0; display: none;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 400px;">
-                        <div>
-                            <label for="force-iterations">Iterations:</label>
-                            <input type="number" id="force-iterations" min="100" max="2000" value="500" step="100" 
-                                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                            <div style="font-size: 12px; color: #666; margin-top: 4px;">100-2000</div>
-                        </div>
-                        <div>
-                            <label for="force-learning-rate">Learning Rate:</label>
-                            <input type="number" id="force-learning-rate" min="0.01" max="0.5" value="0.1" step="0.01" 
-                                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                            <div style="font-size: 12px; color: #666; margin-top: 4px;">0.01-0.5</div>
-                        </div>
-                    </div>
-                    <div style="margin-top: 15px;">
-                        <label for="force-initialization">Starting Positions:</label>
-                        <select id="force-initialization" style="width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-left: 10px;">
-                            <option value="mds">Initialize with MDS</option>
-                            <option value="current">Use Current Positions</option>
-                        </select>
-                        <div style="font-size: 12px; color: #666; margin-top: 4px;">Choose starting positions for force-directed layout</div>
-                    </div>
-                </div>
-            `;
-            
-            // Insert after the button group in visualization tab
-            const vizTab = document.getElementById('visualization-tab');
-            const buttonGroup = vizTab.querySelector('.button-group');
-            buttonGroup.insertAdjacentElement('afterend', controls);
-            
-            // Add event listeners for force-directed parameters
-            const iterationsInput = document.getElementById('force-iterations');
-            const learningRateInput = document.getElementById('force-learning-rate');
-            const initializationSelect = document.getElementById('force-initialization');
-            
-            if (iterationsInput) {
-                iterationsInput.addEventListener('change', () => {
-                    if (document.getElementById('viz-method').value === 'force') {
-                        updateVisualization();
-                    }
-                });
-            }
-            
-            if (learningRateInput) {
-                learningRateInput.addEventListener('change', () => {
-                    if (document.getElementById('viz-method').value === 'force') {
-                        updateVisualization();
-                    }
-                });
-            }
-            
-            if (initializationSelect) {
-                initializationSelect.addEventListener('change', () => {
-                    if (document.getElementById('viz-method').value === 'force') {
-                        updateVisualization();
-                    }
-                });
-            }
-        }
-        addVisualizationControls();
+    // Visualization controls are now static in HTML (previously injected dynamically)
         // Update visualization method based on selection
         function updateVisualizationMethod() {
             const method = document.getElementById('viz-method').value;
@@ -1317,7 +1277,7 @@
             }
             
             info.style.color = '#666';
-            updateVisualization();
+            // updateVisualization();
         }
 
         // Visualization functions
@@ -1891,6 +1851,24 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize assignment display
             updateAssignmentDisplay();
+
+            // Hook up visualization control listeners (moved from dynamic insertion)
+            const iterationsInput = document.getElementById('force-iterations');
+            const learningRateInput = document.getElementById('force-learning-rate');
+            const initializationSelect = document.getElementById('force-initialization');
+            [iterationsInput, learningRateInput, initializationSelect].forEach(el => {
+                if (!el) return;
+                el.addEventListener('change', () => {
+                    const methodSel = document.getElementById('viz-method');
+                    if (methodSel && methodSel.value === 'force') {
+                        // updateVisualization();
+                    }
+                });
+            });
+            // Initialize method info text
+            if (document.getElementById('viz-method')) {
+                updateVisualizationMethod();
+            }
             
             const canvas = document.getElementById('scatter-plot');
             const tooltip = document.getElementById('tooltip');
