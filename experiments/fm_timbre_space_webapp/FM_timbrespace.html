@@ -574,10 +574,8 @@
         <!-- Visualization Tab -->
         <div id="visualization-tab" class="tab-content">
             <h2>Timbre Space Visualization</h2>
-            <div class="button-group">
-                <button onclick="updateVisualization()">Update Visualization</button>
-            </div>
-            <!-- Visualization Method Controls (inlined from previous dynamic insertion) -->
+
+        <div style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap;">
             <div class="control-group" style="margin: 20px 0;">
                 <label for="viz-method">Visualization Method:</label>
                 <select id="viz-method" onchange="updateVisualizationMethod()">
@@ -585,8 +583,13 @@
                     <option value="force">Force-Directed</option>
                     <option value="hybrid">Hybrid MDS+Force</option>
                 </select>
-                <span id="viz-info" style="margin-left: 10px; color: #666; font-size: 12px;"></span>
+                <span id="viz-info" style="color: #666; font-size: 12px;"></span>
             </div>
+            <div class="button-group">
+                <button onclick="updateVisualization()">Update Visualization</button>
+            </div>
+        </div>
+
 
             <div id="force-params" class="control-group" style="margin: 20px 0; display: none;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 400px;">
