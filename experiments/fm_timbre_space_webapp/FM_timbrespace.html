@@ -637,7 +637,26 @@
         let assignedPoints = { A: null, B: null, X: null }; // Track assigned points
         let currentLayout = null; // Store current layout positions for force-directed continuation
         let currentSoundSet = []; // Track current sound set to detect changes
-        
+
+        // Helper: stable key for a sound using rounding to collapse near-identical FP values
+        function soundKey(p) {
+            if (!p) return '';
+            const round = v => Number(v).toFixed(3); // precision can be tuned
+            return `${round(p.carrier)}|${round(p.harmRatio)}|${round(p.modIndex)}`;
+        }
+
+        function updateUniqueSoundsCount() {
+            const el = document.getElementById('unique-sounds');
+            if (!el) return;
+            const set = new Set();
+            studyData.forEach(tr => {
+                ['A','B','X'].forEach(role => {
+                    if (tr && tr[role]) set.add(soundKey(tr[role]));
+                });
+            });
+            el.textContent = set.size;
+        }
+
         // Initialize audio context
         function initAudio() {
             if (!audioContext) {
@@ -1901,6 +1920,7 @@
                         
                         // Keep tooltip within viewport
                         if (finalX < 5) finalX = 5;
+
                         if (finalX + tooltipRect.width > window.innerWidth - 5) {
                             finalX = window.innerWidth - tooltipRect.width - 5;
                         }
@@ -2258,16 +2278,7 @@
                     if (trialCountEl) trialCountEl.textContent = studyData.length;
                     const dataCountEl = document.getElementById('data-count');
                     if (dataCountEl) dataCountEl.textContent = studyData.length;
-                    const uniqueSoundsEl = document.getElementById('unique-sounds');
-                    if (uniqueSoundsEl) {
-                        const soundSet = new Set();
-                        studyData.forEach(tr => ['A','B','X'].forEach(role => {
-                            if (tr[role]) {
-                                soundSet.add(`${tr[role].carrier}|${tr[role].harmRatio}|${tr[role].modIndex}`);
-                            }
-                        }));
-                        uniqueSoundsEl.textContent = soundSet.size;
-                    }
+                    updateUniqueSoundsCount();
 
                     const importedCount = filteredNew.length;
                     alert(`Imported ${importedCount} new trials successfully (ignored ${newTrials.length - importedCount} duplicates). Total now: ${studyData.length}`);
