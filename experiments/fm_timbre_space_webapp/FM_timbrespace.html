@@ -536,10 +536,7 @@
         <!-- Similarity Study Tab -->
         <div id="study-tab" class="tab-content">
             <h2>Perceptual Similarity Study</h2>
-            
-            <div class="stats">
-                <strong>Trials completed:</strong> <span id="trial-count">0</span>
-            </div>
+            <!-- Trials completed bar removed per request -->
             
             <div class="triplet-container">
                 <div class="sound-card" id="sound-a">
@@ -569,7 +566,7 @@
                 <button class="choice-btn" onclick="recordChoice('A')">More like A</button>
                 <button class="choice-btn" onclick="recordChoice('B')">More like B</button>
                 <button class="choice-btn" onclick="recordABSimilarity()" style="background-color: #9C27B0;">A and B are more similar</button>
-                <button class="choice-btn secondary-btn" onclick="generateNewTriplet()" style="background-color: #666;">Can't decide</button>
+                <button class="choice-btn secondary-btn" onclick="cantDecide()" style="background-color: #666;">Can't decide</button>
             </div>
             
         </div>
@@ -655,6 +652,13 @@
                 });
             });
             el.textContent = set.size;
+        }
+
+        // Update global stats (data points & unique sounds)
+        function updateGlobalStats() {
+            const dataCountEl = document.getElementById('data-count');
+            if (dataCountEl) dataCountEl.textContent = studyData.length;
+            updateUniqueSoundsCount();
         }
 
         // Initialize audio context
@@ -913,8 +917,8 @@
             studyData.push(trialData);
             localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
             
-            // Update trial count
-            document.getElementById('trial-count').textContent = studyData.length;
+            // Update global stats
+            updateGlobalStats();
             
             // Store current triplet as previous before generating new one
             previousTriplet = { ...currentTriplet };
@@ -959,8 +963,8 @@
             studyData.push(trialData);
             localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
             
-            // Update trial count
-            document.getElementById('trial-count').textContent = studyData.length;
+            // Update global stats
+            updateGlobalStats();
             
             // Store current triplet as previous before generating new one
             previousTriplet = { ...currentTriplet };
@@ -978,6 +982,26 @@
             setTimeout(() => {
                 cardA.style.backgroundColor = '#f8f9fa';
                 cardB.style.backgroundColor = '#f8f9fa';
+            }, 300);
+        }
+
+        // User could not decide: flash all three cards gray then generate a new triplet (no data recorded)
+        function cantDecide() {
+            if (!currentTriplet) {
+                generateNewTriplet();
+                return;
+            }
+            // Preserve current triplet for possible reuse logic
+            previousTriplet = { ...currentTriplet };
+            const cards = ['sound-a','sound-b','sound-x'].map(id => document.getElementById(id));
+            cards.forEach(card => {
+                if (card) card.style.backgroundColor = '#666';
+            });
+            setTimeout(() => {
+                cards.forEach(card => {
+                    if (card) card.style.backgroundColor = '#f8f9fa';
+                });
+                generateNewTriplet();
             }, 300);
         }
 
@@ -2036,7 +2060,6 @@
             localStorage.removeItem('fmSynthStudyData');
             
             // Update UI elements
-            document.getElementById('trial-count').textContent = '0';
             document.getElementById('data-count').textContent = '0';
             document.getElementById('unique-sounds').textContent = '0';
             
@@ -2274,8 +2297,6 @@
                     localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
 
                     // Update counts in UI if elements exist
-                    const trialCountEl = document.getElementById('trial-count');
-                    if (trialCountEl) trialCountEl.textContent = studyData.length;
                     const dataCountEl = document.getElementById('data-count');
                     if (dataCountEl) dataCountEl.textContent = studyData.length;
                     updateUniqueSoundsCount();
@@ -2460,8 +2481,8 @@
             studyData.push(trialData);
             localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
             
-            // Update trial count
-            document.getElementById('trial-count').textContent = studyData.length;
+            // Update global stats
+            updateGlobalStats();
             
             // Clear assignments
             clearAssignments();
@@ -2487,7 +2508,7 @@
             const savedData = localStorage.getItem('fmSynthStudyData');
             if (savedData) {
                 studyData = JSON.parse(savedData);
-                document.getElementById('trial-count').textContent = studyData.length;
+                updateGlobalStats();
             }
             
             // Generate initial triplet
