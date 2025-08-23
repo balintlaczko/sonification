@@ -664,7 +664,6 @@
         // Global variables
         let audioContext;
         let currentTriplet = null;
-        let previousTriplet = null; // Store previous triplet for reuse
         let studyData = [];
         let visualizationData = null; // Store visualization data for interactivity
         let normalizedPoints = null; // Store normalized coordinates separately
@@ -672,6 +671,10 @@
         let assignedPoints = { A: null, B: null, X: null }; // Track assigned points
         let currentLayout = null; // Store current layout positions for force-directed continuation
         let currentSoundSet = []; // Track current sound set to detect changes
+        // Probability (0-1) of reusing a sound from ANY prior trial (database reuse)
+        let DATABASE_REUSE_PROBABILITY = 0.5; // adjustable
+        // Sequential trial ID counter
+        let nextTrialId = 1;
 
         // Helper: stable key for a sound using rounding to collapse near-identical FP values
         function soundKey(p) {
@@ -807,122 +810,50 @@
                 modIndex: Math.max(0, Math.min(10, modIndex))
             };
         }
-        
-        function generateNewTriplet() {
+        function generateNewTriplet() { // simplified: only DB reuse
             let paramsA, paramsB, paramsX;
-            let reuseInfo = { isReused: false, position: null, fromPrevious: null };
-            
-            // If we have a previous triplet, reuse one of its sounds
-            if (previousTriplet && Math.random() < 0.8) { // 80% chance to reuse a sound
-                // Randomly select which sound from the previous triplet to reuse
-                const previousSounds = ['A', 'B', 'X'];
-                const selectedPrevious = previousSounds[Math.floor(Math.random() * previousSounds.length)];
-                const reuseParams = previousTriplet[selectedPrevious];
-                
-                // Randomly assign the reused sound to A, B, or X in the new triplet
-                const newPositions = ['A', 'B', 'X'];
-                const reusePosition = newPositions[Math.floor(Math.random() * newPositions.length)];
-                
-                console.log(`Reusing sound ${selectedPrevious} from previous triplet as ${reusePosition}`);
-                reuseInfo = { isReused: true, position: reusePosition, fromPrevious: selectedPrevious };
-                
-                // Generate base point for the other sounds
-                const baseParams = generateRandomParams();
-                
-                if (reusePosition === 'A') {
-                    paramsA = { ...reuseParams }; // Reuse previous sound
-                    paramsB = generateConstrainedParams(baseParams, 0.3);
-                    
-                    // Generate X closer to either A (reused) or B
-                    const closerTo = Math.random() < 0.5 ? paramsA : paramsB;
-                    const fartherFrom = closerTo === paramsA ? paramsB : paramsA;
-                    const mixRatio = 0.3 + Math.random() * 0.4;
-                    paramsX = {
-                        carrier: closerTo.carrier * mixRatio + fartherFrom.carrier * (1 - mixRatio),
-                        harmRatio: closerTo.harmRatio * mixRatio + fartherFrom.harmRatio * (1 - mixRatio),
-                        modIndex: closerTo.modIndex * mixRatio + fartherFrom.modIndex * (1 - mixRatio)
-                    };
-                    paramsX = generateConstrainedParams(paramsX, 0.1);
-                    
-                } else if (reusePosition === 'B') {
-                    paramsA = generateConstrainedParams(baseParams, 0.3);
-                    paramsB = { ...reuseParams }; // Reuse previous sound
-                    
-                    // Generate X closer to either A or B (reused)
-                    const closerTo = Math.random() < 0.5 ? paramsA : paramsB;
-                    const fartherFrom = closerTo === paramsA ? paramsB : paramsA;
-                    const mixRatio = 0.3 + Math.random() * 0.4;
-                    paramsX = {
-                        carrier: closerTo.carrier * mixRatio + fartherFrom.carrier * (1 - mixRatio),
-                        harmRatio: closerTo.harmRatio * mixRatio + fartherFrom.harmRatio * (1 - mixRatio),
-                        modIndex: closerTo.modIndex * mixRatio + fartherFrom.modIndex * (1 - mixRatio)
-                    };
-                    paramsX = generateConstrainedParams(paramsX, 0.1);
-                    
-                } else { // reusePosition === 'X'
-                    paramsA = generateConstrainedParams(baseParams, 0.3);
-                    paramsB = generateConstrainedParams(baseParams, 0.3);
-                    paramsX = { ...reuseParams }; // Reuse previous sound as X
-                }
-                
-            } else {
-                // Generate completely new triplet (original behavior)
-                console.log('Generating completely new triplet');
-                
-                // Generate base point in parameter space
-                const baseParams = generateRandomParams();
-                
-                // Generate A and B as variations from the base
-                paramsA = generateConstrainedParams(baseParams, 0.3);
-                paramsB = generateConstrainedParams(baseParams, 0.3);
-                
-                // Generate X as either closer to A or B (randomly)
-                const closerTo = Math.random() < 0.5 ? paramsA : paramsB;
-                const fartherFrom = closerTo === paramsA ? paramsB : paramsA;
-                
-                // X is generated to be somewhat between A and B, but closer to one
-                const mixRatio = 0.3 + Math.random() * 0.4; // Between 0.3 and 0.7
-                paramsX = {
-                    carrier: closerTo.carrier * mixRatio + fartherFrom.carrier * (1 - mixRatio),
-                    harmRatio: closerTo.harmRatio * mixRatio + fartherFrom.harmRatio * (1 - mixRatio),
-                    modIndex: closerTo.modIndex * mixRatio + fartherFrom.modIndex * (1 - mixRatio)
-                };
-                
-                // Add some noise to X
-                paramsX = generateConstrainedParams(paramsX, 0.1);
+            let reuseInfo = { isReused: false, position: null, fromPrevious: null, fromTrialId: null };
+            const tryReuseFromDatabase = studyData.length > 0 && Math.random() < DATABASE_REUSE_PROBABILITY;
+            function makeX(closerTo, fartherFrom) {
+                const mixRatio = 0.3 + Math.random() * 0.4;
+                let x = { carrier: closerTo.carrier * mixRatio + fartherFrom.carrier * (1 - mixRatio), harmRatio: closerTo.harmRatio * mixRatio + fartherFrom.harmRatio * (1 - mixRatio), modIndex: closerTo.modIndex * mixRatio + fartherFrom.modIndex * (1 - mixRatio) };
+                return generateConstrainedParams(x, 0.1);
             }
-            
-            currentTriplet = {
-                A: paramsA,
-                B: paramsB,
-                X: paramsX,
-                timestamp: new Date().toISOString(),
-                reuseInfo: reuseInfo // Store reuse information
-            };
-            
-            // Update display
-            updateParamsDisplay('A', currentTriplet.A, reuseInfo.position === 'A' ? reuseInfo.fromPrevious : null);
-            updateParamsDisplay('B', currentTriplet.B, reuseInfo.position === 'B' ? reuseInfo.fromPrevious : null);
-            updateParamsDisplay('X', currentTriplet.X, reuseInfo.position === 'X' ? reuseInfo.fromPrevious : null);
-            
-            // Reset active states
-            document.querySelectorAll('.sound-card').forEach(card => {
-                card.classList.remove('active');
-            });
+            if (tryReuseFromDatabase) {
+                const trialIndex = Math.floor(Math.random()*studyData.length);
+                const srcTrial = studyData[trialIndex];
+                const roles = ['A','B','X'];
+                const selRole = roles[Math.floor(Math.random()*roles.length)];
+                const reuseParams = srcTrial[selRole];
+                const positions = ['A','B','X'];
+                const reusePos = positions[Math.floor(Math.random()*positions.length)];
+                const trialIdLabel = srcTrial.id != null ? srcTrial.id : (trialIndex + 1);
+                reuseInfo = { isReused: true, position: reusePos, fromPrevious: selRole, fromTrialId: trialIdLabel };
+                const base = generateRandomParams();
+                if (reusePos === 'A') { paramsA = {...reuseParams}; paramsB = generateConstrainedParams(base,0.3); paramsX = makeX(Math.random()<0.5?paramsA:paramsB, (Math.random()<0.5?paramsA:paramsB)===paramsA?paramsB:paramsA); }
+                else if (reusePos === 'B') { paramsA = generateConstrainedParams(base,0.3); paramsB = {...reuseParams}; paramsX = makeX(Math.random()<0.5?paramsA:paramsB, (Math.random()<0.5?paramsA:paramsB)===paramsA?paramsB:paramsA); }
+                else { paramsA = generateConstrainedParams(base,0.3); paramsB = generateConstrainedParams(base,0.3); paramsX = {...reuseParams}; }
+            } else {
+                const base = generateRandomParams();
+                paramsA = generateConstrainedParams(base,0.3);
+                paramsB = generateConstrainedParams(base,0.3);
+                const closerTo = Math.random()<0.5?paramsA:paramsB;
+                const fartherFrom = closerTo===paramsA?paramsB:paramsA;
+                paramsX = makeX(closerTo, fartherFrom);
+            }
+            currentTriplet = { A: paramsA, B: paramsB, X: paramsX, timestamp: new Date().toISOString(), reuseInfo };
+            const desc = (pos)=> reuseInfo.isReused && reuseInfo.position===pos ? `Reused from ${reuseInfo.fromPrevious}${reuseInfo.fromTrialId? ' from sample '+reuseInfo.fromTrialId:''}` : null;
+            updateParamsDisplay('A', currentTriplet.A, desc('A'));
+            updateParamsDisplay('B', currentTriplet.B, desc('B'));
+            updateParamsDisplay('X', currentTriplet.X, desc('X'));
+            document.querySelectorAll('.sound-card').forEach(c=>c.classList.remove('active'));
         }
-        
-        function updateParamsDisplay(sound, params, reuseFromPrevious = null) {
+        // REPLACED: updateParamsDisplay supports custom descriptor string
+        function updateParamsDisplay(sound, params, reuseDescriptor=null) {
             const display = document.getElementById(`params-${sound.toLowerCase()}`);
             let reuseIndicator = '';
-            if (reuseFromPrevious) {
-                reuseIndicator = `<div style="color: #FF9800; font-weight: bold; margin-bottom: 5px; font-size: 11px;">↻ Reused from ${reuseFromPrevious}</div>`;
-            }
-            display.innerHTML = `
-                ${reuseIndicator}
-                Carrier: ${params.carrier.toFixed(1)} Hz<br>
-                Harm Ratio: ${params.harmRatio.toFixed(2)}<br>
-                Mod Index: ${params.modIndex.toFixed(2)}
-            `;
+            if (reuseDescriptor) reuseIndicator = `<div style="color:#FF9800;font-weight:bold;margin-bottom:5px;font-size:11px;">↻ ${reuseDescriptor}</div>`;
+            display.innerHTML = `${reuseIndicator}Carrier: ${params.carrier.toFixed(1)} Hz<br>Harm Ratio: ${params.harmRatio.toFixed(2)}<br>Mod Index: ${params.modIndex.toFixed(2)}`;
         }
         
         function playTripletSound(sound) {
@@ -940,107 +871,25 @@
             document.getElementById(`sound-${sound.toLowerCase()}`).classList.add('active');
         }
         
-        function recordChoice(choice) {
-            if (!currentTriplet) {
-                alert('Please generate a triplet first!');
-                return;
-            }
-            
-            const trialData = {
-                ...currentTriplet,
-                choice: choice,
-                responseTime: new Date().toISOString()
-            };
-            
-            studyData.push(trialData);
-            localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
-            
-            // Update global stats
-            updateGlobalStats();
-            
-            // Store current triplet as previous before generating new one
-            previousTriplet = { ...currentTriplet };
-            
-            // Generate new triplet
-            generateNewTriplet();
-            
-            // Flash feedback
-            const chosenCard = document.getElementById(`sound-${choice.toLowerCase()}`);
-            chosenCard.style.backgroundColor = '#4CAF50';
-            setTimeout(() => {
-                chosenCard.style.backgroundColor = '#f8f9fa';
-            }, 300);
+        function recordChoice(choice) { // updated: no previousTriplet tracking
+            if (!currentTriplet) { alert('Please generate a triplet first!'); return; }
+            const trialData = { ...currentTriplet, choice, responseTime: new Date().toISOString(), id: nextTrialId++ };
+            studyData.push(trialData); localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData)); updateGlobalStats(); generateNewTriplet(); const chosenCard = document.getElementById(`sound-${choice.toLowerCase()}`); chosenCard.style.backgroundColor='#4CAF50'; setTimeout(()=>{ chosenCard.style.backgroundColor='#f8f9fa'; },300);
         }
 
-        function recordABSimilarity() {
-            if (!currentTriplet) {
-                alert('Please generate a triplet first!');
-                return;
-            }
-            
-            // Create the transformed triplet where A becomes X and X becomes A
-            // This represents the judgment that A and B are more similar to each other than X is to either
-            const transformedTriplet = {
-                A: currentTriplet.X,  // X becomes the new A
-                B: currentTriplet.B,  // B stays the same
-                X: currentTriplet.A,  // A becomes the new X
-                timestamp: new Date().toISOString(),
-                originalTriplet: { ...currentTriplet }, // Keep reference to original for debugging
-                transformationType: 'AB_similarity'
-            };
-            
-            // Record the judgment that (new) X is more similar to B than to A
-            // This captures the user's judgment that A and B were more similar to each other
-            const trialData = {
-                ...transformedTriplet,
-                choice: 'B',  // In the transformed triplet, X (original A) is judged closer to B
-                responseTime: new Date().toISOString(),
-                originalChoice: 'AB_similarity'  // Track that this came from the AB similarity button
-            };
-            
-            studyData.push(trialData);
-            localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
-            
-            // Update global stats
-            updateGlobalStats();
-            
-            // Store current triplet as previous before generating new one
-            previousTriplet = { ...currentTriplet };
-            
-            // Generate new triplet
-            generateNewTriplet();
-            
-            // Flash feedback on both A and B cards to show they were judged as similar
-            const cardA = document.getElementById('sound-a');
-            const cardB = document.getElementById('sound-b');
-            
-            cardA.style.backgroundColor = '#9C27B0';
-            cardB.style.backgroundColor = '#9C27B0';
-            
-            setTimeout(() => {
-                cardA.style.backgroundColor = '#f8f9fa';
-                cardB.style.backgroundColor = '#f8f9fa';
-            }, 300);
+        function recordABSimilarity() { // updated: no previousTriplet tracking
+            if (!currentTriplet) { alert('Please generate a triplet first!'); return; }
+            const transformedTriplet = { A: currentTriplet.X, B: currentTriplet.B, X: currentTriplet.A, timestamp: new Date().toISOString(), originalTriplet: { ...currentTriplet }, transformationType: 'AB_similarity' };
+            const trialData = { ...transformedTriplet, choice: 'B', responseTime: new Date().toISOString(), originalChoice: 'AB_similarity', id: nextTrialId++ };
+            studyData.push(trialData); localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData)); updateGlobalStats(); generateNewTriplet(); const cardA = document.getElementById('sound-a'); const cardB = document.getElementById('sound-b'); cardA.style.backgroundColor='#9C27B0'; cardB.style.backgroundColor='#9C27B0'; setTimeout(()=>{ cardA.style.backgroundColor='#f8f9fa'; cardB.style.backgroundColor='#f8f9fa'; },300);
         }
 
         // User could not decide: flash all three cards gray then generate a new triplet (no data recorded)
-        function cantDecide() {
-            if (!currentTriplet) {
-                generateNewTriplet();
-                return;
-            }
-            // Preserve current triplet for possible reuse logic
-            previousTriplet = { ...currentTriplet };
+        function cantDecide() { // remove previousTriplet usage
+            if (!currentTriplet) { generateNewTriplet(); return; }
             const cards = ['sound-a','sound-b','sound-x'].map(id => document.getElementById(id));
-            cards.forEach(card => {
-                if (card) card.style.backgroundColor = '#666';
-            });
-            setTimeout(() => {
-                cards.forEach(card => {
-                    if (card) card.style.backgroundColor = '#f8f9fa';
-                });
-                generateNewTriplet();
-            }, 300);
+            cards.forEach(card => { if (card) card.style.backgroundColor = '#666'; });
+            setTimeout(() => { cards.forEach(card => { if (card) card.style.backgroundColor = '#f8f9fa'; }); generateNewTriplet(); },300);
         }
 
         async function computeEmbedding(distanceMatrix, method = 'mds') {
@@ -2239,57 +2088,8 @@
             document.getElementById('file-input').click();
         }
         
-        document.getElementById('file-input').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                try {
-                    const raw = JSON.parse(event.target.result);
-                    // Support the exported format (object with data array) and legacy plain array
-                    let newTrials;
-                    if (Array.isArray(raw)) {
-                        newTrials = raw;
-                    } else if (raw && Array.isArray(raw.data)) {
-                        newTrials = raw.data;
-                    } else {
-                        throw new Error('Unrecognized JSON format: expected an array or an object with a data[] property');
-                    }
-
-                    // Optional: de-duplicate by timestamp + choice + A/B/X params signature
-                    const existingKeys = new Set(
-                        studyData.map(t => {
-                            const keyParts = ['A','B','X'].map(k => t[k] ? `${t[k].carrier}|${t[k].harmRatio}|${t[k].modIndex}` : '');
-                            return `${t.timestamp||''}|${t.choice||''}|${keyParts.join('||')}`;
-                        })
-                    );
-                    const filteredNew = newTrials.filter(t => {
-                        if (!t || !t.A || !t.B || !t.X) return false; // basic validation
-                        const keyParts = ['A','B','X'].map(k => t[k] ? `${t[k].carrier}|${t[k].harmRatio}|${t[k].modIndex}` : '');
-                        const key = `${t.timestamp||''}|${t.choice||''}|${keyParts.join('||')}`;
-                        if (existingKeys.has(key)) return false;
-                        existingKeys.add(key);
-                        return true;
-                    });
-
-                    const beforeCount = studyData.length;
-                    studyData = studyData.concat(filteredNew);
-                    localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
-
-                    // Update counts in UI if elements exist
-                    const dataCountEl = document.getElementById('data-count');
-                    if (dataCountEl) dataCountEl.textContent = studyData.length;
-                    updateUniqueSoundsCount();
-
-                    const importedCount = filteredNew.length;
-                    alert(`Imported ${importedCount} new trials successfully (ignored ${newTrials.length - importedCount} duplicates). Total now: ${studyData.length}`);
-                } catch (err) {
-                    alert('Error importing data: ' + err.message);
-                }
-            };
-            reader.readAsText(file);
-        });
+        document.getElementById('file-input').addEventListener('change', function(e) { // modified import to assign ids
+            const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = function(event) { try { const raw = JSON.parse(event.target.result); let newTrials; if (Array.isArray(raw)) newTrials = raw; else if (raw && Array.isArray(raw.data)) newTrials = raw.data; else throw new Error('Unrecognized JSON format: expected an array or an object with a data[] property'); const existingKeys = new Set( studyData.map(t => { const kp=['A','B','X'].map(k => t[k]?`${t[k].carrier}|${t[k].harmRatio}|${t[k].modIndex}`:''); return `${t.timestamp||''}|${t.choice||''}|${kp.join('||')}`; }) ); const filteredNew = newTrials.filter(t => { if(!t||!t.A||!t.B||!t.X) return false; const kp=['A','B','X'].map(k => t[k]?`${t[k].carrier}|${t[k].harmRatio}|${t[k].modIndex}`:''); const key=`${t.timestamp||''}|${t.choice||''}|${kp.join('||')}`; if (existingKeys.has(key)) return false; existingKeys.add(key); return true; }); filteredNew.forEach(t=>{ if(t.id==null){ t.id=nextTrialId++; } else if (t.id >= nextTrialId) { nextTrialId = t.id + 1; } }); studyData = studyData.concat(filteredNew); localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData)); const dataCountEl=document.getElementById('data-count'); if(dataCountEl) dataCountEl.textContent=studyData.length; updateUniqueSoundsCount(); alert(`Imported ${filteredNew.length} new trials successfully (ignored ${newTrials.length - filteredNew.length} duplicates). Total now: ${studyData.length}`); } catch(err){ alert('Error importing data: '+err.message); } }; reader.readAsText(file); });
         
         function showDataInConsole() {
             if (studyData.length === 0) {
@@ -2441,61 +2241,30 @@
             updateAssignmentDisplay();
         }
         
-        function recordVisualizationChoice(choice) {
-            if (!assignedPoints.A || !assignedPoints.B || !assignedPoints.X) {
-                alert('Please assign all three points first!');
-                return;
-            }
-            
-            // Create trial data from assigned points
-            const trialData = {
-                A: assignedPoints.A.params,
-                B: assignedPoints.B.params,
-                X: assignedPoints.X.params,
-                choice: choice,
-                timestamp: new Date().toISOString(),
-                responseTime: new Date().toISOString(),
-                source: 'visualization' // Mark that this came from visualization
-            };
-            
-            // Add to study data
-            studyData.push(trialData);
-            localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
-            
-            // Update global stats
-            updateGlobalStats();
-            
-            // Clear assignments
-            clearAssignments();
-            
-            // Update visualization with new data
-            updateVisualization();
-            
-            // Flash feedback on the choice controls
-            const choiceControls = document.getElementById('choice-controls');
-            if (choiceControls) {
-                choiceControls.style.backgroundColor = '#4CAF50';
-                choiceControls.style.borderRadius = '4px';
-                choiceControls.style.padding = '10px';
-                setTimeout(() => {
-                    choiceControls.style.backgroundColor = 'transparent';
-                    choiceControls.style.padding = '0';
-                }, 300);
-            }
-        }
+        function recordVisualizationChoice(choice) { // modified to add id
+            if (!assignedPoints.A || !assignedPoints.B || !assignedPoints.X) { alert('Please assign all three points first!'); return; }
+            const trialData = { A: assignedPoints.A.params, B: assignedPoints.B.params, X: assignedPoints.X.params, choice, timestamp: new Date().toISOString(), responseTime: new Date().toISOString(), source: 'visualization', id: nextTrialId++ };
+            studyData.push(trialData); localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData)); updateGlobalStats(); clearAssignments(); updateVisualization(); const choiceControls=document.getElementById('choice-controls'); if(choiceControls){ choiceControls.style.backgroundColor='#4CAF50'; choiceControls.style.borderRadius='4px'; choiceControls.style.padding='10px'; setTimeout(()=>{ choiceControls.style.backgroundColor='transparent'; choiceControls.style.padding='0'; },300);} }
         
         // Load saved data on startup
-        window.addEventListener('load', function() {
+        window.addEventListener('load', function() { // modified to initialize IDs
             const savedData = localStorage.getItem('fmSynthStudyData');
             if (savedData) {
                 studyData = JSON.parse(savedData);
+                let maxId = 0; // track existing max id
+                // Assign IDs if missing
+                if (studyData.length) {
+                    // First, inspect existing IDs
+                    studyData.forEach((t,i)=>{ if (t.id != null) { if (t.id > maxId) maxId = t.id; } });
+                    if (maxId === 0) { // no ids existed
+                        studyData.forEach((t,i)=>{ t.id = i+1; maxId = i+1; });
+                    }
+                }
+                nextTrialId = maxId + 1;
+                localStorage.setItem('fmSynthStudyData', JSON.stringify(studyData));
                 updateGlobalStats();
             }
-            
-            // Generate initial triplet
             generateNewTriplet();
-            
-            // Set up canvas resizing
             resizeCanvas();
         });
         
