@@ -13,6 +13,7 @@ from sklearn.preprocessing import MinMaxScaler
 import json
 from .models.ddsp import FMSynth
 from .utils.tensor import midi2frequency
+from tqdm import tqdm
 
 
 class Amanis_RG_dataset(Dataset):
@@ -410,42 +411,57 @@ class FMTripletDataset(Dataset):
     def __init__(self, json_path, sr=48000, n_samples=48000, device='cpu'):
         with open(json_path, 'r') as f:
             self.triplets = json.load(f)
+            self.triplets_data = torch.zeros(len(self.triplets['data']), 3, 3)  # (N, 3 sounds, 3 params)
+            for i, triplet in tqdm(enumerate(self.triplets['data'])):
+                # anchor
+                self.triplets_data[i, 0] = self._get_params(triplet['X'])
+                # positive, negative
+                if triplet['choice'] == 'A':
+                    self.triplets_data[i, 1] = self._get_params(triplet['A'])
+                    self.triplets_data[i, 2] = self._get_params(triplet['B'])
+                else:
+                    self.triplets_data[i, 1] = self._get_params(triplet['B'])
+                    self.triplets_data[i, 2] = self._get_params(triplet['A'])
 
         self.sr = sr
         self.n_samples = n_samples
         self.device = torch.device(device)
+        self.triplets_data = self.triplets_data.to(self.device)
 
     def __len__(self):
-        return self.triplets["totalTrials"]
+        # return self.triplets["totalTrials"]
+        return self.triplets_data.shape[0]
 
     def _get_params(self, params):
-        freq = torch.tensor([params["carrier"]]).to(self.device)
-        harm_ratio = torch.tensor([params["harmRatio"]]).to(self.device)
-        mod_index = torch.tensor([params["modIndex"]]).to(self.device)
+        freq = torch.tensor([params["carrier"]])
+        harm_ratio = torch.tensor([params["harmRatio"]])
+        mod_index = torch.tensor([params["modIndex"]])
 
         # stack them
-        stacked_params = torch.stack([freq, harm_ratio, mod_index], dim=0)
+        stacked_params = torch.stack([freq, harm_ratio, mod_index], dim=1)
         return stacked_params
 
     def __getitem__(self, idx):
-        triplet_data = self.triplets["data"][idx]
+        # triplet_data = self.triplets["data"][idx]
 
-        # Synthesize spectrograms for A, B, and X
-        params_a = self._get_params(triplet_data["A"])
-        params_b = self._get_params(triplet_data["B"])
-        params_x = self._get_params(triplet_data["X"])
+        # # Synthesize spectrograms for A, B, and X
+        # params_a = self._get_params(triplet_data["A"])
+        # params_b = self._get_params(triplet_data["B"])
+        # params_x = self._get_params(triplet_data["X"])
 
-        # The user chose whether X is closer to A or B.
-        # This defines our Anchor, Positive, and Negative.
-        if triplet_data["choice"] == "A":
-            # Anchor is X, Positive is A, Negative is B
-            anchor = params_x
-            positive = params_a
-            negative = params_b
-        else: # choice == "B"
-            # Anchor is X, Positive is B, Negative is A
-            anchor = params_x
-            positive = params_b
-            negative = params_a
+        # # The user chose whether X is closer to A or B.
+        # # This defines our Anchor, Positive, and Negative.
+        # if triplet_data["choice"] == "A":
+        #     # Anchor is X, Positive is A, Negative is B
+        #     anchor = params_x
+        #     positive = params_a
+        #     negative = params_b
+        # else: # choice == "B"
+        #     # Anchor is X, Positive is B, Negative is A
+        #     anchor = params_x
+        #     positive = params_b
+        #     negative = params_a
 
-        return anchor, positive, negative
+        # return anchor, positive, negative
+
+        return self.triplets_data[idx]

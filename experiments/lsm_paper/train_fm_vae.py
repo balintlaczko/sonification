@@ -33,13 +33,13 @@ def main():
     parser.add_argument("--latent_size", type=int, default=16)
     parser.add_argument("--encoder_channels", type=int, default=128)
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 5])
-    parser.add_argument("--encoder_n_res_block", type=int, default=24)
+    parser.add_argument("--encoder_n_res_block", type=int, default=16)
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
-    parser.add_argument("--decoder_features", type=int, default=256)
-    parser.add_argument("--decoder_n_res_block", type=int, default=8)
-    parser.add_argument("--decoder_n_res_features", type=int, default=128)
+    parser.add_argument("--decoder_features", type=int, default=64)
+    parser.add_argument("--decoder_n_res_block", type=int, default=4)
+    parser.add_argument("--decoder_n_res_features", type=int, default=32)
     parser.add_argument("--dropout", type=float, default=0.0)
-    parser.add_argument("--d_hidden_size", type=int, default=128)
+    parser.add_argument("--d_hidden_size", type=int, default=64)
     parser.add_argument("--d_num_layers", type=int, default=5)
 
     # training params
@@ -51,36 +51,36 @@ def main():
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument("--recon_weight", type=int, default=10)
-    parser.add_argument('--target_recon_loss', type=float, default=0.01, help='target recon loss to keep in case of dynamic kld')
+    parser.add_argument('--target_recon_loss', type=float, default=1.3, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float, default=1, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.01, help='kld weight at the start of the warmup')
+    parser.add_argument('--kld_weight_min', type=float, default=0.1, help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=1000, help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=10000, help='the number of epochs to warmup the kld weight')
     # tc loss params
-    parser.add_argument('--tc_weight_max', type=float, default=6, help='tc weight at the end of the warmup')
-    parser.add_argument('--tc_weight_min', type=float, default=0.01, help='tc weight at the start of the warmup')
+    parser.add_argument('--tc_weight_max', type=float, default=3, help='tc weight at the end of the warmup')
+    parser.add_argument('--tc_weight_min', type=float, default=0.5, help='tc weight at the start of the warmup')
     parser.add_argument('--tc_start_epoch', type=int, default=1000, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=1000, help='the number of epochs to warmup the tc weight')
+    parser.add_argument('--tc_warmup_epochs', type=int, default=3000, help='the number of epochs to warmup the tc weight')
     # contrastive loss params
     parser.add_argument("--contrastive_regularization", type=int, default=1, help="Use contrastive regularization (default: 0 = no contrastive regularization)")
-    parser.add_argument("--contrastive_weight_max", type=float, default=1, help="Maximum weight for contrastive loss")
+    parser.add_argument("--contrastive_weight_max", type=float, default=3, help="Maximum weight for contrastive loss")
     parser.add_argument("--contrastive_weight_min", type=float, default=0.01, help="Minimum weight for contrastive loss")
     parser.add_argument("--contrastive_start_epoch", type=int, default=1000, help="The epoch at which to start the contrastive warmup from contrastive_weight_min to contrastive_weight_max")
-    parser.add_argument("--contrastive_warmup_epochs", type=int, default=1000, help="The number of epochs to warmup the contrastive weight")
+    parser.add_argument("--contrastive_warmup_epochs", type=int, default=3000, help="The number of epochs to warmup the contrastive weight")
     # optimizer params
-    parser.add_argument("--lr_vae", type=float, default=0.0001)
+    parser.add_argument("--lr_vae", type=float, default=0.0003)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
-    parser.add_argument("--lr_d", type=float, default=0.00001)
+    parser.add_argument("--lr_d", type=float, default=0.0001)
     parser.add_argument("--lr_decay_d", type=float, default=0.75)
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v4.8")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v4.11")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="define min synth param ranges, harm/mod up to 10, stronger contrastive weight, less param loss weight, more mss, no tc at start")
+    parser.add_argument("--comment", type=str, default="")
 
     args = parser.parse_args()
 
@@ -106,12 +106,13 @@ def main():
             n_samples=args.sr, # generate a full second, later it will be cut to size via augmentation
             device='cpu'
             )
+        print(f"Created triplet dataloader with {len(fm_triplet_dataset)} samples")
         fm_triplet_dataloader = DataLoader(
             fm_triplet_dataset,
             batch_size=args.batch_size,
             shuffle=True,
-            num_workers=24,
-            persistent_workers=True,
+            # num_workers=24,
+            # persistent_workers=True,
         )
 
     # create model

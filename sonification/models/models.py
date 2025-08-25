@@ -2237,10 +2237,9 @@ class PlFMFactorVAE(LightningModule):
         triplet_loss, scaled_triplet_loss, triplet_loss_scale = 0, 0, 0
         if self.contrastive_regularization:
             # get triplet data
-            anchor_params, positive_params, negative_params = triplet_batch # (B, 3, 1) (B, 3, 1) (B, 3, 1)
-            anchor_params = anchor_params.repeat(1, 1, self.sr) # (B, 3, ds_n_samps)
-            positive_params = positive_params.repeat(1, 1, self.sr)
-            negative_params = negative_params.repeat(1, 1, self.sr)
+            anchor_params = triplet_batch[:, 0].unsqueeze(-1).repeat(1, 1, self.sr) # (B, 3, ds_n_samps)
+            positive_params = triplet_batch[:, 1].unsqueeze(-1).repeat(1, 1, self.sr)
+            negative_params = triplet_batch[:, 2].unsqueeze(-1).repeat(1, 1, self.sr)
             # create waveforms with the usual augmentations
             triplet_specs = [None, None, None]
             for idx, params in enumerate([anchor_params, positive_params, negative_params]):
@@ -2344,7 +2343,8 @@ class PlFMFactorVAE(LightningModule):
 
         # log losses
         # self.last_recon_loss = vae_recon_loss
-        self.last_recon_loss = param_loss # using it for dynamic kld threshold
+        # self.last_recon_loss = param_loss # using it for dynamic kld threshold
+        self.last_recon_loss = mss_loss # using it for dynamic kld threshold
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_param_loss": param_loss,
