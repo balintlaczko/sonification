@@ -1758,7 +1758,9 @@ class ParamDecoder(nn.Module):
             post_decoder_blocks.extend(block)
         post_decoder_blocks.extend([
             nn.Linear(post_decoder_target_n_features, n_params),
-            nn.Sigmoid()
+            # nn.Sigmoid()
+            # nn.ReLU()
+            nn.Identity()
         ])
 
         self.post_decoder = nn.Sequential(*post_decoder_blocks)
@@ -2000,10 +2002,11 @@ class PlFMFactorVAE(LightningModule):
         self.n_samples = args.length_samps
         self.n_fft = args.n_fft
         self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
+        self.use_curriculum = args.use_curriculum > 0
         self.min_harm_ratio = args.min_harm_ratio
-        self.max_harm_ratio = args.max_harm_ratio
+        self.max_harm_ratio = max(6, self.min_harm_ratio * 2) if self.use_curriculum else args.max_harm_ratio
         self.min_mod_idx = args.min_mod_idx
-        self.max_mod_idx = args.max_mod_idx
+        self.max_mod_idx = max(6, self.min_mod_idx * 2) if self.use_curriculum else args.max_mod_idx
         self.latent_size = args.latent_size
         self.logdir = args.logdir
         self.d_hidden_size = args.d_hidden_size
@@ -2085,10 +2088,10 @@ class PlFMFactorVAE(LightningModule):
         freqs = midi2frequency(pitches)
         ratios_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
         ratios = scale(ratios_norm, 0, 1, self.min_harm_ratio, self.max_harm_ratio)
-        ratios = torch.clip(ratios, 0.1, self.max_harm_ratio) # avoid zero ratios
+        ratios_norm = scale(ratios, self.min_harm_ratio, self.args.max_harm_ratio, 0, 1)
         indices_norm = torch.rand(batch_size, requires_grad=False, device=self.device)
         indices = scale(indices_norm, 0, 1, self.min_mod_idx, self.max_mod_idx)
-        indices = torch.clip(indices, 0.1, self.max_mod_idx) # avoid zero indices
+        indices_norm = scale(indices, self.min_mod_idx, self.args.max_mod_idx, 0, 1)
         # stack norm params together
         norm_params = torch.stack([pitches_norm, ratios_norm, indices_norm], dim=1)
         # now repeat on the samples dimension
@@ -2110,8 +2113,8 @@ class PlFMFactorVAE(LightningModule):
         # scale to the correct range
         pitches = scale(pitches, 0, 1, 38, 86)
         freqs = midi2frequency(pitches)
-        ratios = scale(ratios, 0, 1, self.min_harm_ratio, self.max_harm_ratio)
-        indices = scale(indices, 0, 1, self.min_mod_idx, self.max_mod_idx)
+        ratios = scale(ratios, 0, 1, self.min_harm_ratio, self.args.max_harm_ratio)
+        indices = scale(indices, 0, 1, self.min_mod_idx, self.args.max_mod_idx)
         # re-stack them
         out = torch.cat([freqs.unsqueeze(1), ratios.unsqueeze(1), indices.unsqueeze(1)], dim=1)
         return out
@@ -2359,6 +2362,8 @@ class PlFMFactorVAE(LightningModule):
             "vae_kld_scale": kld_scale,
             "vae_tc_scale": tc_scale,
             "vae_triplet_scale": triplet_loss_scale,
+            "max_harm_ratio": self.max_harm_ratio,
+            "max_mod_idx": self.max_mod_idx
         },
         prog_bar=True)
 
@@ -2385,9 +2390,35 @@ class PlFMFactorVAE(LightningModule):
                         scheduler.num_bad_epochs = 0
                         print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
         # update the kld weight
-        if self.args.dynamic_kld > 0:
+        changed_kld, changed_param = False, False
+        if self.args.dynamic_kld > 0 and not self.use_curriculum: # only start dynamic kld when curriculum is completed
             if self.last_recon_loss < self.args.target_recon_loss:
                 self.kld_weight_dynamic *= 1.01
+                changed_kld = True
+        if self.use_curriculum:
+            if self.last_recon_loss < self.args.target_recon_loss:
+                # increase the max_harm_ratio and max_mod_idx
+                if self.max_harm_ratio < self.args.max_harm_ratio:
+                    self.max_harm_ratio += 0.2
+                    self.max_harm_ratio = min(self.max_harm_ratio, self.args.max_harm_ratio)
+                    changed_param = True
+                if self.max_mod_idx < self.args.max_mod_idx:
+                    self.max_mod_idx += 0.2
+                    self.max_mod_idx = min(self.max_mod_idx, self.args.max_mod_idx)
+                    changed_param = True
+                # switch off if finished
+                if self.max_harm_ratio >= self.args.max_harm_ratio and self.max_mod_idx >= self.args.max_mod_idx:
+                    self.use_curriculum = False
+                    print("Curriculum learning completed!")
+        # if changed param or kld, reset scheduler bad epochs
+        if changed_param or changed_kld:
+            epoch = self.trainer.current_epoch
+            vae_scheduler, d_scheduler = self.lr_schedulers()
+            for scheduler in [vae_scheduler, d_scheduler]:
+                # Check if this is a ReduceLROnPlateau scheduler
+                if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    scheduler.num_bad_epochs = 0
+                    print(f"Resetting patience for {scheduler} at epoch {epoch}")
 
 
     def on_train_batch_start(self, batch, batch_idx):
@@ -2406,9 +2437,9 @@ class PlFMFactorVAE(LightningModule):
         d_optimizer = torch.optim.AdamW(
             self.D.parameters(), lr=self.lr_d)
         vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=50000)
+            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=10000)
         d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            d_optimizer, mode='min', factor=self.lr_decay_d, patience=50000)
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=10000)
         # return the optimizers and schedulers
         return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
     
