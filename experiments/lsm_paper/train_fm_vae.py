@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--min_mod_idx", type=float, default=0.1)
     parser.add_argument("--max_mod_idx", type=float, default=10)
     parser.add_argument("--use_curriculum", type=int, default=1)
-    parser.add_argument("--contrastive_dataset_path", type=str, default="data/fm_triplet/fm-synth-study-2025-08-20_15_46_36.json")
+    parser.add_argument("--contrastive_dataset_path", type=str, default="data/fm_triplet/fm-synth-study-2025-08-27_17_28_48.json")
 
     # model params
     parser.add_argument("--latent_size", type=int, default=16)
