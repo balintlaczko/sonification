@@ -2037,6 +2037,7 @@ class PlFMFactorVAE(LightningModule):
         self.contrastive_regularization = args.contrastive_regularization > 0
         self.contrastive_weight_max = args.contrastive_weight_max
         self.contrastive_weight_min = args.contrastive_weight_min
+        self.contrastive_weight_dynamic = args.contrastive_weight_min  # initialize to min
         self.contrastive_start_epoch = args.contrastive_start_epoch
         self.contrastive_warmup_epochs = args.contrastive_warmup_epochs
 
@@ -2201,7 +2202,8 @@ class PlFMFactorVAE(LightningModule):
 
         # VAE recon_loss: MSS + param loss
         # param loss
-        param_loss = F.l1_loss(norm_predicted_params, norm_params.detach())
+        # param_loss = F.l1_loss(norm_predicted_params, norm_params.detach())
+        param_loss = F.mse_loss(norm_predicted_params, norm_params.detach())
         # mss loss
         mss_loss = self.mss_loss(out_wf, in_wf)
         # calculate current param loss weight
@@ -2275,9 +2277,12 @@ class PlFMFactorVAE(LightningModule):
             negative_z = self.model.reparameterize(*self.model.encode(negative_spec))
             # calculate triplet loss
             triplet_loss = F.triplet_margin_loss(anchor_z, positive_z, negative_z, margin=1.0, p=2)
-            triplet_loss_scale = (self.contrastive_weight_max - self.contrastive_weight_min) * \
-                min(1.0, (epoch_idx - self.contrastive_start_epoch) /
-                    self.contrastive_warmup_epochs) + self.contrastive_weight_min if epoch_idx > self.contrastive_start_epoch else self.contrastive_weight_min
+            if self.args.dynamic_contrastive > 0:
+                triplet_loss_scale = self.contrastive_weight_dynamic
+            else:
+                triplet_loss_scale = (self.contrastive_weight_max - self.contrastive_weight_min) * \
+                    min(1.0, (epoch_idx - self.contrastive_start_epoch) /
+                        self.contrastive_warmup_epochs) + self.contrastive_weight_min if epoch_idx > self.contrastive_start_epoch else self.contrastive_weight_min
             scaled_triplet_loss = triplet_loss * triplet_loss_scale
 
         # VAE loss
@@ -2390,11 +2395,15 @@ class PlFMFactorVAE(LightningModule):
                         scheduler.num_bad_epochs = 0
                         print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
         # update the kld weight
-        changed_kld, changed_param = False, False
+        changed_kld, changed_param, changed_contrastive = False, False, False
         if self.args.dynamic_kld > 0 and not self.use_curriculum: # only start dynamic kld when curriculum is completed
             if self.last_recon_loss < self.args.target_recon_loss:
                 self.kld_weight_dynamic *= 1.01
                 changed_kld = True
+        if self.args.dynamic_contrastive > 0 and not self.use_curriculum:
+            if self.last_recon_loss < self.args.target_recon_loss:
+                self.contrastive_weight_dynamic *= 1.02
+                changed_contrastive = True
         if self.use_curriculum:
             if self.last_recon_loss < self.args.target_recon_loss:
                 # increase the max_harm_ratio and max_mod_idx
@@ -2410,8 +2419,8 @@ class PlFMFactorVAE(LightningModule):
                 if self.max_harm_ratio >= self.args.max_harm_ratio and self.max_mod_idx >= self.args.max_mod_idx:
                     self.use_curriculum = False
                     print("Curriculum learning completed!")
-        # if changed param or kld, reset scheduler bad epochs
-        if changed_param or changed_kld:
+        # if changed param or kld or contrastive weights, reset scheduler bad epochs
+        if changed_param or changed_kld or changed_contrastive:
             epoch = self.trainer.current_epoch
             vae_scheduler, d_scheduler = self.lr_schedulers()
             for scheduler in [vae_scheduler, d_scheduler]:
@@ -2437,9 +2446,9 @@ class PlFMFactorVAE(LightningModule):
         d_optimizer = torch.optim.AdamW(
             self.D.parameters(), lr=self.lr_d)
         vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=10000)
+            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=20000)
         d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            d_optimizer, mode='min', factor=self.lr_decay_d, patience=10000)
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=50000)
         # return the optimizers and schedulers
         return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
     
