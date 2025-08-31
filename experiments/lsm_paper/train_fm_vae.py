@@ -52,7 +52,7 @@ def main():
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument("--recon_weight", type=int, default=1)
-    parser.add_argument('--target_recon_loss', type=float, default=1.6, help='target recon loss to keep in case of dynamic kld')
+    parser.add_argument('--target_recon_loss', type=float, default=1.5, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float, default=1, help='kld weight at the end of the warmup')
@@ -68,7 +68,7 @@ def main():
     parser.add_argument("--contrastive_regularization", type=int, default=1, help="Use contrastive regularization (default: 0 = no contrastive regularization)")
     parser.add_argument("--dynamic_contrastive", type=int, default=1, help="non-zero will use dynamic contrastive")
     parser.add_argument("--contrastive_weight_max", type=float, default=5, help="Maximum weight for contrastive loss")
-    parser.add_argument("--contrastive_weight_min", type=float, default=0.01, help="Minimum weight for contrastive loss")
+    parser.add_argument("--contrastive_weight_min", type=float, default=0.1, help="Minimum weight for contrastive loss")
     parser.add_argument("--contrastive_start_epoch", type=int, default=1500, help="The epoch at which to start the contrastive warmup from contrastive_weight_min to contrastive_weight_max")
     parser.add_argument("--contrastive_warmup_epochs", type=int, default=3000, help="The number of epochs to warmup the contrastive weight")
     # optimizer params
@@ -80,9 +80,9 @@ def main():
     parser.add_argument("--steps_per_epoch", type=int, default=200)
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v5.9")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v5.10")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="v5.8 refined")
+    parser.add_argument("--comment", type=str, default="v5.8 refined again")
 
     args = parser.parse_args()
 

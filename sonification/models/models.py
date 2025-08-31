@@ -2402,7 +2402,7 @@ class PlFMFactorVAE(LightningModule):
                 changed_kld = True
         if self.args.dynamic_contrastive > 0 and not self.use_curriculum:
             if self.last_recon_loss < self.args.target_recon_loss:
-                self.contrastive_weight_dynamic *= 1.02
+                self.contrastive_weight_dynamic *= 1.03
                 changed_contrastive = True
         if self.use_curriculum:
             if self.last_recon_loss < self.args.target_recon_loss:
@@ -2448,7 +2448,7 @@ class PlFMFactorVAE(LightningModule):
         vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=20000)
         d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            d_optimizer, mode='min', factor=self.lr_decay_d, patience=50000)
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=20000)
         # return the optimizers and schedulers
         return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
     
