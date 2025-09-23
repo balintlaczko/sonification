@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--latent_size", type=int, default=2)
     parser.add_argument("--encoder_channels", type=int, default=32)
     parser.add_argument("--encoder_kernels", type=int, default=3)
-    parser.add_argument("--encoder_n_res_block", type=int, default=4)
+    parser.add_argument("--encoder_n_res_block", type=int, default=8)
     parser.add_argument("--encoder_n_res_channel", type=int, default=16)
     parser.add_argument("--decoder_channels", type=int, default=32)
     parser.add_argument("--decoder_n_res_block", type=int, default=4)
@@ -37,14 +37,14 @@ def main():
     parser.add_argument("--d_num_layers", type=int, default=4)
 
     # training params
-    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     # reconstruction loss params
-    parser.add_argument("--recon_loss_weight_start", type=int, default=500)
-    parser.add_argument("--recon_loss_weight_end", type=int, default=500)
+    parser.add_argument("--recon_loss_weight_start", type=int, default=1)
+    parser.add_argument("--recon_loss_weight_end", type=int, default=1)
     parser.add_argument("--recon_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--recon_loss_weight_ramp_end_epoch", type=int, default=1)
-    parser.add_argument('--target_recon_loss', type=float, default=0.001, help='target recon loss to keep in case of dynamic kld')
+    parser.add_argument('--target_recon_loss', type=float, default=0.1, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float, default=1, help='kld weight at the end of the warmup')
@@ -92,7 +92,7 @@ def main():
     # checkpoint callbacks
     checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
     best_checkpoint_callback = ModelCheckpoint(
-        monitor="val_vae_loss",
+        monitor="vae_loss",
         dirpath=checkpoint_path,
         filename=args.ckpt_name + "_best_{epoch:02d}-{vae_loss:.4f}",
         save_top_k=1,
