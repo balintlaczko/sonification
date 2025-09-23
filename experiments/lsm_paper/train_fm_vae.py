@@ -136,8 +136,7 @@ def main():
         save_top_k=1,
         mode="max",
     )
-    # swa = StochasticWeightAveraging(swa_lrs=1e-2)
-    callbacks = [best_checkpoint_callback, last_checkpoint_callback] #, swa]
+    callbacks = [best_checkpoint_callback, last_checkpoint_callback]
 
     # create logger
     logger = WandbLogger(
@@ -147,7 +146,6 @@ def main():
         offline=False,
         settings=wandb.Settings(_disable_stats=True),
         )
-    # logger.watch(model, log='all')
 
     # create trainer
     trainer = Trainer(
@@ -183,7 +181,5 @@ if __name__ == "__main__":
     random.seed(fix_seed)
     torch.manual_seed(fix_seed)
     np.random.seed(fix_seed)
-
     torch.set_float32_matmul_precision('high')
-    # os.environ["WANDB_START_METHOD"] = "thread"
     main()

@@ -19,6 +19,9 @@ MNIST/
 experiments/params2feats_paper/checkpoints/
 experiments/params2feats_paper/embeddings/
 experiments/params2feats_paper/audio/
+experiments/lsm_paper/dev.ipynb
 rendered_plate_views/
 *.ts
 *.min.js
+sonification/models/layers_old.py
+sonification/models/models_old.py

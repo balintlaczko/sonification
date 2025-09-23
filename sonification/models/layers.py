@@ -172,26 +172,47 @@ class ConvEncoder1D(nn.Module):
         return self.layers(x)
     
 
+# loosely based on MultiScaleEncoder
 class ConvEncoder1DRes(nn.Module):
-    def __init__(self, in_channels, output_size, layers_channels=[16, 32, 64, 128, 256, 512], input_size=512):
-        super(ConvEncoder1DRes, self).__init__()
-        self.in_channels = in_channels
-        self.output_size = output_size
+    def __init__(
+            self, 
+            in_channel=1, 
+            channel=128, 
+            n_res_block=1, 
+            n_res_channel=32,
+            stride=4,
+            kernel=3,
+            ):
+        super().__init__()
 
-        layers = []
-        in_channel = self.in_channels
-        for idx, hidden_channel in enumerate(layers_channels):
-            layers.extend([
-                ResBlock1D(in_channel, hidden_channel),
-            ])
+        # check that the stride is valid
+        assert stride in [2, 4]
 
-        layers.extend([
-            nn.Flatten(),
-            # nn.Linear(
-            #     input_size, self.output_size),
-            # nn.BatchNorm1d(self.output_size),
-            # nn.LeakyReLU(0.2),
-        ])
+        padding = max(1, (kernel - 1) // 2)
+
+        if stride == 4:
+            # base block: in -> out/2 -> out -> out
+            layers = [
+                nn.Conv1d(in_channel, channel // 2, kernel, stride=2, padding=padding),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv1d(channel // 2, channel, kernel, stride=2, padding=padding),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv1d(channel, channel, 3, stride=1, padding=1),
+            ]
+
+        elif stride == 2:
+            # base block: in -> out/2 -> out
+            layers = [
+                nn.Conv1d(in_channel, channel // 2, kernel, stride=2, padding=padding),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv1d(channel // 2, channel, 3, padding=1),
+            ]
+
+        # add residual blocks
+        layers.extend([ResBlock1D(channel, n_res_channel) for _ in range(n_res_block)])
+
+        # add final ReLU
+        layers.append(nn.LeakyReLU(inplace=True))
 
         self.layers = nn.Sequential(*layers)
 
@@ -291,11 +312,9 @@ class ResBlock(nn.Module):
         self.conv = nn.Sequential(
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(in_channel, channel, 3, padding=1),
-            # nn.BatchNorm2d(channel),
             nn.GroupNorm(channel // chans_per_group, channel),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(channel, in_channel, 1),
-            # nn.BatchNorm2d(in_channel),
             nn.GroupNorm(in_channel // chans_per_group, in_channel),
         )
 
@@ -331,14 +350,12 @@ class ResBlock1D(nn.Module):
 
         # this is the residual block
         self.conv = nn.Sequential(
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv1d(in_channel, channel, 3, padding=1),
-            # nn.BatchNorm1d(channel),
             nn.GroupNorm(channel // chans_per_group, channel),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv1d(channel, in_channel, 1),
-            # nn.BatchNorm1d(in_channel),
             nn.GroupNorm(in_channel // chans_per_group, in_channel),
-            nn.LeakyReLU(0.2),
         )
 
     def forward(self, input):
