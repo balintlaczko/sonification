@@ -13,13 +13,14 @@ import umap
 import matplotlib.pyplot as plt
 from sonification.utils.array import array2fluid_dataset
 from sonification.utils.tensor import scale
+from sonification.utils.array import scale_array_exp
 from sklearn.preprocessing import RobustScaler
 from sklearn.decomposition import PCA
 
 # %%
 # grab checkpoint
 ckpt_path = '../../ckpt/fm_vae'
-ckpt_name = 'imv_v3.5'
+ckpt_name = 'imv_v5.10'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -45,13 +46,15 @@ model.eval()
 # create a meshgrid of parameters to synthesize (SynthMaps style)
 
 # create ranges for each parameter
-pitch_steps = 51
-harm_ratio_steps = 51
-mod_idx_steps = 51
+pitch_steps = 64 # 51 for synthmaps paper
+harm_ratio_steps = 64
+mod_idx_steps = 64
 pitches = np.linspace(38, 86, pitch_steps)
 freqs = midi2frequency(pitches)  # x
-ratios = np.linspace(0, 1, harm_ratio_steps) * args.max_harm_ratio  # y
-indices = np.linspace(0, 1, mod_idx_steps) * args.max_mod_idx  # z
+ratios = np.linspace(0, 1, harm_ratio_steps) # y
+ratios = scale_array_exp(ratios, 0, 1, args.min_harm_ratio, args.max_harm_ratio)  # y
+indices = np.linspace(0, 1, mod_idx_steps) # z
+indices = scale_array_exp(indices, 0, 1, args.min_mod_idx, args.max_mod_idx)  # z
 
 # make into 3D mesh
 freqs, ratios, indices = np.meshgrid(freqs, ratios, indices)  # y, x, z!
@@ -82,7 +85,7 @@ model.mel_spectrogram.to(device)  # move mel spectrogram to device
 # %%
 # iterate the dataframe in batches and synthesize
 batch_size = 64
-n_batches = len(df) // batch_size + 1
+n_batches = len(df) // batch_size #+ 1
 print(f"Number of batches: {n_batches}, batch size: {batch_size}")
 z_all = torch.zeros((len(df), args.latent_size), device=device)
 with torch.no_grad():
@@ -118,13 +121,13 @@ z_all.shape  # (n_samples, latent_size)
 
 # %%
 # filter embeddinggs and keep only meaningful dimensions
-# for imv_v3.2: dims 0, 8, 9
-# for imv_v3.4: dims 1, 6, 12, 14
-# for imv_v3.5: dims 1, 3, 6, 15
 meaningful_dims = {
     "imv_v3.2": [0, 8, 9],
     "imv_v3.4": [1, 6, 12, 14],
-    "imv_v3.5": [1, 3, 6, 15]
+    "imv_v3.5": [1, 3, 6, 15],
+    "imv_v5.8": [2, 4, 8],
+    "imv_v5.9": [2, 8, 14],
+    "imv_v5.10": [1, 2, 8],
 }
 
 z_all_filtered = z_all[:, meaningful_dims[ckpt_name]]
@@ -156,6 +159,17 @@ z_all_pca = pca.fit_transform(pca_input)
 explained_variance = pca.explained_variance_ratio_
 print(f"Explained variance ratio for PCA with {pca_dims} components: {explained_variance.sum() * 100:.2f}%")
 
+
+# %%
+# Build RGB colors from dataframe x, y, z columns
+colors = df.iloc[np.arange(z_all_filtered.shape[0])][["x", "y", "z"]].to_numpy().astype(float)
+mins = colors.min(axis=0)
+maxs = colors.max(axis=0)
+den = np.where((maxs - mins) == 0, 1, (maxs - mins))
+colors = (colors - mins) / den  # normalize to [0, 1]
+# scale them to [0, 0.9]
+colors *= 0.9
+
 # %%
 # UMAP
 mode = 'filtered'  # 'standardized', 'robustscaled', 'pca', 'filtered', or 'raw'
@@ -183,14 +197,7 @@ min_dist = 1  # minimum distance between points in UMAP
 metric = 'euclidean'  # distance metric for UMAP
 emb = umap.UMAP(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, metric=metric).fit_transform(Z[idx])
 
-# Build RGB colors from dataframe x, y, z columns
-colors = df.iloc[idx][["x", "y", "z"]].to_numpy().astype(float)
-mins = colors.min(axis=0)
-maxs = colors.max(axis=0)
-den = np.where((maxs - mins) == 0, 1, (maxs - mins))
-colors = (colors - mins) / den  # normalize to [0, 1]
-# scale them to [0, 0.7]
-colors *= 0.9
+
 
 plot_title = f"UMAP {mode}, {n_components}D, n_neighbors={n_neighbors}, min_dist={min_dist}, metric={metric}"
 fig = plt.figure(figsize=(7, 6))
@@ -217,7 +224,7 @@ os.makedirs(predictions_dir, exist_ok=True)
 
 # %%
 # save the fm parameters to a json file
-fm_params = df.iloc[idx][["freq", "harm_ratio", "mod_index"]]
+fm_params = df.iloc[np.arange(z_all_filtered.shape[0])][["freq", "harm_ratio", "mod_index"]]
 fm_params = fm_params.to_numpy().astype(float)
 fm_params_json = array2fluid_dataset(fm_params)
 fm_params_json_path = os.path.join(predictions_dir, "fm_params.json")

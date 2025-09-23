@@ -8,6 +8,7 @@ import pandas as pd
 from sonification.models.models import PlFMFactorVAE
 from sonification.utils.misc import midi2frequency
 from sonification.utils.tensor import scale
+from sonification.utils.array import scale_array_exp
 from tqdm import tqdm
 from pythonosc import dispatcher, osc_server, udp_client
 import nn_tilde
@@ -15,7 +16,7 @@ from torchaudio.transforms import MelSpectrogram
 
 # %%
 ckpt_path = '../../ckpt/fm_vae'
-ckpt_name = 'imv_v3.5'
+ckpt_name = 'imv_v5.10'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -50,13 +51,15 @@ print(f"Predicted parameters (scaled): {predicted_params}")
 # create a meshgrid of parameters to synthesize (SynthMaps style)
 
 # create ranges for each parameter
-pitch_steps = 51
-harm_ratio_steps = 51
-mod_idx_steps = 51
+pitch_steps = 64 # 51 for synthmaps paper
+harm_ratio_steps = 64
+mod_idx_steps = 64
 pitches = np.linspace(38, 86, pitch_steps)
 freqs = midi2frequency(pitches)  # x
-ratios = np.linspace(0, 1, harm_ratio_steps) * args.max_harm_ratio  # y
-indices = np.linspace(0, 1, mod_idx_steps) * args.max_mod_idx  # z
+ratios = np.linspace(0, 1, harm_ratio_steps) # y
+ratios = scale_array_exp(ratios, 0, 1, args.min_harm_ratio, args.max_harm_ratio)  # y
+indices = np.linspace(0, 1, mod_idx_steps) # z
+indices = scale_array_exp(indices, 0, 1, args.min_mod_idx, args.max_mod_idx)  # z
 
 # make into 3D mesh
 freqs, ratios, indices = np.meshgrid(freqs, ratios, indices)  # y, x, z!
@@ -87,7 +90,7 @@ model.mel_spectrogram.to(device)  # move mel spectrogram to device
 # %%
 # iterate the dataframe in batches and synthesize
 batch_size = 64
-n_batches = len(df) // batch_size + 1
+n_batches = len(df) // batch_size #+ 1
 print(f"Number of batches: {n_batches}, batch size: {batch_size}")
 z_min_all = torch.ones(args.latent_size) * 1000
 z_max_all = torch.ones(args.latent_size) * -1000
@@ -302,5 +305,5 @@ model_to_export.load_state_dict(ckpt['state_dict'])
 model_to_export.eval()
 export_fm_model = ExportFMModelNNTilde(model_to_export)
 dummy_input = torch.randn(1, 1, 8192)
-export_fm_model.export_to_ts("fm_vae3.ts", None)
+export_fm_model.export_to_ts("fm_vae_imv_v5.10.ts", None)
 # %%
