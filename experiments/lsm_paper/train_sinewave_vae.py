@@ -110,7 +110,7 @@ def main():
     # create logger
     logger = WandbLogger(
         name=args.ckpt_name,
-        project="fm_vae",
+        project="sinewave_fvae",
         save_dir=logdir,
         offline=False,
         settings=wandb.Settings(_disable_stats=True),
