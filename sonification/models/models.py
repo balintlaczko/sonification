@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from .layers import LinearEncoder, LinearDecoder, ResBlock, ResBlock1D, LinearResBlock, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
 from .ddsp import FMSynth, Sinewave
-from torchaudio.transforms import MelSpectrogram
+from torchaudio.transforms import MelSpectrogram, AmplitudeToDB
 from torchaudio.functional import resample
 from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims, midi2frequency, scale
@@ -2231,6 +2231,8 @@ class PlSineFactorVAE(LightningModule):
             power=args.power,
             normalized=args.normalized > 0,
         )
+        self.amplitude_to_db = AmplitudeToDB(stype='power', top_db=80.0)
+        self.mel_spectrogram.eval()
         self.model = SineVAE(
             input_width=self.args.n_mels,
             encoder_channels=args.encoder_channels,
@@ -2258,7 +2260,7 @@ class PlSineFactorVAE(LightningModule):
         pitches = scale(pitches_norm, 0, 1, 38, 86)
         freqs = midi2frequency(pitches)
         freqs = freqs.unsqueeze(1).repeat(1, self.sr)
-        amps = torch.rand(batch_size, requires_grad=False, device=self.device) * 0.9 + 0.1
+        amps = torch.rand(batch_size, requires_grad=False, device=self.device) * 0.99 + 0.01
         norm_params = torch.stack((pitches_norm, amps), dim=1)
         return norm_params, freqs, amps
     
@@ -2267,6 +2269,8 @@ class PlSineFactorVAE(LightningModule):
         in_wf = x.unsqueeze(1)
         # get mel spectrogram
         in_spec = self.mel_spectrogram(in_wf)
+        # convert to dB
+        in_spec = self.amplitude_to_db(in_spec)
         # average time dimension, keep batch and mel dims
         in_spec = torch.mean(in_spec, dim=-1)
         # predict
@@ -2291,7 +2295,6 @@ class PlSineFactorVAE(LightningModule):
 
         norm_params, freqs, amps = self.sample_sine_params(self.batch_size)
         x = self.input_synth(freqs).detach() * amps.unsqueeze(1)
-        in_wf = x.unsqueeze(1)
         # select a random slice of self.n_samples
         start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
         x = x[:, start_idx:start_idx + self.n_samples]
@@ -2299,18 +2302,20 @@ class PlSineFactorVAE(LightningModule):
         phase_flip = torch.rand(self.batch_size, 1, device=self.device)
         phase_flip = torch.where(phase_flip > 0.5, 1, -1)
         x = x * phase_flip
-        # add random noise
-        noise = torch.randn_like(x, device=self.device)
-        noise = (noise - noise.min()) / (noise.max() - noise.min())
-        noise = noise * 2 - 1
-        noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
-        noise = noise * noise_coeff
-        x = x + noise
+        # # add random noise
+        # noise = torch.randn_like(x, device=self.device)
+        # noise = (noise - noise.min()) / (noise.max() - noise.min())
+        # noise = noise * 2 - 1
+        # noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
+        # noise = noise * noise_coeff
+        # x = x + noise
         in_wf_slice = x.unsqueeze(1)
 
         # forward pass
         # get mel spectrogram
         in_spec = self.mel_spectrogram(in_wf_slice.detach())
+        # convert to dB
+        in_spec = self.amplitude_to_db(in_spec)
         # average time dimension, keep batch and mel dims
         in_spec = torch.mean(in_spec, dim=-1)
         # predict
@@ -2371,16 +2376,18 @@ class PlSineFactorVAE(LightningModule):
         phase_flip = torch.rand(self.batch_size, 1, device=self.device)
         phase_flip = torch.where(phase_flip > 0.5, 1, -1)
         x = x * phase_flip
-        # add random noise
-        noise = torch.randn_like(x, device=self.device)
-        noise = (noise - noise.min()) / (noise.max() - noise.min())
-        noise = noise * 2 - 1
-        noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
-        noise = noise * noise_coeff
-        x = x + noise
+        # # add random noise
+        # noise = torch.randn_like(x, device=self.device)
+        # noise = (noise - noise.min()) / (noise.max() - noise.min())
+        # noise = noise * 2 - 1
+        # noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
+        # noise = noise * noise_coeff
+        # x = x + noise
         in_wf_slice = x.unsqueeze(1)
         # get mel spectrogram
         in_spec = self.mel_spectrogram(in_wf_slice.detach())
+        # convert to dB
+        in_spec = self.amplitude_to_db(in_spec)
         # average time dimension, keep batch and mel dims
         in_spec = torch.mean(in_spec, dim=-1)
         # encode with the VAE
