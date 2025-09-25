@@ -2273,6 +2273,8 @@ class PlSineFactorVAE(LightningModule):
         in_spec = self.amplitude_to_db(in_spec)
         # average time dimension, keep batch and mel dims
         in_spec = torch.mean(in_spec, dim=-1)
+        # scale by bin minmax
+        in_spec = scale(in_spec, self.args.bin_minmax[0], self.args.bin_minmax[1], 0, 1)
         # predict
         out_spec, mu, logvar, z = self.model(in_spec)
         return out_spec, mu, logvar, z
@@ -2318,6 +2320,8 @@ class PlSineFactorVAE(LightningModule):
         in_spec = self.amplitude_to_db(in_spec)
         # average time dimension, keep batch and mel dims
         in_spec = torch.mean(in_spec, dim=-1)
+        # scale by bin minmax
+        in_spec = scale(in_spec, self.args.bin_minmax[0], self.args.bin_minmax[1], 0, 1)
         # predict
         out_spec, mu, logvar, z = self.model(in_spec)
 
@@ -2390,6 +2394,8 @@ class PlSineFactorVAE(LightningModule):
         in_spec = self.amplitude_to_db(in_spec)
         # average time dimension, keep batch and mel dims
         in_spec = torch.mean(in_spec, dim=-1)
+        # scale by bin minmax
+        in_spec = scale(in_spec, self.args.bin_minmax[0], self.args.bin_minmax[1], 0, 1)
         # encode with the VAE
         self.model.eval()
         mu_2, logvar_2 = self.model.encode(in_spec)
