@@ -1686,9 +1686,10 @@ class MelSpecEncoder(nn.Module):
         num_mlp_blocks = int(np.log2(post_encoder_n_features) - np.log2(target_n_features)) # 256 -> 16 = 4 blocks
         mlp_layers_features = [post_encoder_n_features // (2 ** i) for i in range(num_mlp_blocks + 1)]
         for i in range(num_mlp_blocks):
+            num_groups = max(1, mlp_layers_features[i + 1] // self.chans_per_group)
             block = [
                 nn.Linear(mlp_layers_features[i], mlp_layers_features[i + 1]),
-                nn.GroupNorm(mlp_layers_features[i + 1] // self.chans_per_group, mlp_layers_features[i + 1]),
+                nn.GroupNorm(num_groups, mlp_layers_features[i + 1]),
                 nn.LeakyReLU(0.2),
             ]
             mlp_layers.extend(block)
@@ -1942,9 +1943,10 @@ class ImageDecoder(nn.Module):
         mlp_layers = []
         mlp_layers_features = [latent_size * (2 ** i) for i in range(num_mlp_blocks + 1)]
         for i in range(num_mlp_blocks):
+            num_groups = max(1, mlp_layers_features[i + 1] // self.chans_per_group)
             block = [
                 nn.Linear(mlp_layers_features[i], mlp_layers_features[i + 1]),
-                nn.GroupNorm(mlp_layers_features[i + 1] // self.chans_per_group, mlp_layers_features[i + 1]),
+                nn.GroupNorm(num_groups, mlp_layers_features[i + 1]),
                 nn.LeakyReLU(0.2),
             ]
             mlp_layers.extend(block)
@@ -1958,6 +1960,7 @@ class ImageDecoder(nn.Module):
             in_channels = 2 ** i
             out_channels = 2 ** (i + 1)
             num_groups = out_channels // self.chans_per_group if out_channels // self.chans_per_group >= 2 else out_channels // 2
+            num_groups = max(1, num_groups)
             reshape_layers.extend([
                 nn.Conv2d(in_channels, out_channels, 3, 1, 1),
                 nn.GroupNorm(num_groups, out_channels),
@@ -1969,9 +1972,10 @@ class ImageDecoder(nn.Module):
         reshaped_width = int(np.sqrt(target_n_features))  # 8
         num_convtranspose_blocks = int(np.log2(output_width) - np.log2(reshaped_width))  # 512 -> 8 = 6 blocks
         convtranspose_blocks = []
+        num_groups = max(1, decoder_channels // self.chans_per_group)
         convtranspose_block = [
             nn.ConvTranspose2d(decoder_channels, decoder_channels, 3, stride=2, padding=1, output_padding=1),
-            nn.GroupNorm(decoder_channels // self.chans_per_group, decoder_channels),
+            nn.GroupNorm(num_groups, decoder_channels),
             nn.LeakyReLU(0.2),
         ]
         for _ in range(num_convtranspose_blocks - 1):
@@ -1979,7 +1983,7 @@ class ImageDecoder(nn.Module):
         # last block has no activation
         convtranspose_blocks.extend([
             nn.ConvTranspose2d(decoder_channels, decoder_channels, 3, stride=2, padding=1, output_padding=1),
-            nn.GroupNorm(decoder_channels // self.chans_per_group, decoder_channels),
+            nn.GroupNorm(num_groups, decoder_channels),
         ])
         self.upscaler = nn.Sequential(*convtranspose_blocks)
         # now we have a 512x512 feature map with decoder_channels channels
@@ -2001,6 +2005,7 @@ class ImageDecoder(nn.Module):
             out_channels = 2 ** int(np.log2(decoder_channels) - i - 1)
             if i < num_head_blocks - 1:
                 num_groups = out_channels // self.chans_per_group if out_channels // self.chans_per_group >= 2 else out_channels // 2
+                num_groups = max(1, num_groups)
                 head_layers.extend([
                     nn.Conv2d(in_channels, out_channels, 3, 1, 1),
                     nn.GroupNorm(num_groups, out_channels),
@@ -2245,8 +2250,7 @@ class PlSineFactorVAE(LightningModule):
             decoder_n_res_channel=args.decoder_n_res_channel,
             latent_size=self.latent_size,
         )
-        self.D = LinearDiscriminator(
-            self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+        self.D = LinearDiscriminator(self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
         
 
         def init_weights_kaiming(m):
@@ -2976,13 +2980,19 @@ class PlImgFactorVAE(LightningModule):
 
         self.batch_size = args.batch_size
         self.warmup_epochs = args.warmup_epochs
+        self.recon_loss_weight_start = args.recon_loss_weight_start
+        self.recon_loss_weight = args.recon_loss_weight_start # initialize to start
+        self.recon_loss_weight_end = args.recon_loss_weight_end
+        self.recon_loss_weight_ramp_start_epoch = args.recon_loss_weight_ramp_start_epoch
+        self.recon_loss_weight_ramp_end_epoch = args.recon_loss_weight_ramp_end_epoch
         self.latent_size = args.latent_size
         self.logdir = args.logdir
         self.d_hidden_size = args.d_hidden_size
         self.d_num_layers = args.d_num_layers
 
         # losses
-        self.recon_weight = args.recon_weight
+        self.recon_loss = nn.MSELoss() if self.args.recon_loss_type == 'mse' else nn.L1Loss()
+        self.recon_loss.eval()
         self.kld = kld_loss
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
@@ -3002,8 +3012,8 @@ class PlImgFactorVAE(LightningModule):
 
         # models
         self.model = ImageVAE(
-            input_width=args.input_width,
-            output_channels=args.output_channels,
+            input_width=args.img_size,
+            output_channels=1,
             encoder_channels=args.encoder_channels,
             encoder_kernels=args.encoder_kernels,
             encoder_n_res_block=args.encoder_n_res_block,
@@ -3013,8 +3023,7 @@ class PlImgFactorVAE(LightningModule):
             decoder_n_res_channel=args.decoder_n_res_channel,
             latent_size=self.latent_size
         )
-        self.D = LinearDiscriminator(
-            self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+        self.D = LinearDiscriminator(self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
 
 
         def init_weights_kaiming(m):
@@ -3028,12 +3037,6 @@ class PlImgFactorVAE(LightningModule):
         # predict the image
         predicted_img, mu, logvar, z = self.model(x)
         return predicted_img, mu, logvar, z
-    
-
-    def on_train_epoch_start(self):
-        # Reinitialize the Discriminator batch iterator at the start of every epoch
-        train_loader = self.trainer.train_dataloader
-        self.disc_iter = iter(train_loader)
     
 
     def training_step(self, batch, batch_idx):
@@ -3050,26 +3053,26 @@ class PlImgFactorVAE(LightningModule):
 
         # get the batch
         epoch_idx = self.trainer.current_epoch
-        # batch is the main VAE batch
-        x_vae, _ = batch  # assuming MNIST (x, label)
-
-        # Get discriminator batch
-        try:
-            x_disc, _ = next(self.disc_iter)
-        except StopIteration:
-            self.disc_iter = iter(self.trainer.train_dataloader)
-            x_disc, _ = next(self.disc_iter)
-
-        x_vae = x_vae.to(self.device)
-        x_disc = x_disc.to(self.device)
+        x1, x2 = batch
 
         # forward pass
         # predict the image
-        predicted_img, mu, logvar, z = self.model(x_vae)
+        predicted_img, mu, logvar, z = self.model(x1)
 
         # VAE recon_loss
-        vae_recon_loss = F.l1_loss(predicted_img, x_vae)
-        scaled_vae_recon_loss = vae_recon_loss * self.recon_weight
+        recon_loss = self.recon_loss(predicted_img, x1)
+        # calculate current recon loss weight
+        current_epoch = self.trainer.current_epoch
+        if current_epoch < self.recon_loss_weight_ramp_start_epoch:
+            recon_loss_weight = self.recon_loss_weight_start
+        elif current_epoch > self.recon_loss_weight_ramp_end_epoch:
+            recon_loss_weight = self.recon_loss_weight_end
+        else:
+            recon_loss_weight = self.recon_loss_weight_start + (self.recon_loss_weight_end - self.recon_loss_weight_start) * \
+                (current_epoch - self.recon_loss_weight_ramp_start_epoch) / \
+                (self.recon_loss_weight_ramp_end_epoch - self.recon_loss_weight_ramp_start_epoch)
+        self.recon_loss_weight = recon_loss_weight
+        scaled_recon_loss = recon_loss * recon_loss_weight
 
         # VAE KLD loss
         if self.args.dynamic_kld > 0:
@@ -3089,8 +3092,8 @@ class PlImgFactorVAE(LightningModule):
             self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
         scaled_vae_tc_loss = vae_tc_loss * tc_scale
 
-        # VAE loss
-        vae_loss = scaled_vae_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
+        # VAE total loss
+        vae_loss = scaled_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
 
         # VAE backward pass
         vae_optimizer.zero_grad()
@@ -3103,7 +3106,7 @@ class PlImgFactorVAE(LightningModule):
         # Discriminator forward pass
         # encode with the VAE
         self.model.eval()
-        mu_2, logvar_2 = self.model.encode(x_disc)
+        mu_2, logvar_2 = self.model.encode(x2)
         # reparameterize
         z_2 = self.model.reparameterize(mu_2, logvar_2)
         z_2_perm = permute_dims(z_2)
@@ -3123,82 +3126,18 @@ class PlImgFactorVAE(LightningModule):
         d_scheduler.step(d_tc_loss.item())
 
         # log losses
-        self.last_recon_loss = vae_recon_loss
+        self.last_recon_loss = recon_loss # using it for dynamic kld threshold
         self.log_dict({
             "vae_loss": vae_loss,
-            "vae_recon_loss": vae_recon_loss,
+            "vae_recon_loss": recon_loss,
             "vae_kld_loss": kld_loss,
             "vae_tc_loss": vae_tc_loss,
             "d_tc_loss": d_tc_loss,
             "lr_vae": vae_scheduler.get_last_lr()[0],
             "lr_d": d_scheduler.get_last_lr()[0],
+            "vae_recon_loss_weight": self.recon_loss_weight,
             "vae_kld_scale": kld_scale,
             "vae_tc_scale": tc_scale,
-        },
-        prog_bar=True)
-
-
-    def on_validation_epoch_start(self):
-        # Reinitialize the Discriminator batch iterator at the start of every validation epoch
-        val_loader = self.trainer.val_dataloaders
-        self.disc_iter = iter(val_loader)
-
-    def validation_step(self, batch, batch_idx):
-        self.model.eval()
-        self.D.eval()
-
-        # create a batch of ones and zeros for the discriminator
-        ones = torch.ones(self.batch_size, dtype=torch.long, device=self.device)
-        zeros = torch.zeros(self.batch_size, dtype=torch.long, device=self.device)
-
-        # get the batch
-        # epoch_idx = self.trainer.current_epoch
-        # batch is the main VAE batch
-        x_vae, _ = batch  # assuming MNIST (x, label)
-
-        # Get discriminator batch
-        try:
-            x_disc, _ = next(self.disc_iter)
-        except StopIteration:
-            self.disc_iter = iter(self.trainer.val_dataloaders)
-            x_disc, _ = next(self.disc_iter)
-
-        x_vae = x_vae.to(self.device)
-        x_disc = x_disc.to(self.device)
-
-        # forward pass
-        # predict the image
-        predicted_img, mu, logvar, z = self.model(x_vae)
-
-        # VAE recon_loss
-        vae_recon_loss = F.l1_loss(predicted_img, x_vae)
-
-        # VAE KLD loss
-        kld_loss = self.kld(mu, logvar)
-
-        # VAE TC loss
-        d_z = self.D(z)
-        vae_tc_loss = F.cross_entropy(d_z, ones)
-
-        # Discriminator forward pass
-        # encode with the VAE
-        mu_2, logvar_2 = self.model.encode(x_disc)
-        # reparameterize
-        z_2 = self.model.reparameterize(mu_2, logvar_2)
-        z_2_perm = permute_dims(z_2)
-        # get the discriminator output
-        d_z_detached = self.D(z.detach())
-        d_z_2_perm = self.D(z_2_perm.detach())
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
-                           F.cross_entropy(d_z_2_perm, ones))
-        
-        # log losses
-        self.log_dict({
-            "val_vae_loss": vae_recon_loss + kld_loss + vae_tc_loss,
-            "val_vae_recon_loss": vae_recon_loss,
-            "val_vae_kld_loss": kld_loss,
-            "val_vae_tc_loss": vae_tc_loss,
-            "val_d_tc_loss": d_tc_loss,
         },
         prog_bar=True)
 
@@ -3225,9 +3164,20 @@ class PlImgFactorVAE(LightningModule):
                         scheduler.num_bad_epochs = 0
                         print(f"Patience changed to {scheduler.patience} at epoch {epoch}")
         # update the kld weight
+        changed_kld, changed_param = False, False
         if self.args.dynamic_kld > 0:
             if self.last_recon_loss < self.args.target_recon_loss:
                 self.kld_weight_dynamic *= 1.01
+                changed_kld = True
+        # if changed param or kld weights, reset scheduler bad epochs
+        if changed_param or changed_kld:
+            epoch = self.trainer.current_epoch
+            vae_scheduler, d_scheduler = self.lr_schedulers()
+            for scheduler in [vae_scheduler, d_scheduler]:
+                # Check if this is a ReduceLROnPlateau scheduler
+                if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    scheduler.num_bad_epochs = 0
+                    print(f"Resetting patience for {scheduler} at epoch {epoch}")
 
 
     def on_train_batch_start(self, batch, batch_idx):
@@ -3246,9 +3196,9 @@ class PlImgFactorVAE(LightningModule):
         d_optimizer = torch.optim.AdamW(
             self.D.parameters(), lr=self.lr_d)
         vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=50000)
+            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=20000)
         d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            d_optimizer, mode='min', factor=self.lr_decay_d, patience=50000)
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=40000)
         # return the optimizers and schedulers
         return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
     
