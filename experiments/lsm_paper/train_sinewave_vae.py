@@ -26,19 +26,19 @@ def main():
     parser.add_argument("--bin_minmax", type=float, nargs=2, default=(-70, 50))
 
     # model params
-    parser.add_argument("--latent_size", type=int, default=4)
+    parser.add_argument("--latent_size", type=int, default=2)
     parser.add_argument("--encoder_channels", type=int, default=128)
     parser.add_argument("--encoder_kernels", type=int, default=3)
     parser.add_argument("--encoder_n_res_block", type=int, default=32)
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
     parser.add_argument("--decoder_channels", type=int, default=128)
-    parser.add_argument("--decoder_n_res_block", type=int, default=2)
+    parser.add_argument("--decoder_n_res_block", type=int, default=8)
     parser.add_argument("--decoder_n_res_channel", type=int, default=64)
     parser.add_argument("--d_hidden_size", type=int, default=128)
     parser.add_argument("--d_num_layers", type=int, default=5)
 
     # training params
-    parser.add_argument("--batch_size", type=int, default=512)
+    parser.add_argument("--batch_size", type=int, default=1024)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     # reconstruction loss params
     parser.add_argument("--recon_loss_weight_start", type=float, default=100)
@@ -49,7 +49,7 @@ def main():
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float, default=100, help='kld weight at the end of the warmup')
-    parser.add_argument('--kld_weight_min', type=float, default=0.1, help='kld weight at the start of the warmup')
+    parser.add_argument('--kld_weight_min', type=float, default=0.3, help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0, help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the kld weight')
     # tc loss params
@@ -58,17 +58,17 @@ def main():
     parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
     # optimizer params
-    parser.add_argument("--lr_vae", type=float, default=0.001)
+    parser.add_argument("--lr_vae", type=float, default=0.0002)
     parser.add_argument("--lr_decay_vae", type=float, default=0.85)
-    parser.add_argument("--lr_d", type=float, default=0.1)
+    parser.add_argument("--lr_d", type=float, default=0.0001)
     parser.add_argument("--lr_decay_d", type=float, default=0.85)
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=400)
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/sine_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_new_v25")
+    parser.add_argument("--ckpt_name", type=str, default="imv_new_v29")
     parser.add_argument("--logdir", type=str, default="./logs/sine_vae")
-    parser.add_argument("--comment", type=str, default="use bin minmax scaling, new params everywhere")
+    parser.add_argument("--comment", type=str, default="double D patience, deeper decoder, batch=1024")
 
     args = parser.parse_args()
 
@@ -122,7 +122,7 @@ def main():
         enable_checkpointing=True,
         callbacks=callbacks,
         logger=logger,
-        log_every_n_steps=20,
+        log_every_n_steps=100,
         limit_train_batches=args.steps_per_epoch,
     )
 

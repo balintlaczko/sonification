@@ -2490,7 +2490,7 @@ class PlSineFactorVAE(LightningModule):
         vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=20000)
         d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            d_optimizer, mode='min', factor=self.lr_decay_d, patience=20000)
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=40000)
         # return the optimizers and schedulers
         return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
 
