@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=1024)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     # reconstruction loss params
+    parser.add_argument('--recon_loss_type', type=str, default='mse', help='reconstruction loss type: l1 or mse')
     parser.add_argument("--recon_loss_weight_start", type=float, default=100)
     parser.add_argument("--recon_loss_weight_end", type=float, default=100)
     parser.add_argument("--recon_loss_weight_ramp_start_epoch", type=int, default=0)

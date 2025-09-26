@@ -2011,7 +2011,8 @@ class ImageDecoder(nn.Module):
                 head_layers.extend([
                     nn.Conv2d(in_channels, out_channels, 3, 1, 1),
                     # nn.Tanh()  # output is in range [-1, 1]
-                    nn.Sigmoid()  # output is in range [0, 1]
+                    # nn.Sigmoid()  # output is in range [0, 1]
+                    nn.Identity()  # output is unbounded
                 ])
             # print(f"block {i+1}/{num_head_blocks}: {in_channels} --> {out_channels}")
 
@@ -2200,7 +2201,7 @@ class PlSineFactorVAE(LightningModule):
         self.d_num_layers = args.d_num_layers
 
         # losses
-        self.recon_loss = nn.MSELoss()
+        self.recon_loss = nn.MSELoss() if self.args.recon_loss_type == 'mse' else nn.L1Loss()
         self.recon_loss.eval()
         self.kld = kld_loss
         self.kld_weight_max = args.kld_weight_max
