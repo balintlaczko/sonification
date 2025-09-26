@@ -1686,9 +1686,10 @@ class MelSpecEncoder(nn.Module):
         num_mlp_blocks = int(np.log2(post_encoder_n_features) - np.log2(target_n_features)) # 256 -> 16 = 4 blocks
         mlp_layers_features = [post_encoder_n_features // (2 ** i) for i in range(num_mlp_blocks + 1)]
         for i in range(num_mlp_blocks):
+            num_groups = max(1, mlp_layers_features[i + 1] // self.chans_per_group)
             block = [
                 nn.Linear(mlp_layers_features[i], mlp_layers_features[i + 1]),
-                nn.GroupNorm(mlp_layers_features[i + 1] // self.chans_per_group, mlp_layers_features[i + 1]),
+                nn.GroupNorm(num_groups, mlp_layers_features[i + 1]),
                 nn.LeakyReLU(0.2),
             ]
             mlp_layers.extend(block)
