@@ -15,7 +15,7 @@ import matplotlib.colors as colors
 
 # %%
 ckpt_path = '../../ckpt/sine_vae'
-model_version = '30'
+model_version = '35'
 ckpt_name = 'imv_new_v' + model_version
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
@@ -168,8 +168,8 @@ if num_pairs > 0:
 
 # %%
 # set percentiles
-percentile_low = 5
-percentile_high = 95
+percentile_low = 1
+percentile_high = 99
 steps = 64
 
 z_x_min = np.percentile(z_all[:, 0], percentile_low)
