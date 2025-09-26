@@ -1943,9 +1943,10 @@ class ImageDecoder(nn.Module):
         mlp_layers = []
         mlp_layers_features = [latent_size * (2 ** i) for i in range(num_mlp_blocks + 1)]
         for i in range(num_mlp_blocks):
+            num_groups = max(1, mlp_layers_features[i + 1] // self.chans_per_group)
             block = [
                 nn.Linear(mlp_layers_features[i], mlp_layers_features[i + 1]),
-                nn.GroupNorm(mlp_layers_features[i + 1] // self.chans_per_group, mlp_layers_features[i + 1]),
+                nn.GroupNorm(num_groups, mlp_layers_features[i + 1]),
                 nn.LeakyReLU(0.2),
             ]
             mlp_layers.extend(block)
@@ -1959,6 +1960,7 @@ class ImageDecoder(nn.Module):
             in_channels = 2 ** i
             out_channels = 2 ** (i + 1)
             num_groups = out_channels // self.chans_per_group if out_channels // self.chans_per_group >= 2 else out_channels // 2
+            num_groups = max(1, num_groups)
             reshape_layers.extend([
                 nn.Conv2d(in_channels, out_channels, 3, 1, 1),
                 nn.GroupNorm(num_groups, out_channels),
@@ -1970,9 +1972,10 @@ class ImageDecoder(nn.Module):
         reshaped_width = int(np.sqrt(target_n_features))  # 8
         num_convtranspose_blocks = int(np.log2(output_width) - np.log2(reshaped_width))  # 512 -> 8 = 6 blocks
         convtranspose_blocks = []
+        num_groups = max(1, decoder_channels // self.chans_per_group)
         convtranspose_block = [
             nn.ConvTranspose2d(decoder_channels, decoder_channels, 3, stride=2, padding=1, output_padding=1),
-            nn.GroupNorm(decoder_channels // self.chans_per_group, decoder_channels),
+            nn.GroupNorm(num_groups, decoder_channels),
             nn.LeakyReLU(0.2),
         ]
         for _ in range(num_convtranspose_blocks - 1):
@@ -1980,7 +1983,7 @@ class ImageDecoder(nn.Module):
         # last block has no activation
         convtranspose_blocks.extend([
             nn.ConvTranspose2d(decoder_channels, decoder_channels, 3, stride=2, padding=1, output_padding=1),
-            nn.GroupNorm(decoder_channels // self.chans_per_group, decoder_channels),
+            nn.GroupNorm(num_groups, decoder_channels),
         ])
         self.upscaler = nn.Sequential(*convtranspose_blocks)
         # now we have a 512x512 feature map with decoder_channels channels
@@ -2002,6 +2005,7 @@ class ImageDecoder(nn.Module):
             out_channels = 2 ** int(np.log2(decoder_channels) - i - 1)
             if i < num_head_blocks - 1:
                 num_groups = out_channels // self.chans_per_group if out_channels // self.chans_per_group >= 2 else out_channels // 2
+                num_groups = max(1, num_groups)
                 head_layers.extend([
                     nn.Conv2d(in_channels, out_channels, 3, 1, 1),
                     nn.GroupNorm(num_groups, out_channels),
