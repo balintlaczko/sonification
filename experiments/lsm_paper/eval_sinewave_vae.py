@@ -15,7 +15,7 @@ import matplotlib.colors as colors
 
 # %%
 ckpt_path = '../../ckpt/sine_vae'
-model_version = '29'
+model_version = '30'
 ckpt_name = 'imv_new_v' + model_version
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
