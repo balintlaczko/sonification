@@ -26,21 +26,21 @@ def main():
     parser.add_argument("--encoder_n_res_block", type=int, default=32)
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
     parser.add_argument("--decoder_channels", type=int, default=128)
-    parser.add_argument("--decoder_n_res_block", type=int, default=8)
+    parser.add_argument("--decoder_n_res_block", type=int, default=2)
     parser.add_argument("--decoder_n_res_channel", type=int, default=64)
     parser.add_argument("--d_hidden_size", type=int, default=128)
     parser.add_argument("--d_num_layers", type=int, default=5)
 
     # training params
-    parser.add_argument("--batch_size", type=int, default=1024)
+    parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     # reconstruction loss params
-    parser.add_argument('--recon_loss_type', type=str, default='l1', help='reconstruction loss type: l1 or mse')
+    parser.add_argument('--recon_loss_type', type=str, default='mse', help='reconstruction loss type: l1 or mse')
     parser.add_argument("--recon_loss_weight_start", type=float, default=100)
     parser.add_argument("--recon_loss_weight_end", type=float, default=100)
     parser.add_argument("--recon_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--recon_loss_weight_ramp_end_epoch", type=int, default=1)
-    parser.add_argument('--target_recon_loss', type=float, default=0.01, help='target recon loss to keep in case of dynamic kld')
+    parser.add_argument('--target_recon_loss', type=float, default=0.001, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float, default=100, help='kld weight at the end of the warmup')
@@ -58,7 +58,7 @@ def main():
     parser.add_argument("--lr_d", type=float, default=0.0001)
     parser.add_argument("--lr_decay_d", type=float, default=0.85)
     parser.add_argument("--train_epochs", type=int, default=100000)
-    parser.add_argument("--steps_per_epoch", type=int, default=400)
+    # parser.add_argument("--steps_per_epoch", type=int, default=400)
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/squares_vae")
     parser.add_argument("--ckpt_name", type=str, default="imv_new_v1")
@@ -78,7 +78,7 @@ def main():
     dataset = White_Square_dataset(img_size=args.img_size, square_size=args.square_size)
 
     # create dataloader
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=4, prefetch_factor=2, persistent_workers=True)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=2, persistent_workers=True)
 
     # create the model
     model = PlImgFactorVAE(args)
@@ -116,8 +116,8 @@ def main():
         enable_checkpointing=True,
         callbacks=callbacks,
         logger=logger,
-        log_every_n_steps=100,
-        limit_train_batches=args.steps_per_epoch,
+        log_every_n_steps=50,
+        # limit_train_batches=args.steps_per_epoch,
     )
 
     hyperparams = vars(args).copy()
