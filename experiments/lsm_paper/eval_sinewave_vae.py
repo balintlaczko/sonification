@@ -7,11 +7,12 @@ import numpy as np
 import pandas as pd
 from sonification.models.models import PlSineFactorVAE
 from sonification.utils.misc import midi2frequency, frequency2midi
-from sonification.utils.tensor import db2amp, scale
-from sonification.utils.dsp import db2amp, amp2db
+from sonification.utils.tensor import scale
+from sonification.utils.dsp import amp2db
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+import itertools
 
 # %%
 ckpt_path = '../../ckpt/sine_vae'
@@ -122,8 +123,6 @@ z_all = z_all.cpu().numpy()
 
 # %%
 # create a scatter plot of the latent space
-import itertools
-
 num_dims = z_all.shape[1]
 dim_pairs = list(itertools.combinations(range(num_dims), 2))
 num_pairs = len(dim_pairs)
