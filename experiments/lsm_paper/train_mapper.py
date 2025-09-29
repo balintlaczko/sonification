@@ -48,11 +48,11 @@ def main():
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper', help='checkpoint path')
-    parser.add_argument('--ckpt_name', type=str, default='imv_new_v2', help='checkpoint name')
+    parser.add_argument('--ckpt_name', type=str, default='imv_new_v3', help='checkpoint name')
     parser.add_argument('--logdir', type=str, default='./logs/mapper', help='log directory')
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='', help='add a comment if needed')
+    parser.add_argument('--comment', type=str, default='same as v2 but with group norm', help='add a comment if needed')
 
     args = parser.parse_args()
 
