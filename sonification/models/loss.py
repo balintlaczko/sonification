@@ -277,3 +277,26 @@ class MMDloss(nn.Module):
             z__kernel.mean() - \
             2 * priorz_z__kernel.mean()
         return mmd
+
+
+def rbf_kernel(x, y, sigma=1.0):
+    """
+    Computes the RBF (Gaussian) kernel between two sets of vectors.
+    """
+    # Use torch.cdist to get pairwise distances, then square it for the kernel
+    dist_sq = torch.cdist(x, y, p=2)**2
+    return torch.exp(-dist_sq / (2 * sigma**2))
+
+def mmd_loss(x, y, sigma=1.0):
+    """
+    Calculates the Maximum Mean Discrepancy (MMD) between two sets of samples x and y.
+    """
+    x_kernel = rbf_kernel(x, x, sigma)
+    y_kernel = rbf_kernel(y, y, sigma)
+    xy_kernel = rbf_kernel(x, y, sigma)
+    
+    # The diagonal elements are always 1 (exp(0)), but we can keep them for simplicity
+    # or subtract the trace for an unbiased estimate if needed.
+    # For simplicity, we use the biased estimate here.
+    mmd = x_kernel.mean() + y_kernel.mean() - 2 * xy_kernel.mean()
+    return mmd
