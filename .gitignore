@@ -15,6 +15,7 @@ datasets/
 logs/
 experiments/lsm_paper/MNIST/
 experiments/lsm_paper/figures/
+experiments/lsm_paper/eval_mapper_old.py
 MNIST/
 experiments/params2feats_paper/checkpoints/
 experiments/params2feats_paper/embeddings/
