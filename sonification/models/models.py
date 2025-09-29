@@ -1262,7 +1262,7 @@ class PlMapper(LightningModule):
         scaled_locality_loss = self.locality_weight * locality_loss
 
         # cycle consistency loss
-        cycle_consistency_loss = self.cycle_consistency_loss(z_3, z_2)
+        cycle_consistency_loss = 0
         # calculate current cycle consistency loss weight
         current_epoch = self.trainer.current_epoch
         if current_epoch < self.cycle_consistency_ramp_start_epoch:
@@ -1274,6 +1274,8 @@ class PlMapper(LightningModule):
                 (current_epoch - self.cycle_consistency_ramp_start_epoch) / \
                 (self.cycle_consistency_ramp_end_epoch - self.cycle_consistency_ramp_start_epoch)
         self.cycle_consistency_weight = cycle_consistency_weight
+        if cycle_consistency_weight > 0:
+            cycle_consistency_loss = self.cycle_consistency_loss(z_3, z_2)
         scaled_cycle_consistency_loss = cycle_consistency_weight * cycle_consistency_loss
 
         # MMD loss for distribution matching

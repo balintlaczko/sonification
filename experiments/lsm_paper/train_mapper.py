@@ -18,26 +18,26 @@ def main():
     # model params
     parser.add_argument('--in_features', type=int, default=2, help='input size')
     parser.add_argument('--out_features', type=int, default=2, help='output size')
-    parser.add_argument('--hidden_layers_features', type=int, nargs='*', default=[64, 128, 256, 128, 64], help='the size of the hidden layers')
+    parser.add_argument('--hidden_layers_features', type=int, nargs='*', default=[8, 16, 32, 64, 128, 256, 128, 64, 32, 16, 8], help='the size of the hidden layers')
 
     # training params
-    parser.add_argument('--batch_size', type=int, default=256, help='batch size')
+    parser.add_argument('--batch_size', type=int, default=512, help='batch size')
     parser.add_argument("--warmup_epochs", type=int, default=10)
     parser.add_argument('--train_epochs', type=int, default=10000000, help='number of training epochs')
     # locality loss params
-    parser.add_argument('--locality_loss_type', type=str, default='mse', help='locality loss type: l1 or mse')
+    parser.add_argument('--locality_loss_type', type=str, default='l1', help='locality loss type: l1 or mse')
     parser.add_argument('--locality_weight', type=float, default=1)
     # mmd loss params
-    parser.add_argument('--mmd_weight', type=float, default=0.1)
+    parser.add_argument('--mmd_weight', type=float, default=0.5)
     # cycle consistency loss params
-    parser.add_argument('--cycle_consistency_loss_type', type=str, default='mse', help='cycle consistency loss type: l1 or mse')
+    parser.add_argument('--cycle_consistency_loss_type', type=str, default='l1', help='cycle consistency loss type: l1 or mse')
     parser.add_argument('--cycle_consistency_weight_start', type=float, default=0)
     parser.add_argument('--cycle_consistency_weight_end', type=float, default=1)
-    parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=300, help='cycle consistency start epoch')
-    parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=700)
+    parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=50, help='cycle consistency start epoch')
+    parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=100)
 
     # optimizer params
-    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
+    parser.add_argument('--lr', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--lr_decay', type=float, default=0.85)
 
     # image model
@@ -48,7 +48,7 @@ def main():
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper', help='checkpoint path')
-    parser.add_argument('--ckpt_name', type=str, default='imv_new_v1', help='checkpoint name')
+    parser.add_argument('--ckpt_name', type=str, default='imv_new_v2', help='checkpoint name')
     parser.add_argument('--logdir', type=str, default='./logs/mapper', help='log directory')
 
     # quick comment
