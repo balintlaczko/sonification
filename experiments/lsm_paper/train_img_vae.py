@@ -54,7 +54,7 @@ def main():
     parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
     # optimizer params
     parser.add_argument("--lr_vae", type=float, default=0.0005)
-    parser.add_argument("--lr_decay_vae", type=float, default=0.85)
+    parser.add_argument("--lr_decay_vae", type=float, default=0.851)
     parser.add_argument("--lr_d", type=float, default=0.000005)
     parser.add_argument("--lr_decay_d", type=float, default=0.85)
     parser.add_argument("--train_epochs", type=int, default=100000)
