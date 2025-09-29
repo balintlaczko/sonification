@@ -1213,7 +1213,7 @@ class PlMapper(LightningModule):
         self.out_model = args.out_model
         self.in_model.eval()
         self.out_model.eval()
-        self.D = LinearDiscriminator(self.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+        self.D = LinearDiscriminator(self.out_model.args.latent_size, self.d_hidden_size, 2, self.d_num_layers)
 
         def init_weights_kaiming(m):
             if isinstance(m, (nn.Conv1d, nn.ConvTranspose1d, nn.Linear)):  # Apply to conv and linear layers
@@ -1341,11 +1341,11 @@ class PlMapper(LightningModule):
         scheduler.step(loss.item())
 
         # discriminator step
-        z_1_perm = permute_dims(z_1)
+        z_real_perm = permute_dims(z_real)
         d_z_2_detached = self.D(z_2.detach())
-        d_z_1_perm = self.D(z_1_perm.detach())
+        d_z_real_perm = self.D(z_real_perm.detach())
         d_tc_loss = 0.5 * (F.cross_entropy(d_z_2_detached, zeros) +
-                           F.cross_entropy(d_z_1_perm, ones))
+                           F.cross_entropy(d_z_real_perm, ones))
 
         # Discriminator backward pass
         d_optimizer.zero_grad()

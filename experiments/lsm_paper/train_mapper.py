@@ -48,7 +48,6 @@ def main():
     parser.add_argument("--lr_decay", type=float, default=0.85)
     parser.add_argument("--lr_d", type=float, default=0.000005)
     parser.add_argument("--lr_decay_d", type=float, default=0.85)
-    parser.add_argument("--train_epochs", type=int, default=100000)
 
     # image model
     parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/squares_vae/imv_new_v21_bkp/imv_new_v21_last_epoch=203.ckpt', help='image model checkpoint path')
