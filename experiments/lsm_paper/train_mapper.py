@@ -35,8 +35,8 @@ def main():
     parser.add_argument('--cycle_consistency_loss_type', type=str, default='l1', help='cycle consistency loss type: l1 or mse')
     parser.add_argument('--cycle_consistency_weight_start', type=float, default=0)
     parser.add_argument('--cycle_consistency_weight_end', type=float, default=1)
-    parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=1000, help='cycle consistency start epoch')
-    parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=2000)
+    parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=2000, help='cycle consistency start epoch')
+    parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=4000)
     # tc loss params
     parser.add_argument('--tc_weight_max', type=float, default=2, help='tc weight at the end of the warmup')
     parser.add_argument('--tc_weight_min', type=float, default=2, help='tc weight at the start of the warmup')
@@ -57,11 +57,11 @@ def main():
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper', help='checkpoint path')
-    parser.add_argument('--ckpt_name', type=str, default='imv_new_v7', help='checkpoint name')
+    parser.add_argument('--ckpt_name', type=str, default='imv_new_v8', help='checkpoint name')
     parser.add_argument('--logdir', type=str, default='./logs/mapper', help='log directory')
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='adding tc loss to mapped', help='add a comment if needed')
+    parser.add_argument('--comment', type=str, default='fixed tc loss, more delayed cycle consistency', help='add a comment if needed')
 
     args = parser.parse_args()
 

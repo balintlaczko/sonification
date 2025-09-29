@@ -1240,7 +1240,7 @@ class PlMapper(LightningModule):
 
         # get the batch
         epoch_idx = self.trainer.current_epoch
-        x, _ = batch
+        x, x2 = batch
 
         # encode with input model
         mu, logvar = self.in_model.model.encode(x)
@@ -1341,11 +1341,17 @@ class PlMapper(LightningModule):
         scheduler.step(loss.item())
 
         # discriminator step
-        z_real_perm = permute_dims(z_real)
+        self.model.eval()
+        # encode with input model
+        mu, logvar = self.in_model.model.encode(x2)
+        z_1b = self.in_model.model.reparameterize(mu, logvar)
+        # project to output space
+        z_2b = self.model(z_1b)
+        z_2b_perm = permute_dims(z_2b)
         d_z_2_detached = self.D(z_2.detach())
-        d_z_real_perm = self.D(z_real_perm.detach())
+        d_z_2b_perm = self.D(z_2b_perm.detach())
         d_tc_loss = 0.5 * (F.cross_entropy(d_z_2_detached, zeros) +
-                           F.cross_entropy(d_z_real_perm, ones))
+                           F.cross_entropy(d_z_2b_perm, ones))
 
         # Discriminator backward pass
         d_optimizer.zero_grad()
