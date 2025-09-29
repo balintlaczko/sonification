@@ -583,18 +583,22 @@ class LinearProjector(nn.Module):
         super(LinearProjector, self).__init__()
 
         layers = []
-
+        features_per_group = 16
+        num_groups = max(1, hidden_layers_features[0] // features_per_group)
         # add first layer
         layers.extend([
             nn.Linear(in_features, hidden_layers_features[0]),
+            nn.GroupNorm(num_groups, hidden_layers_features[0]),
             nn.LeakyReLU(0.2, inplace=True),
         ])
 
         # add hidden layers
         for i in range(len(hidden_layers_features)-1):
+            num_groups = max(1, hidden_layers_features[i+1] // features_per_group)
             layers.extend([
                 nn.Linear(hidden_layers_features[i],
                           hidden_layers_features[i+1]),
+                nn.GroupNorm(num_groups, hidden_layers_features[i+1]),
                 nn.LeakyReLU(0.2, inplace=True),
             ])
 
