@@ -300,3 +300,28 @@ def mmd_loss(x, y, sigma=1.0):
     # For simplicity, we use the biased estimate here.
     mmd = x_kernel.mean() + y_kernel.mean() - 2 * xy_kernel.mean()
     return mmd
+
+def pearson_correlation_loss(x, y):
+    """
+    Calculates 1 - Pearson Correlation Coefficient in a batch-independent manner.
+    x and y are 2D distance matrices.
+    """
+    # We only need the upper triangular part of the distance matrices (excluding the diagonal)
+    # to get the unique pairwise distances.
+    indices = torch.triu_indices(x.shape[0], x.shape[1], offset=1)
+    x_flat = x[indices[0], indices[1]]
+    y_flat = y[indices[0], indices[1]]
+
+    # Handle the edge case of batch size < 2, where there are no pairs.
+    if x_flat.numel() == 0:
+        return 0.0
+
+    # Center the vectors
+    vx = x_flat - torch.mean(x_flat)
+    vy = y_flat - torch.mean(y_flat)
+
+    # Calculate Pearson Correlation
+    cost = torch.sum(vx * vy) / (torch.sqrt(torch.sum(vx**2)) * torch.sqrt(torch.sum(vy**2)) + 1e-8)
+    
+    # We want to maximize correlation, which is equivalent to minimizing 1 - correlation.
+    return 1.0 - cost
