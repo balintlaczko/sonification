@@ -22,6 +22,7 @@ def main():
 
     # training params
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
+    parser.add_argument("--warmup_epochs", type=int, default=10)
     parser.add_argument('--train_epochs', type=int, default=10000000, help='number of training epochs')
     # locality loss params
     parser.add_argument('--locality_loss_type', type=str, default='mse', help='locality loss type: l1 or mse')
@@ -30,8 +31,8 @@ def main():
     parser.add_argument('--mmd_weight', type=float, default=0.1)
     # cycle consistency loss params
     parser.add_argument('--cycle_consistency_loss_type', type=str, default='mse', help='cycle consistency loss type: l1 or mse')
-    parser.add_argument('--cycle_consistency_weight_start', type=float, default=4)
-    parser.add_argument('--cycle_consistency_weight_end', type=float, default=4)
+    parser.add_argument('--cycle_consistency_weight_start', type=float, default=0)
+    parser.add_argument('--cycle_consistency_weight_end', type=float, default=1)
     parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=300, help='cycle consistency start epoch')
     parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=700)
 
@@ -40,10 +41,10 @@ def main():
     parser.add_argument('--lr_decay', type=float, default=0.85)
 
     # image model
-    parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/white_squares_fvae_opt/with_falloff-v12/with_falloff-v12_epoch=4807-val_loss=0.0000.ckpt', help='image model checkpoint path')
+    parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/squares_vae/imv_new_v21_bkp/imv_new_v21_last_epoch=203.ckpt', help='image model checkpoint path')
 
     # audio model
-    parser.add_argument('--audio_model_ckpt_path', type=str, default='./ckpt/sinewave_fvae-mae-v3/mae-v23.6/mae-v23.6_last_epoch=217007.ckpt', help='sound model checkpoint path')
+    parser.add_argument('--audio_model_ckpt_path', type=str, default='./ckpt/sine_vae/imv_new_v35/imv_new_v35_last_epoch=1171.ckpt', help='sound model checkpoint path')
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper', help='checkpoint path')

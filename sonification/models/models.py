@@ -1190,9 +1190,10 @@ class PlMapper(LightningModule):
         self.mmd_weight = args.mmd_weight
         self.cycle_consistency_loss = nn.MSELoss() if self.args.cycle_consistency_loss_type == "mse" else nn.L1Loss()
         self.cycle_consistency_weight = args.cycle_consistency_weight_start # initialize to start
+        self.cycle_consistency_weight_start = args.cycle_consistency_weight_start
         self.cycle_consistency_weight_end = args.cycle_consistency_weight_end
-        self.cycle_consistency_weight_ramp_start_epoch = args.cycle_consistency_weight_ramp_start_epoch
-        self.cycle_consistency_weight_ramp_end_epoch = args.cycle_consistency_weight_ramp_end_epoch
+        self.cycle_consistency_ramp_start_epoch = args.cycle_consistency_ramp_start_epoch
+        self.cycle_consistency_ramp_end_epoch = args.cycle_consistency_ramp_end_epoch
 
         # learning rate
         self.lr = args.lr
@@ -1219,23 +1220,25 @@ class PlMapper(LightningModule):
         self.out_model.eval()
 
         # get the optimizer and scheduler
-        optimizer = self.optimizers()[0]
-        scheduler = self.lr_schedulers()[0]
+        optimizer = self.optimizers()
+        scheduler = self.lr_schedulers()
 
         # get the batch
         x, _ = batch
 
         # encode with input model
-        z_1 = self.in_model.encode(x)
+        mu, logvar = self.in_model.model.encode(x)
+        z_1 = self.in_model.model.reparameterize(mu, logvar)
 
         # project to output space
         z_2 = self.model(z_1)
 
         # decode with output model
-        x_hat = self.out_model.decode(z_2)
+        x_hat = self.out_model.model.decoder(z_2)
 
         # re-encode with output model
-        z_3 = self.out_model.encode(x_hat.detach())
+        mu, logvar = self.out_model.model.encode(x_hat.detach())
+        z_3 = self.out_model.model.reparameterize(mu, logvar)
 
         # LOSSES
         # locality loss
@@ -1262,14 +1265,14 @@ class PlMapper(LightningModule):
         cycle_consistency_loss = self.cycle_consistency_loss(z_3, z_2)
         # calculate current cycle consistency loss weight
         current_epoch = self.trainer.current_epoch
-        if current_epoch < self.cycle_consistency_weight_ramp_start_epoch:
+        if current_epoch < self.cycle_consistency_ramp_start_epoch:
             cycle_consistency_weight = self.cycle_consistency_weight_start
-        elif current_epoch > self.cycle_consistency_weight_ramp_end_epoch:
+        elif current_epoch > self.cycle_consistency_ramp_end_epoch:
             cycle_consistency_weight = self.cycle_consistency_weight_end
         else:
             cycle_consistency_weight = self.cycle_consistency_weight_start + (self.cycle_consistency_weight_end - self.cycle_consistency_weight_start) * \
-                (current_epoch - self.cycle_consistency_weight_ramp_start_epoch) / \
-                (self.cycle_consistency_weight_ramp_end_epoch - self.cycle_consistency_weight_ramp_start_epoch)
+                (current_epoch - self.cycle_consistency_ramp_start_epoch) / \
+                (self.cycle_consistency_ramp_end_epoch - self.cycle_consistency_ramp_start_epoch)
         self.cycle_consistency_weight = cycle_consistency_weight
         scaled_cycle_consistency_loss = cycle_consistency_weight * cycle_consistency_loss
 
@@ -1295,9 +1298,9 @@ class PlMapper(LightningModule):
         # scale by bin minmax
         in_spec = scale(in_spec, self.out_model.args.bin_minmax[0], self.out_model.args.bin_minmax[1], 0, 1)
         # encode
-        mu, logvar = self.out_model.encode(in_spec)
+        mu, logvar = self.out_model.model.encode(in_spec)
         # reparameterize
-        z_real = self.out_model.reparameterize(mu, logvar)
+        z_real = self.out_model.model.reparameterize(mu, logvar)
         # get mmd loss
         loss_mmd = mmd_loss(z_2, z_real)
         scaled_mmd_loss = self.mmd_weight * loss_mmd
@@ -1320,6 +1323,13 @@ class PlMapper(LightningModule):
             "mmd_loss": loss_mmd,
             "lr": scheduler.get_last_lr()[0],
         }, prog_bar=True)
+
+    def on_train_batch_start(self, batch, batch_idx):
+        epoch = self.trainer.current_epoch
+        if epoch < self.warmup_epochs:
+            lr_scale = min(1.0, (epoch + 1) / self.warmup_epochs)
+            for pg in self.trainer.optimizers[0].param_groups:
+                pg["lr"] = self.lr * lr_scale
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
