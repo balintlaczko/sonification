@@ -1183,29 +1183,29 @@ class PlMapper(LightningModule):
         self.hidden_layers_features = args.hidden_layers_features
         self.batch_size = args.batch_size
         self.warmup_epochs = args.warmup_epochs
-        self.d_hidden_size = args.d_hidden_size
-        self.d_num_layers = args.d_num_layers
+        # self.d_hidden_size = args.d_hidden_size
+        # self.d_num_layers = args.d_num_layers
 
         # losses
         self.locality_loss = nn.MSELoss() if self.args.locality_loss_type == "mse" else nn.L1Loss()
         self.locality_weight = args.locality_weight
-        self.mmd_weight = args.mmd_weight
+        # self.mmd_weight = args.mmd_weight
         self.cycle_consistency_loss = nn.MSELoss() if self.args.cycle_consistency_loss_type == "mse" else nn.L1Loss()
         self.cycle_consistency_weight = args.cycle_consistency_weight_start # initialize to start
         self.cycle_consistency_weight_start = args.cycle_consistency_weight_start
         self.cycle_consistency_weight_end = args.cycle_consistency_weight_end
         self.cycle_consistency_ramp_start_epoch = args.cycle_consistency_ramp_start_epoch
         self.cycle_consistency_ramp_end_epoch = args.cycle_consistency_ramp_end_epoch
-        self.tc_weight_max = args.tc_weight_max
-        self.tc_weight_min = args.tc_weight_min
-        self.tc_start_epoch = args.tc_start_epoch
-        self.tc_warmup_epochs = args.tc_warmup_epochs
+        # self.tc_weight_max = args.tc_weight_max
+        # self.tc_weight_min = args.tc_weight_min
+        # self.tc_start_epoch = args.tc_start_epoch
+        # self.tc_warmup_epochs = args.tc_warmup_epochs
 
         # learning rate
         self.lr = args.lr
         self.lr_decay = args.lr_decay
-        self.lr_d = args.lr_d
-        self.lr_decay_d = args.lr_decay_d
+        # self.lr_d = args.lr_d
+        # self.lr_decay_d = args.lr_decay_d
 
         # models
         self.model = LinearProjector(in_features=self.in_features, out_features=self.out_features, hidden_layers_features=self.hidden_layers_features)
@@ -1213,30 +1213,32 @@ class PlMapper(LightningModule):
         self.out_model = args.out_model
         self.in_model.eval()
         self.out_model.eval()
-        self.D = LinearDiscriminator(self.out_model.args.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+        # self.D = LinearDiscriminator(self.out_model.args.latent_size, self.d_hidden_size, 2, self.d_num_layers)
 
         def init_weights_kaiming(m):
             if isinstance(m, (nn.Conv1d, nn.ConvTranspose1d, nn.Linear)):  # Apply to conv and linear layers
                 nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
         self.model.apply(init_weights_kaiming)
-        self.D.apply(init_weights_kaiming)
+        # self.D.apply(init_weights_kaiming)
 
     def forward(self, x):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
         self.model.train()
-        self.D.train()
+        # self.D.train()
         self.in_model.eval()
         self.out_model.eval()
 
         # get the optimizers and schedulers
-        optimizer, d_optimizer = self.optimizers()
-        scheduler, d_scheduler = self.lr_schedulers()
+        # optimizer, d_optimizer = self.optimizers()
+        # scheduler, d_scheduler = self.lr_schedulers()
+        optimizer = self.optimizers()
+        scheduler = self.lr_schedulers()
 
-        # create a batch of ones and zeros for the discriminator
-        ones = torch.ones(self.batch_size, dtype=torch.long, device=self.device)
-        zeros = torch.zeros(self.batch_size, dtype=torch.long, device=self.device)
+        # # create a batch of ones and zeros for the discriminator
+        # ones = torch.ones(self.batch_size, dtype=torch.long, device=self.device)
+        # zeros = torch.zeros(self.batch_size, dtype=torch.long, device=self.device)
 
         # get the batch
         epoch_idx = self.trainer.current_epoch
@@ -1261,30 +1263,30 @@ class PlMapper(LightningModule):
         # TODO: have to do it per axis, since the axes have different meanings
         # TODO: use l1 or mse?
         # TODO: this assumes that z_1 and z_2 have the same dimensions
-        # num_dims = z_1.shape[1]
-        # locality_loss = 0
-        # for dim in range(num_dims):
-        #     locality_loss += self.l1(z_2[:, dim], z_1[:, dim])
-        # scaled_locality_loss = self.locality_weight * locality_loss
-
-        # get pairwise distances in both spaces
-        dist_z1 = torch.cdist(z_1, z_1, p=2)**2
-        dist_z2 = torch.cdist(z_2, z_2, p=2)**2
-        # # To make the loss scale-invariant, we normalize the distances
-        # # by dividing by their respective means before comparing.
-        # dist_z1_norm = dist_z1 / (dist_z1.mean() + 1e-8)
-        # dist_z2_norm = dist_z2 / (dist_z2.mean() + 1e-8)
-        # locality_loss = self.locality_loss(dist_z2_norm, dist_z1_norm)
-        locality_loss = pearson_correlation_loss(dist_z1, dist_z2)
+        num_dims = z_1.shape[1]
+        locality_loss = 0
+        for dim in range(num_dims):
+            locality_loss += self.locality_loss(z_2[:, dim], z_1[:, dim])
         scaled_locality_loss = self.locality_weight * locality_loss
 
-        # mapper TC loss
-        d_z = self.D(z_2)
-        tc_loss = F.cross_entropy(d_z, ones)
-        tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
-            min(1.0, (epoch_idx - self.tc_start_epoch) /
-            self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
-        scaled_tc_loss = tc_loss * tc_scale
+        # # get pairwise distances in both spaces
+        # dist_z1 = torch.cdist(z_1, z_1, p=2)**2
+        # dist_z2 = torch.cdist(z_2, z_2, p=2)**2
+        # # # To make the loss scale-invariant, we normalize the distances
+        # # # by dividing by their respective means before comparing.
+        # # dist_z1_norm = dist_z1 / (dist_z1.mean() + 1e-8)
+        # # dist_z2_norm = dist_z2 / (dist_z2.mean() + 1e-8)
+        # # locality_loss = self.locality_loss(dist_z2_norm, dist_z1_norm)
+        # locality_loss = pearson_correlation_loss(dist_z1, dist_z2)
+        # scaled_locality_loss = self.locality_weight * locality_loss
+
+        # # mapper TC loss
+        # d_z = self.D(z_2)
+        # tc_loss = F.cross_entropy(d_z, ones)
+        # tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
+        #     min(1.0, (epoch_idx - self.tc_start_epoch) /
+        #     self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
+        # scaled_tc_loss = tc_loss * tc_scale
 
         # cycle consistency loss
         cycle_consistency_loss = 0
@@ -1302,62 +1304,62 @@ class PlMapper(LightningModule):
             cycle_consistency_loss = self.cycle_consistency_loss(z_3, z_2)
         scaled_cycle_consistency_loss = cycle_consistency_weight * cycle_consistency_loss
 
-        # MMD loss for distribution matching
-        # encode a batch of random sine waves with the out model
-        norm_params, freqs, amps = self.out_model.sample_sine_params(self.batch_size)
-        x = self.out_model.input_synth(freqs).detach() * amps.unsqueeze(1)
-        # select a random slice of self.n_samples
-        start_idx = torch.randint(0, self.out_model.sr - self.out_model.n_samples, (1,))
-        x = x[:, start_idx:start_idx + self.out_model.n_samples]
-        # add random phase flip
-        phase_flip = torch.rand(self.batch_size, 1, device=self.device)
-        phase_flip = torch.where(phase_flip > 0.5, 1, -1)
-        x = x * phase_flip
-        in_wf_slice = x.unsqueeze(1)
-        # forward pass
-        # get mel spectrogram
-        in_spec = self.out_model.mel_spectrogram(in_wf_slice.detach())
-        # convert to dB
-        in_spec = self.out_model.amplitude_to_db(in_spec)
-        # average time dimension, keep batch and mel dims
-        in_spec = torch.mean(in_spec, dim=-1)
-        # scale by bin minmax
-        in_spec = scale(in_spec, self.out_model.args.bin_minmax[0], self.out_model.args.bin_minmax[1], 0, 1)
-        # encode
-        mu, logvar = self.out_model.model.encode(in_spec)
-        # reparameterize
-        z_real = self.out_model.model.reparameterize(mu, logvar)
-        # get mmd loss
-        loss_mmd = mmd_loss(z_2, z_real)
-        scaled_mmd_loss = self.mmd_weight * loss_mmd
+        # # MMD loss for distribution matching
+        # # encode a batch of random sine waves with the out model
+        # norm_params, freqs, amps = self.out_model.sample_sine_params(self.batch_size)
+        # x = self.out_model.input_synth(freqs).detach() * amps.unsqueeze(1)
+        # # select a random slice of self.n_samples
+        # start_idx = torch.randint(0, self.out_model.sr - self.out_model.n_samples, (1,))
+        # x = x[:, start_idx:start_idx + self.out_model.n_samples]
+        # # add random phase flip
+        # phase_flip = torch.rand(self.batch_size, 1, device=self.device)
+        # phase_flip = torch.where(phase_flip > 0.5, 1, -1)
+        # x = x * phase_flip
+        # in_wf_slice = x.unsqueeze(1)
+        # # forward pass
+        # # get mel spectrogram
+        # in_spec = self.out_model.mel_spectrogram(in_wf_slice.detach())
+        # # convert to dB
+        # in_spec = self.out_model.amplitude_to_db(in_spec)
+        # # average time dimension, keep batch and mel dims
+        # in_spec = torch.mean(in_spec, dim=-1)
+        # # scale by bin minmax
+        # in_spec = scale(in_spec, self.out_model.args.bin_minmax[0], self.out_model.args.bin_minmax[1], 0, 1)
+        # # encode
+        # mu, logvar = self.out_model.model.encode(in_spec)
+        # # reparameterize
+        # z_real = self.out_model.model.reparameterize(mu, logvar)
+        # # get mmd loss
+        # loss_mmd = mmd_loss(z_2, z_real)
+        # scaled_mmd_loss = self.mmd_weight * loss_mmd
 
         # total loss
-        loss = scaled_locality_loss + scaled_cycle_consistency_loss + scaled_mmd_loss + scaled_tc_loss
+        loss = scaled_locality_loss + scaled_cycle_consistency_loss #+ scaled_mmd_loss + scaled_tc_loss
 
         # backward pass
         optimizer.zero_grad()
-        self.manual_backward(loss, retain_graph=True)
+        self.manual_backward(loss)#, retain_graph=True)
         optimizer.step()
         scheduler.step(loss.item())
 
-        # discriminator step
-        self.model.eval()
-        # encode with input model
-        mu, logvar = self.in_model.model.encode(x2)
-        z_1b = self.in_model.model.reparameterize(mu, logvar)
-        # project to output space
-        z_2b = self.model(z_1b)
-        z_2b_perm = permute_dims(z_2b)
-        d_z_2_detached = self.D(z_2.detach())
-        d_z_2b_perm = self.D(z_2b_perm.detach())
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z_2_detached, zeros) +
-                           F.cross_entropy(d_z_2b_perm, ones))
+        # # discriminator step
+        # self.model.eval()
+        # # encode with input model
+        # mu, logvar = self.in_model.model.encode(x2)
+        # z_1b = self.in_model.model.reparameterize(mu, logvar)
+        # # project to output space
+        # z_2b = self.model(z_1b)
+        # z_2b_perm = permute_dims(z_2b)
+        # d_z_2_detached = self.D(z_2.detach())
+        # d_z_2b_perm = self.D(z_2b_perm.detach())
+        # d_tc_loss = 0.5 * (F.cross_entropy(d_z_2_detached, zeros) +
+        #                    F.cross_entropy(d_z_2b_perm, ones))
 
-        # Discriminator backward pass
-        d_optimizer.zero_grad()
-        self.manual_backward(d_tc_loss)
-        d_optimizer.step()
-        d_scheduler.step(d_tc_loss.item())
+        # # Discriminator backward pass
+        # d_optimizer.zero_grad()
+        # self.manual_backward(d_tc_loss)
+        # d_optimizer.step()
+        # d_scheduler.step(d_tc_loss.item())
 
         # log losses
         self.log_dict({
@@ -1365,12 +1367,12 @@ class PlMapper(LightningModule):
             "locality_loss": locality_loss,
             "cycle_consistency_loss": cycle_consistency_loss,
             "cycle_consistency_scale": self.cycle_consistency_weight,
-            "mmd_loss": loss_mmd,
-            "tc_loss": tc_loss,
-            "d_tc_loss": d_tc_loss,
+            # "mmd_loss": loss_mmd,
+            # "tc_loss": tc_loss,
+            # "d_tc_loss": d_tc_loss,
             "lr": scheduler.get_last_lr()[0],
-            "lr_d": d_scheduler.get_last_lr()[0],
-            "tc_scale": tc_scale,
+            # "lr_d": d_scheduler.get_last_lr()[0],
+            # "tc_scale": tc_scale,
         }, prog_bar=True)
 
     def on_train_batch_start(self, batch, batch_idx):
@@ -1379,20 +1381,21 @@ class PlMapper(LightningModule):
             lr_scale = min(1.0, (epoch + 1) / self.warmup_epochs)
             for pg in self.trainer.optimizers[0].param_groups:
                 pg["lr"] = self.lr * lr_scale
-            for pg in self.trainer.optimizers[1].param_groups:
-                pg["lr"] = self.lr_d * lr_scale
+            # for pg in self.trainer.optimizers[1].param_groups:
+            #     pg["lr"] = self.lr_d * lr_scale
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.lr)
-        d_optimizer = torch.optim.AdamW(
-            self.D.parameters(), lr=self.lr_d)
+        # d_optimizer = torch.optim.AdamW(
+        #     self.D.parameters(), lr=self.lr_d)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=self.lr_decay, patience=20000)
-        d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            d_optimizer, mode='min', factor=self.lr_decay_d, patience=40000)
+        # d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        #     d_optimizer, mode='min', factor=self.lr_decay_d, patience=40000)
         # return the optimizers and schedulers
-        return [optimizer, d_optimizer], [scheduler, d_scheduler]
+        # return [optimizer, d_optimizer], [scheduler, d_scheduler]
+        return [optimizer], [scheduler]
 
 
 class FMParamEstimator(nn.Module):

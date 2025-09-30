@@ -19,8 +19,8 @@ def main():
     parser.add_argument('--in_features', type=int, default=2, help='input size')
     parser.add_argument('--out_features', type=int, default=2, help='output size')
     parser.add_argument('--hidden_layers_features', type=int, nargs='*', default=[8, 16, 32, 64, 128, 256, 128, 64, 32, 16, 8], help='the size of the hidden layers')
-    parser.add_argument("--d_hidden_size", type=int, default=16)
-    parser.add_argument("--d_num_layers", type=int, default=3)
+    # parser.add_argument("--d_hidden_size", type=int, default=16)
+    # parser.add_argument("--d_num_layers", type=int, default=3)
 
     # training params
     parser.add_argument('--batch_size', type=int, default=512, help='batch size')
@@ -30,24 +30,24 @@ def main():
     parser.add_argument('--locality_loss_type', type=str, default='l1', help='locality loss type: l1 or mse')
     parser.add_argument('--locality_weight', type=float, default=1)
     # mmd loss params
-    parser.add_argument('--mmd_weight', type=float, default=50)
+    # parser.add_argument('--mmd_weight', type=float, default=50)
     # cycle consistency loss params
     parser.add_argument('--cycle_consistency_loss_type', type=str, default='l1', help='cycle consistency loss type: l1 or mse')
     parser.add_argument('--cycle_consistency_weight_start', type=float, default=0)
     parser.add_argument('--cycle_consistency_weight_end', type=float, default=1)
     parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=2000, help='cycle consistency start epoch')
     parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=4000)
-    # tc loss params
-    parser.add_argument('--tc_weight_max', type=float, default=2, help='tc weight at the end of the warmup')
-    parser.add_argument('--tc_weight_min', type=float, default=2, help='tc weight at the start of the warmup')
-    parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
+    # # tc loss params
+    # parser.add_argument('--tc_weight_max', type=float, default=2, help='tc weight at the end of the warmup')
+    # parser.add_argument('--tc_weight_min', type=float, default=2, help='tc weight at the start of the warmup')
+    # parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
+    # parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
 
     # optimizer params
     parser.add_argument("--lr", type=float, default=0.0005)
     parser.add_argument("--lr_decay", type=float, default=0.85)
-    parser.add_argument("--lr_d", type=float, default=0.000005)
-    parser.add_argument("--lr_decay_d", type=float, default=0.85)
+    # parser.add_argument("--lr_d", type=float, default=0.000005)
+    # parser.add_argument("--lr_decay_d", type=float, default=0.85)
 
     # image model
     parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/squares_vae/imv_new_v21_bkp/imv_new_v21_last_epoch=203.ckpt', help='image model checkpoint path')
