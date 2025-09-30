@@ -128,10 +128,16 @@ dim_pairs = list(itertools.combinations(range(num_dims), 2))
 num_pairs = len(dim_pairs)
 
 if num_pairs > 0:
+    # Set font properties for the plot
+    plt.rcParams.update({
+        'font.family': 'serif',
+        'font.serif': ['Times New Roman'],
+        'font.size': 20
+    })
     fig, axes = plt.subplots(num_pairs, 2, figsize=(20, 10 * num_pairs), squeeze=False)
 
     epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
-    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx}", fontsize=16)
+    # fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx}", fontsize=16)
 
     for i, (dim1, dim2) in enumerate(dim_pairs):
         ax1 = axes[i, 0]
@@ -140,17 +146,17 @@ if num_pairs > 0:
         # Plot 1: Colored by pitch
         sc1 = ax1.scatter(z_all[:, dim1], z_all[:, dim2], c=df['pitch'], cmap='viridis', s=3)
         fig.colorbar(sc1, ax=ax1, label='Pitch (MIDI)', shrink=0.8)
-        ax1.set_title(f"Latent Dims {dim1} vs {dim2} by Pitch")
-        ax1.set_xlabel(f"Latent Dim {dim1}")
-        ax1.set_ylabel(f"Latent Dim {dim2}")
+        # ax1.set_title(f"Latent Dimensions {dim1} vs {dim2} colored by Pitch")
+        ax1.set_xlabel(f"Latent Dimension {dim1}")
+        ax1.set_ylabel(f"Latent Dimension {dim2}")
         ax1.set_aspect('equal', adjustable='box')
 
         # Plot 2: Colored by amplitude
         sc2 = ax2.scatter(z_all[:, dim1], z_all[:, dim2], c=df['amp'], cmap='viridis', s=3)
         fig.colorbar(sc2, ax=ax2, label='Amplitude', shrink=0.8)
-        ax2.set_title(f"Latent Dims {dim1} vs {dim2} by Amplitude")
-        ax2.set_xlabel(f"Latent Dim {dim1}")
-        ax2.set_ylabel(f"Latent Dim {dim2}")
+        # ax2.set_title(f"Latent Dimensions {dim1} vs {dim2} colored by Amplitude")
+        ax2.set_xlabel(f"Latent Dimension {dim1}")
+        ax2.set_ylabel(f"Latent Dimension {dim2}")
         ax2.set_aspect('equal', adjustable='box')
         # # Plot 2: Colored by decibels
         # sc2 = ax2.scatter(z_all[:, dim1], z_all[:, dim2], c=df['db'], cmap='viridis', s=3)
@@ -161,9 +167,60 @@ if num_pairs > 0:
         # ax2.set_aspect('equal', adjustable='box')
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
+    plt.subplots_adjust(wspace=0.3) 
+    # plt.show()
+    plt.savefig("sound_model_latent_space.png", dpi=300)
+    # Reset rcParams to default to not affect other plots
+    plt.rcdefaults()
 
 ########################################################################
+
+# %%
+# generate 64 random samples and plot them
+num_samples = 64
+random_indices = np.random.choice(len(df), num_samples, replace=False)
+input_samples = torch.zeros(num_samples, 1, args.n_mels)
+for i, idx in enumerate(random_indices):
+    batch_df = df.iloc[idx]
+    # convert to tensor
+    batch_z = torch.tensor(batch_df[['freq', 'amp']].values, dtype=torch.float32).unsqueeze(0)
+    freqs = batch_z[:, 0]
+    amps = batch_z[:, 1]
+    # repeat in samples dimension
+    freqs = freqs.unsqueeze(1).repeat(1, args.length_samps).to(device)
+    # synthesize
+    x = model.input_synth(freqs) * amps.unsqueeze(1).to(device)
+    # add channel dimension
+    in_wf = x.unsqueeze(1)
+    # get the mel spectrogram
+    in_spec = model.mel_spectrogram(in_wf)
+    # convert to db
+    in_spec = model.amplitude_to_db(in_spec)
+    # average time dimension, keep batch and mel dims
+    in_spec = torch.mean(in_spec, dim=-1)
+    # scale by bin minmax
+    in_spec = scale(in_spec, args.bin_minmax[0], args.bin_minmax[1], 0, 1)
+    input_samples[i, 0, :] = in_spec
+
+# plot the input mel spectrograms as one image
+# Set font properties for the plot
+plt.rcParams.update({
+    'font.family': 'serif',
+    'font.serif': ['Times New Roman'],
+    'font.size': 30
+})
+fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+ax.matshow(input_samples.squeeze(1).cpu().numpy().T, aspect='auto', origin='lower', cmap='viridis')
+# ax.set_title("Input Mel Spectrograms")
+ax.set_xlabel("Sample Index")
+ax.set_ylabel("Mel Bin")
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+# plt.show()
+plt.savefig("sound_samples.png", dpi=300)
+# Reset rcParams to default to not affect other plots
+plt.rcdefaults()
+
+
 
 # %%
 # set percentiles

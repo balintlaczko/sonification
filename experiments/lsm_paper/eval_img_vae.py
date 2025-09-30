@@ -87,10 +87,16 @@ num_pairs = len(dim_pairs)
 df = dataset.df
 
 if num_pairs > 0:
+    # Set font properties for the plot
+    plt.rcParams.update({
+        'font.family': 'serif',
+        'font.serif': ['Times New Roman'],
+        'font.size': 20
+    })
     fig, axes = plt.subplots(num_pairs, 2, figsize=(20, 10 * num_pairs), squeeze=False)
 
     epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
-    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx}", fontsize=16)
+    # fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx}", fontsize=16)
 
     for i, (dim1, dim2) in enumerate(dim_pairs):
         ax1 = axes[i, 0]
@@ -99,21 +105,25 @@ if num_pairs > 0:
         # Plot 1: Colored by x position
         sc1 = ax1.scatter(z_all[:, dim1], z_all[:, dim2], c=df['x'], cmap='viridis', s=3)
         fig.colorbar(sc1, ax=ax1, label='X Position', shrink=0.8)
-        ax1.set_title(f"Latent Dims {dim1} vs {dim2} by X Position")
-        ax1.set_xlabel(f"Latent Dim {dim1}")
-        ax1.set_ylabel(f"Latent Dim {dim2}")
+        # ax1.set_title(f"Latent Dimensions {dim1} vs {dim2} colored by X Position")
+        ax1.set_xlabel(f"Latent Dimension {dim1}")
+        ax1.set_ylabel(f"Latent Dimension {dim2}")
         ax1.set_aspect('equal', adjustable='box')
 
         # Plot 2: Colored by y position
         sc2 = ax2.scatter(z_all[:, dim1], z_all[:, dim2], c=df['y'], cmap='viridis', s=3)
         fig.colorbar(sc2, ax=ax2, label='Y Position', shrink=0.8)
-        ax2.set_title(f"Latent Dims {dim1} vs {dim2} by Y Position")
-        ax2.set_xlabel(f"Latent Dim {dim1}")
-        ax2.set_ylabel(f"Latent Dim {dim2}")
+        # ax2.set_title(f"Latent Dimensions {dim1} vs {dim2} colored by Y Position")
+        ax2.set_xlabel(f"Latent Dimension {dim1}")
+        ax2.set_ylabel(f"Latent Dimension {dim2}")
         ax2.set_aspect('equal', adjustable='box')
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
+    plt.subplots_adjust(wspace=0.3) 
+    # plt.show()
+    plt.savefig("image_model_latent_space.png", dpi=300)
+    # Reset rcParams to default to not affect other plots
+    plt.rcdefaults()
 
 
 # %%
@@ -139,6 +149,30 @@ plt.show()
 
 
 ########################################################################
+
+
+# %%
+# plot 4 random samples from the dataset
+# Set font properties for the plot
+plt.rcParams.update({
+    'font.family': 'serif',
+    'font.serif': ['Times New Roman'],
+    'font.size': 18
+})
+num_images = 4
+random_indices = np.random.choice(len(dataset), num_images, replace=False)
+fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+for i, idx in enumerate(random_indices):
+    x, y = dataset[idx]
+    row = i // 2
+    col = i % 2
+    axes[row, col].imshow(x[0, ...].cpu().numpy(), cmap="gray")
+    # axes[row, col].set_title(f"Sample Index: {idx}")
+    axes[row, col].axis('off')
+plt.tight_layout()
+plt.savefig("image_samples.png", dpi=300)
+# Reset rcParams to default to not affect other plots
+plt.rcdefaults()
 
 # %%
 # set percentiles
