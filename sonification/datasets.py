@@ -265,7 +265,7 @@ class White_Square_dataset_2(Dataset):
         x = row.x
         y = row.y
         # create the image
-        img2 = square_over_bg(x, y, self.img_size, self.square_size)
+        img2 = square_over_bg_falloff(x, y, self.img_size, self.square_size)
         # add a channel dimension
         img2 = img2.unsqueeze(0)
 
