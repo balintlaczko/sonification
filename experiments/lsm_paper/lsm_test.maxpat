@@ -62,7 +62,7 @@
 							"parameter_linknames" : 1,
 							"parameter_longname" : "loudness",
 							"parameter_mmax" : 0.0,
-							"parameter_mmin" : -24.0,
+							"parameter_mmin" : -40.0,
 							"parameter_modmode" : 3,
 							"parameter_shortname" : "Loudness",
 							"parameter_type" : 0,

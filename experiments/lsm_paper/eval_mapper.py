@@ -254,7 +254,8 @@ def handle_pictslider(unused_addr, x, y):
     with torch.no_grad():
         # encode the image
         mu, logvar = model.in_model.model.encode(img.to(device))
-        z_1 = model.in_model.model.reparameterize(mu, logvar)
+        # z_1 = model.in_model.model.reparameterize(mu, logvar)
+        z_1 = mu # use mean only for stability
         # project to audio latent space
         z_2 = model(z_1)
         # decode the audio
