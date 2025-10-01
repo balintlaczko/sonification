@@ -1967,9 +1967,10 @@ class ParamDecoder(nn.Module):
         pre_decoder_blocks = []
         pre_decoder_layers_features = [latent_size * (2 ** i) for i in range(pre_decoder_num_blocks + 1)]
         for i in range(pre_decoder_num_blocks):
+            num_groups = max(1, pre_decoder_layers_features[i + 1] // self.chans_per_group)
             block = [
                 nn.Linear(pre_decoder_layers_features[i], pre_decoder_layers_features[i + 1]),
-                nn.GroupNorm(pre_decoder_layers_features[i + 1] // self.chans_per_group, pre_decoder_layers_features[i + 1]),
+                nn.GroupNorm(num_groups, pre_decoder_layers_features[i + 1]),
                 nn.LeakyReLU(0.2),
             ]
             pre_decoder_blocks.extend(block)
@@ -1984,9 +1985,10 @@ class ParamDecoder(nn.Module):
         post_decoder_blocks = []
         post_decoder_layers_features = [decoder_features // (2 ** i) for i in range(post_decoder_num_blocks + 1)]
         for i in range(post_decoder_num_blocks):
+            num_groups = max(1, post_decoder_layers_features[i + 1] // self.chans_per_group)
             block = [
                 nn.Linear(post_decoder_layers_features[i], post_decoder_layers_features[i + 1]),
-                nn.GroupNorm(post_decoder_layers_features[i + 1] // self.chans_per_group, post_decoder_layers_features[i + 1]),
+                nn.GroupNorm(num_groups, post_decoder_layers_features[i + 1]),
                 nn.LeakyReLU(0.2),
             ]
             post_decoder_blocks.extend(block)
