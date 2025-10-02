@@ -22,24 +22,24 @@ def main():
     parser.add_argument('--hidden_layers_features', type=int, default=128, help='the size of the hidden layers')
     parser.add_argument("--n_res_block", type=int, default=16)
     parser.add_argument("--n_res_features", type=int, default=64)
-    parser.add_argument("--d_hidden_size", type=int, default=16)
-    parser.add_argument("--d_num_layers", type=int, default=3)
+    parser.add_argument("--d_hidden_size", type=int, default=32)
+    parser.add_argument("--d_num_layers", type=int, default=5)
 
     # training params
     parser.add_argument('--batch_size', type=int, default=512, help='batch size')
     parser.add_argument("--warmup_epochs", type=int, default=10)
     parser.add_argument('--train_epochs', type=int, default=10000000, help='number of training epochs')
     # locality loss params
-    parser.add_argument('--locality_loss_type', type=str, default='l1', help='locality loss type: l1 or mse')
-    parser.add_argument('--locality_weight', type=float, default=1)
+    parser.add_argument('--locality_loss_type', type=str, default='mse', help='locality loss type: l1 or mse')
+    parser.add_argument('--locality_weight', type=float, default=50)
     # mmd loss params
     parser.add_argument('--mmd_weight', type=float, default=50)
     # cycle consistency loss params
-    parser.add_argument('--cycle_consistency_loss_type', type=str, default='l1', help='cycle consistency loss type: l1 or mse')
-    parser.add_argument('--cycle_consistency_weight_start', type=float, default=0)
-    parser.add_argument('--cycle_consistency_weight_end', type=float, default=1)
-    parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=600, help='cycle consistency start epoch')
-    parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=2000)
+    parser.add_argument('--cycle_consistency_loss_type', type=str, default='mse', help='cycle consistency loss type: l1 or mse')
+    parser.add_argument('--cycle_consistency_weight_start', type=float, default=10)
+    parser.add_argument('--cycle_consistency_weight_end', type=float, default=10)
+    parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=0, help='cycle consistency start epoch')
+    parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=1)
     # # tc loss params
     parser.add_argument('--tc_weight_max', type=float, default=2, help='tc weight at the end of the warmup')
     parser.add_argument('--tc_weight_min', type=float, default=2, help='tc weight at the start of the warmup')
@@ -60,11 +60,11 @@ def main():
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper', help='checkpoint path')
-    parser.add_argument('--ckpt_name', type=str, default='imv_new_v10', help='checkpoint name')
+    parser.add_argument('--ckpt_name', type=str, default='imv_new_v11', help='checkpoint name')
     parser.add_argument('--logdir', type=str, default='./logs/mapper', help='log directory')
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='NEW version, use Paramdecoder', help='add a comment if needed')
+    parser.add_argument('--comment', type=str, default='use MSE for locality', help='add a comment if needed')
 
     args = parser.parse_args()
 

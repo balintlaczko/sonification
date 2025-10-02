@@ -25,7 +25,7 @@ from pythonosc import udp_client, dispatcher, osc_server
 # %%
 # find the latest mapper checkpoint
 ckpt_path = '../../ckpt/mapper'
-model_version = '9'
+model_version = '10'
 ckpt_name = 'imv_new_v' + model_version
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
@@ -103,8 +103,6 @@ model.out_model.eval()
 # iterate through the dataloader and encode, map, decode, re-encode
 z_1_all = torch.zeros(len(dataset), model.in_model.args.latent_size).to(device) # img encoded
 z_2_all = torch.zeros(len(dataset), model.out_model.args.latent_size).to(device) # mapped
-z_3_all = torch.zeros(len(dataset), model.out_model.args.latent_size).to(device) # audio re-encoded
-losses = []
 with torch.no_grad():
     for batch_idx, data in tqdm(enumerate(dataloader)):
         x, _ = data
@@ -115,22 +113,6 @@ with torch.no_grad():
         # map to audio latent space
         z_2 = model(z_1)
         z_2_all[batch_idx * batch_size: batch_idx * batch_size + batch_size, :] = z_2
-        # decode to mel spectrogram
-        x_hat = model.out_model.model.decoder(z_2)
-        # encode back to latent space
-        mu, logvar = model.out_model.model.encode(x_hat)
-        z_3 = model.out_model.model.reparameterize(mu, logvar)
-        z_3_all[batch_idx * batch_size: batch_idx * batch_size + batch_size, :] = z_3
-        # calc batchwise distances and l1 loss
-        dist_z_1 = torch.cdist(z_1, z_1, p=2)**2 # img encoded
-        dist_z_2 = torch.cdist(z_2, z_2, p=2)**2 # mapped
-        # # get the normalized distances
-        # dist_z_1_norm = dist_z_1 / (dist_z_1.mean() + 1e-8)
-        # dist_z_2_norm = dist_z_2 / (dist_z_2.mean() + 1e-8)
-        # # compute the locality loss with l1
-        # locality_l1_loss = F.l1_loss(dist_z_1_norm, dist_z_2_norm)
-        locality_loss = pearson_correlation_loss(dist_z_1, dist_z_2)
-        losses.append(locality_loss.item())
 
 
 # %%

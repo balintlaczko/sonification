@@ -1279,12 +1279,12 @@ class PlMapper(LightningModule):
         # get pairwise distances in both spaces
         dist_z1 = torch.cdist(z_1, z_1, p=2)**2
         dist_z2 = torch.cdist(z_2, z_2, p=2)**2
-        # # To make the loss scale-invariant, we normalize the distances
-        # # by dividing by their respective means before comparing.
-        # dist_z1_norm = dist_z1 / (dist_z1.mean() + 1e-8)
-        # dist_z2_norm = dist_z2 / (dist_z2.mean() + 1e-8)
-        # locality_loss = self.locality_loss(dist_z2_norm, dist_z1_norm)
-        locality_loss = pearson_correlation_loss(dist_z1, dist_z2)
+        # To make the loss scale-invariant, we normalize the distances
+        # by dividing by their respective means before comparing.
+        dist_z1_norm = dist_z1 / (dist_z1.mean() + 1e-8)
+        dist_z2_norm = dist_z2 / (dist_z2.mean() + 1e-8)
+        locality_loss = self.locality_loss(dist_z2_norm, dist_z1_norm)
+        # locality_loss = pearson_correlation_loss(dist_z1, dist_z2)
         scaled_locality_loss = self.locality_weight * locality_loss
 
         # mapper TC loss
