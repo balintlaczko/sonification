@@ -25,7 +25,7 @@ from pythonosc import udp_client, dispatcher, osc_server
 # %%
 # find the latest mapper checkpoint
 ckpt_path = '../../ckpt/mapper'
-model_version = '10'
+model_version = '11'
 ckpt_name = 'imv_new_v' + model_version
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
@@ -88,7 +88,6 @@ print("Image dataloader created")
 # %%
 # get the cuda/mps device
 device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-# print(f"Using device: {device}")
 # move model to device
 model = model.to(device)
 model.eval()
@@ -98,11 +97,13 @@ model.in_model.eval()
 # out_model = out_model.to(device)
 # out_model.eval()
 model.out_model.eval()
+print(f"Using device: {device}")
 
 # %%
 # iterate through the dataloader and encode, map, decode, re-encode
 z_1_all = torch.zeros(len(dataset), model.in_model.args.latent_size).to(device) # img encoded
 z_2_all = torch.zeros(len(dataset), model.out_model.args.latent_size).to(device) # mapped
+z_3_all = torch.zeros(len(dataset), model.out_model.args.latent_size).to(device) # audio re-encoded
 with torch.no_grad():
     for batch_idx, data in tqdm(enumerate(dataloader)):
         x, _ = data
@@ -113,10 +114,16 @@ with torch.no_grad():
         # map to audio latent space
         z_2 = model(z_1)
         z_2_all[batch_idx * batch_size: batch_idx * batch_size + batch_size, :] = z_2
+        # decode to audio
+        out_spec = model.out_model.model.decoder(z_2)
+        # re-encode audio
+        mu, logvar = model.out_model.model.encode(out_spec)
+        z_3 = model.out_model.model.reparameterize(mu, logvar)
+        z_3_all[batch_idx * batch_size: batch_idx * batch_size + batch_size, :] = z_3
 
 
 # %%
-# create a scatter plot of the latent space
+# create a scatter plot of the mapped latent space
 z_all = z_2_all.cpu().numpy()
 num_dims = z_all.shape[1]
 dim_pairs = list(itertools.combinations(range(num_dims), 2))
@@ -127,7 +134,7 @@ if num_pairs > 0:
     fig, axes = plt.subplots(num_pairs, 2, figsize=(20, 10 * num_pairs), squeeze=False)
 
     epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
-    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx}", fontsize=16)
+    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Mapped Latent Space")
 
     for i, (dim1, dim2) in enumerate(dim_pairs):
         ax1 = axes[i, 0]
@@ -151,6 +158,96 @@ if num_pairs > 0:
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
+
+# %%
+# create a scatter plot color coded by distance between points in z_1 and corresponding points in z_2
+z_1_all_cpu = z_1_all.cpu().numpy()
+z_2_all_cpu = z_2_all.cpu().numpy()
+z_dist = np.linalg.norm(z_2_all_cpu - z_1_all_cpu, axis=1)
+z_diff_mean = np.mean(np.abs(z_2_all_cpu - z_1_all_cpu), axis=1)
+if num_pairs > 0:
+    fig, axes = plt.subplots(num_pairs, 1, figsize=(10, 5 * num_pairs), squeeze=False)
+
+    epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
+    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Mapping Displacement")
+
+    for i, (dim1, dim2) in enumerate(dim_pairs):
+        ax = axes[i, 0]
+
+        # Scatter plot colored by Mapping Displacement
+        sc = ax.scatter(z_all[:, dim1], z_all[:, dim2], c=z_diff_mean, cmap='viridis', s=3)
+        fig.colorbar(sc, ax=ax, label='Mapping Displacement', shrink=0.8)
+        ax.set_title(f"Latent Dims {dim1} vs {dim2} by Mapping Displacement")
+        ax.set_xlabel(f"Latent Dim {dim1}")
+        ax.set_ylabel(f"Latent Dim {dim2}")
+        ax.set_aspect('equal', adjustable='box')
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
+# %%
+# create a scatter plot color coded by the diff between the relative positions of points in z_1 and corresponding points in z_2
+z_1_dist = torch.cdist(z_1_all, z_1_all, p=2).cpu().numpy()
+z_2_dist = torch.cdist(z_2_all, z_2_all, p=2).cpu().numpy()
+# normalize the distance matrices to [0, 1]
+z_1_dist = z_1_dist / np.mean(z_1_dist)
+z_2_dist = z_2_dist / np.mean(z_2_dist)
+# measure vector norm of the difference between the distance matrices
+z_rel_diff = np.linalg.norm(z_2_dist - z_1_dist, axis=1)
+if num_pairs > 0:
+    fig, axes = plt.subplots(num_pairs, 1, figsize=(10, 5 * num_pairs), squeeze=False)
+
+    epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
+    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Locality Loss", fontsize=16)
+
+    for i, (dim1, dim2) in enumerate(dim_pairs):
+        ax = axes[i, 0]
+
+        # Scatter plot colored by Locality Loss
+        sc = ax.scatter(z_all[:, dim1], z_all[:, dim2], c=z_rel_diff, cmap='viridis', s=3)
+        fig.colorbar(sc, ax=ax, label='Locality Loss', shrink=0.8)
+        ax.set_title(f"Latent Dims {dim1} vs {dim2} by Locality Loss")
+        ax.set_xlabel(f"Latent Dim {dim1}")
+        ax.set_ylabel(f"Latent Dim {dim2}")
+        ax.set_aspect('equal', adjustable='box')
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
+
+# %%
+# create a scatter plot color coded by the cycle consistency loss between z_2 and z_3
+z_2_all_cpu = z_2_all.cpu().numpy()
+z_3_all_cpu = z_3_all.cpu().numpy()
+z_dist = np.linalg.norm(z_3_all_cpu - z_2_all_cpu, axis=1)
+if num_pairs > 0:
+    fig, axes = plt.subplots(num_pairs, 1, figsize=(10, 5 * num_pairs), squeeze=False)
+
+    epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
+    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Cycle Consistency Loss")
+
+    for i, (dim1, dim2) in enumerate(dim_pairs):
+        ax = axes[i, 0]
+
+        # Scatter plot colored by Cycle Consistency Loss
+        sc = ax.scatter(z_all[:, dim1], z_all[:, dim2], c=z_dist, cmap='viridis', s=3)
+        fig.colorbar(sc, ax=ax, label='Cycle Consistency Loss', shrink=0.8)
+        ax.set_title(f"Latent Dims {dim1} vs {dim2} by Cycle Consistency Loss")
+        ax.set_xlabel(f"Latent Dim {dim1}")
+        ax.set_ylabel(f"Latent Dim {dim2}")
+        ax.set_aspect('equal', adjustable='box')
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
+# %%
+# measure the total correlation between the dimensions of z_2
+z_2_all_cpu = z_2_all.cpu()
+z_2_var = torch.var(z_2_all_cpu, dim=0)
+z_2_std = torch.std(z_2_all_cpu, dim=0)
+z_2_corr = torch.corrcoef(z_2_all_cpu.T)
+z_2_tc = -0.5 * torch.log(torch.det(z_2_corr))
+print(f"Total correlation of z_2: {z_2_tc.item()}, mean variance: {torch.mean(z_2_var).item()}, mean std: {torch.mean(z_2_std).item()}")
 
 
 # %%
