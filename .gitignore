@@ -26,3 +26,8 @@ rendered_plate_views/
 *.min.js
 sonification/models/layers_old.py
 sonification/models/models_old.py
+thesis_figures/*.svg
+thesis_figures/*.pdf
+thesis_figures/*.png
+thesis_figures/*.jpg
+thesis_figures/volumetric/*
