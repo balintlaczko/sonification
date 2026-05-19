@@ -3231,6 +3231,88 @@ class PlImgFactorVAE(LightningModule):
         prog_bar=True)
 
 
+    def validation_step(self, batch, batch_idx):
+
+        # Guard: skip validation step if trainer has no validation dataloaders
+        if not getattr(self.trainer, 'val_dataloaders', None):
+            return None
+
+        self.model.eval()
+        self.D.eval()
+
+        # create a batch of ones and zeros for the discriminator
+        ones = torch.ones(self.batch_size, dtype=torch.long, device=self.device)
+        zeros = torch.zeros(self.batch_size, dtype=torch.long, device=self.device)
+
+        # get the batch
+        epoch_idx = self.trainer.current_epoch
+        x1, x2 = batch
+
+        # forward pass
+        # predict the image
+        predicted_img, mu, logvar, z = self.model(x1)
+
+        # VAE recon_loss
+        recon_loss = self.recon_loss(predicted_img, x1)
+        # calculate current recon loss weight
+        current_epoch = self.trainer.current_epoch
+        if current_epoch < self.recon_loss_weight_ramp_start_epoch:
+            recon_loss_weight = self.recon_loss_weight_start
+        elif current_epoch > self.recon_loss_weight_ramp_end_epoch:
+            recon_loss_weight = self.recon_loss_weight_end
+        else:
+            recon_loss_weight = self.recon_loss_weight_start + (self.recon_loss_weight_end - self.recon_loss_weight_start) * \
+                (current_epoch - self.recon_loss_weight_ramp_start_epoch) / \
+                (self.recon_loss_weight_ramp_end_epoch - self.recon_loss_weight_ramp_start_epoch)
+        self.recon_loss_weight = recon_loss_weight
+        scaled_recon_loss = recon_loss * recon_loss_weight
+
+        # VAE KLD loss
+        if self.args.dynamic_kld > 0:
+            kld_scale = self.kld_weight_dynamic
+        else:
+            kld_scale = (self.kld_weight_max - self.kld_weight_min) * \
+                min(1.0, (epoch_idx - self.kld_start_epoch) /
+                    self.kld_warmup_epochs) + self.kld_weight_min if epoch_idx > self.kld_start_epoch else self.kld_weight_min
+        kld_loss = self.kld(mu, logvar)
+        scaled_kld_loss = kld_loss * kld_scale
+
+        # VAE TC loss
+        d_z = self.D(z)
+        vae_tc_loss = F.cross_entropy(d_z, ones)
+        tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
+            min(1.0, (epoch_idx - self.tc_start_epoch) /
+            self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
+        scaled_vae_tc_loss = vae_tc_loss * tc_scale
+
+        # VAE total loss
+        vae_loss = scaled_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
+
+        # Discriminator forward pass
+        # encode with the VAE
+        self.model.eval()
+        mu_2, logvar_2 = self.model.encode(x2)
+        # reparameterize
+        z_2 = self.model.reparameterize(mu_2, logvar_2)
+        z_2_perm = permute_dims(z_2)
+        # get the discriminator output
+        d_z_detached = self.D(z.detach())
+        d_z_2_perm = self.D(z_2_perm.detach())
+        d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
+                           F.cross_entropy(d_z_2_perm, ones))
+
+        # log losses
+        self.last_recon_loss = recon_loss # using it for dynamic kld threshold
+        self.log_dict({
+            "val_vae_loss": vae_loss,
+            "val_vae_recon_loss": recon_loss,
+            "val_vae_kld_loss": kld_loss,
+            "val_vae_tc_loss": vae_tc_loss,
+            "val_d_tc_loss": d_tc_loss,
+        },
+        prog_bar=True)
+
+
     def on_train_epoch_end(self):
         change_patience = False
         if change_patience:

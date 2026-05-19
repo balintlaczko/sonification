@@ -9,6 +9,7 @@ from .utils.dsp import midi2frequency, db2amp
 from .models.ddsp import Sinewave, FMSynth
 from torchaudio.transforms import MelSpectrogram
 from torchaudio.functional import amplitude_to_DB
+from torchvision import datasets, transforms
 from sklearn.preprocessing import MinMaxScaler
 import json
 from .models.ddsp import FMSynth
@@ -271,6 +272,40 @@ class White_Square_dataset_2(Dataset):
 
         # return the images
         return img, img2
+    
+
+class MNISTPairDataset(Dataset):
+    """
+    Custom MNIST dataset that returns pairs of images 
+    instead of an image and a label.
+    """
+    def __init__(self, root="./data", train=True, download=True, transform=None):
+        super().__init__()
+        
+        # We load the normal MNIST dataset internally to handle 
+        # downloading and parsing
+        self.mnist = datasets.MNIST(
+            root=root, 
+            train=train, 
+            download=download, 
+            transform=transform
+        )
+        
+    def __len__(self):
+        return len(self.mnist)
+        
+    def __getitem__(self, idx):
+        # 1. Get the primary image at the requested index
+        # MNIST __getitem__ returns (image, label), we just want the image
+        img1, _ = self.mnist[idx] 
+        
+        # 2. Get a second, random image from the entire dataset
+        # We sample a random index using torch.randint
+        random_idx = torch.randint(0, len(self.mnist), (1,)).item()
+        img2, _ = self.mnist[random_idx]
+        
+        # 3. Return the pair of images (ignoring labels entirely)
+        return img1, img2
 
 
 class Sinewave_dataset(Dataset):

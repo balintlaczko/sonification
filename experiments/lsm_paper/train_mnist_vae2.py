@@ -7,6 +7,7 @@ from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from sonification.models.models import PlImgFactorVAE
+from sonification.datasets import MNISTPairDataset
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import wandb
@@ -16,7 +17,7 @@ def main():
 
     # model params
     parser.add_argument("--latent_size", type=int, default=16)
-    parser.add_argument("--input_width", type=int, default=32)
+    parser.add_argument("--img_size", type=int, default=32)
     parser.add_argument("--output_channels", type=int, default=1)
     parser.add_argument("--encoder_channels", type=int, default=128)
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 3])
@@ -57,9 +58,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=100000)
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/mnist_vae")
-    parser.add_argument("--ckpt_name", type=str, default="v2.7")
+    parser.add_argument("--ckpt_name", type=str, default="v2.8")
     parser.add_argument("--logdir", type=str, default="./logs/mnist_vae")
-    parser.add_argument("--comment", type=str, default="added new recon loss annealing params")
+    parser.add_argument("--comment", type=str, default="added validation step")
     
     args = parser.parse_args()
 
@@ -71,17 +72,17 @@ def main():
     args.logdir = logdir
 
     transform = transforms.Compose([
-        transforms.Resize((32, 32)),
+        transforms.Resize((args.img_size, args.img_size)),
         transforms.ToTensor()
     ])
 
 
     # Download and load training dataset
-    train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+    train_dataset = MNISTPairDataset(root='./data', train=True, download=True, transform=transform)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=16)
 
     # Download and load validation dataset
-    val_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+    val_dataset = MNISTPairDataset(root='./data', train=False, download=True, transform=transform)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, num_workers=8)
 
     # create model
