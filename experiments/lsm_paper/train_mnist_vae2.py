@@ -21,10 +21,10 @@ def main():
     parser.add_argument("--output_channels", type=int, default=1)
     parser.add_argument("--encoder_channels", type=int, default=128)
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 3])
-    parser.add_argument("--encoder_n_res_block", type=int, default=12)
+    parser.add_argument("--encoder_n_res_block", type=int, default=24)
     parser.add_argument("--encoder_n_res_channel", type=int, default=64)
     parser.add_argument("--decoder_channels", type=int, default=128)
-    parser.add_argument("--decoder_n_res_block", type=int, default=12)
+    parser.add_argument("--decoder_n_res_block", type=int, default=24)
     parser.add_argument("--decoder_n_res_channel", type=int, default=64)
     parser.add_argument("--d_hidden_size", type=int, default=128)
     parser.add_argument("--d_num_layers", type=int, default=5)
@@ -38,7 +38,7 @@ def main():
     parser.add_argument("--recon_loss_weight_end", type=float, default=100)
     parser.add_argument("--recon_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--recon_loss_weight_ramp_end_epoch", type=int, default=1)
-    parser.add_argument('--target_recon_loss', type=float, default=0.01, help='target recon loss to keep in case of dynamic kld')
+    parser.add_argument('--target_recon_loss', type=float, default=0.02, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
     parser.add_argument('--kld_weight_max', type=float, default=1, help='kld weight at the end of the warmup')
@@ -58,9 +58,9 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=100000)
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/mnist_vae")
-    parser.add_argument("--ckpt_name", type=str, default="v2.8")
+    parser.add_argument("--ckpt_name", type=str, default="v2.9")
     parser.add_argument("--logdir", type=str, default="./logs/mnist_vae")
-    parser.add_argument("--comment", type=str, default="added validation step")
+    parser.add_argument("--comment", type=str, default="bit bigger model, higher target loss")
     
     args = parser.parse_args()
 
