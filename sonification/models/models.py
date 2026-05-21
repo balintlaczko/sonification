@@ -3302,7 +3302,6 @@ class PlImgFactorVAE(LightningModule):
                            F.cross_entropy(d_z_2_perm, ones))
 
         # log losses
-        self.last_recon_loss = recon_loss # using it for dynamic kld threshold
         self.log_dict({
             "val_vae_loss": vae_loss,
             "val_vae_recon_loss": recon_loss,
