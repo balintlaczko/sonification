@@ -19,29 +19,29 @@ def main():
     parser.add_argument("--latent_size", type=int, default=8)
     parser.add_argument("--img_size", type=int, default=32)
     parser.add_argument("--output_channels", type=int, default=1)
-    parser.add_argument("--encoder_channels", type=int, default=128)
+    parser.add_argument("--encoder_channels", type=int, default=64)
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 3])
     parser.add_argument("--encoder_n_res_block", type=int, default=12)
-    parser.add_argument("--encoder_n_res_channel", type=int, default=64)
-    parser.add_argument("--decoder_channels", type=int, default=128)
+    parser.add_argument("--encoder_n_res_channel", type=int, default=32)
+    parser.add_argument("--decoder_channels", type=int, default=64)
     parser.add_argument("--decoder_n_res_block", type=int, default=12)
-    parser.add_argument("--decoder_n_res_channel", type=int, default=64)
+    parser.add_argument("--decoder_n_res_channel", type=int, default=32)
     parser.add_argument("--d_hidden_size", type=int, default=128)
     parser.add_argument("--d_num_layers", type=int, default=5)
 
     # training params
-    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--warmup_epochs", type=int, default=10)
     # reconstruction loss params
     parser.add_argument('--recon_loss_type', type=str, default='l1', help='reconstruction loss type: l1 or mse')
-    parser.add_argument("--recon_loss_weight_start", type=float, default=100)
-    parser.add_argument("--recon_loss_weight_end", type=float, default=100)
+    parser.add_argument("--recon_loss_weight_start", type=float, default=200)
+    parser.add_argument("--recon_loss_weight_end", type=float, default=200)
     parser.add_argument("--recon_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--recon_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument('--target_recon_loss', type=float, default=0.03, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
-    parser.add_argument('--kld_weight_max', type=float, default=10, help='kld weight at the end of the warmup')
+    parser.add_argument('--kld_weight_max', type=float, default=1, help='kld weight at the end of the warmup')
     parser.add_argument('--kld_weight_min', type=float, default=0.1, help='kld weight at the start of the warmup')
     parser.add_argument('--kld_start_epoch', type=int, default=0, help='the epoch at which to start the kld warmup from kld_weight_min to kld_weight_max')
     parser.add_argument('--kld_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the kld weight')
@@ -56,12 +56,15 @@ def main():
     parser.add_argument("--lr_d", type=float, default=0.00005)
     parser.add_argument("--lr_decay_d", type=float, default=0.75)
     parser.add_argument("--train_epochs", type=int, default=100000)
+    parser.add_argument("--vae_lr_patience", type=int, default=10000)
+    parser.add_argument("--d_lr_patience", type=int, default=20000)
+
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/mnist_vae")
-    parser.add_argument("--ckpt_name", type=str, default="v3.2")
+    parser.add_argument("--ckpt_name", type=str, default="v3.5")
     parser.add_argument("--logdir", type=str, default="./logs/mnist_vae")
-    parser.add_argument("--comment", type=str, default="recon loss weight: 100, target recon loss: 0.03, lr_vae: 0.0005, lr_d: 0.00005")
-    
+    parser.add_argument("--comment", type=str, default="latent_size: 8, encoder_channels: 64, decoder_channels: 64, encoder_n_res_channel: 32, decoder_n_res_channel: 32, batch_size: 512, vae_lr_patience: 10000, d_lr_patience: 20000")
+
     args = parser.parse_args()
 
     # change relative path to absolute path

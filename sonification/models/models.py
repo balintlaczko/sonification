@@ -3366,9 +3366,9 @@ class PlImgFactorVAE(LightningModule):
         d_optimizer = torch.optim.AdamW(
             self.D.parameters(), lr=self.lr_d)
         vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=20000)
+            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=self.args.vae_lr_patience)
         d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            d_optimizer, mode='min', factor=self.lr_decay_d, patience=40000)
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=self.args.d_lr_patience)
         # return the optimizers and schedulers
         return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
     
