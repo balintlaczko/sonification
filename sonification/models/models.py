@@ -1190,6 +1190,7 @@ class PlMapper(LightningModule):
         self.locality_loss = nn.MSELoss() if self.args.locality_loss_type == "mse" else nn.L1Loss()
         self.locality_weight = args.locality_weight
         self.mmd_weight = args.mmd_weight
+        self.callback_get_target_domain_latents = None # this will point to a callback function in the trainer script that gets the target domain latents for the mmd loss
         self.cycle_consistency_loss = nn.MSELoss() if self.args.cycle_consistency_loss_type == "mse" else nn.L1Loss()
         self.cycle_consistency_weight = args.cycle_consistency_weight_start # initialize to start
         self.cycle_consistency_weight_start = args.cycle_consistency_weight_start
@@ -1284,16 +1285,17 @@ class PlMapper(LightningModule):
         dist_z1_norm = dist_z1 / (dist_z1.mean() + 1e-8)
         dist_z2_norm = dist_z2 / (dist_z2.mean() + 1e-8)
         locality_loss = self.locality_loss(dist_z2_norm, dist_z1_norm)
-        # locality_loss = pearson_correlation_loss(dist_z1, dist_z2)
         scaled_locality_loss = self.locality_weight * locality_loss
 
         # mapper TC loss
-        d_z = self.D(z_2)
-        tc_loss = F.cross_entropy(d_z, ones)
-        tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
-            min(1.0, (epoch_idx - self.tc_start_epoch) /
-            self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
-        scaled_tc_loss = tc_loss * tc_scale
+        scaled_tc_loss = 0
+        if self.tc_weight_max > 0:
+            d_z = self.D(z_2)
+            tc_loss = F.cross_entropy(d_z, ones)
+            tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
+                min(1.0, (epoch_idx - self.tc_start_epoch) /
+                self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
+            scaled_tc_loss = tc_loss * tc_scale
 
         # cycle consistency loss
         cycle_consistency_loss = 0
@@ -1312,55 +1314,35 @@ class PlMapper(LightningModule):
         scaled_cycle_consistency_loss = cycle_consistency_weight * cycle_consistency_loss
 
         # MMD loss for distribution matching
-        # encode a batch of random sine waves with the out model
-        norm_params, freqs, amps = self.out_model.sample_sine_params(self.batch_size)
-        x = self.out_model.input_synth(freqs).detach() * amps.unsqueeze(1)
-        # select a random slice of self.n_samples
-        start_idx = torch.randint(0, self.out_model.sr - self.out_model.n_samples, (1,))
-        x = x[:, start_idx:start_idx + self.out_model.n_samples]
-        # add random phase flip
-        phase_flip = torch.rand(self.batch_size, 1, device=self.device)
-        phase_flip = torch.where(phase_flip > 0.5, 1, -1)
-        x = x * phase_flip
-        in_wf_slice = x.unsqueeze(1)
-        # forward pass
-        # get mel spectrogram
-        in_spec = self.out_model.mel_spectrogram(in_wf_slice.detach())
-        # convert to dB
-        in_spec = self.out_model.amplitude_to_db(in_spec)
-        # average time dimension, keep batch and mel dims
-        in_spec = torch.mean(in_spec, dim=-1)
-        # scale by bin minmax
-        in_spec = scale(in_spec, self.out_model.args.bin_minmax[0], self.out_model.args.bin_minmax[1], 0, 1)
-        # encode
-        mu, logvar = self.out_model.model.encode(in_spec)
-        # reparameterize
-        z_real = self.out_model.model.reparameterize(mu, logvar)
-        # get mmd loss
-        loss_mmd = mmd_loss(z_2, z_real)
-        scaled_mmd_loss = self.mmd_weight * loss_mmd
+        scaled_mmd_loss = 0
+        if self.callback_get_target_domain_latents is not None and self.mmd_weight > 0:
+            z_real = self.callback_get_target_domain_latents()
+            # get mmd loss
+            loss_mmd = mmd_loss(z_2, z_real)
+            scaled_mmd_loss = self.mmd_weight * loss_mmd
 
         # total loss
         loss = scaled_locality_loss + scaled_cycle_consistency_loss + scaled_mmd_loss + scaled_tc_loss
-
         # backward pass
         optimizer.zero_grad()
-        self.manual_backward(loss, retain_graph=True)
+        self.manual_backward(loss, retain_graph=self.tc_weight_max > 0)  # only retain graph if we need to do the tc loss backward pass after this
         optimizer.step()
         scheduler.step(loss.item())
 
         # discriminator step
-        self.model.eval()
-        # encode with input model
-        mu, logvar = self.in_model.model.encode(x2)
-        z_1b = self.in_model.model.reparameterize(mu, logvar)
-        # project to output space
-        z_2b = self.model(z_1b)
-        z_2b_perm = permute_dims(z_2b)
-        d_z_2_detached = self.D(z_2.detach())
-        d_z_2b_perm = self.D(z_2b_perm.detach())
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z_2_detached, zeros) +
-                           F.cross_entropy(d_z_2b_perm, ones))
+        d_tc_loss = 0
+        if self.tc_weight_max > 0:
+            self.model.eval()
+            # encode with input model
+            mu, logvar = self.in_model.model.encode(x2)
+            z_1b = self.in_model.model.reparameterize(mu, logvar)
+            # project to output space
+            z_2b = self.model(z_1b)
+            z_2b_perm = permute_dims(z_2b)
+            d_z_2_detached = self.D(z_2.detach())
+            d_z_2b_perm = self.D(z_2b_perm.detach())
+            d_tc_loss = 0.5 * (F.cross_entropy(d_z_2_detached, zeros) +
+                            F.cross_entropy(d_z_2b_perm, ones))
 
         # Discriminator backward pass
         d_optimizer.zero_grad()
