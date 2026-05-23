@@ -5,7 +5,7 @@ import os
 import torch
 import numpy as np
 import pandas as pd
-from sonification.models.models import PlFMFactorVAE
+from sonification.models.models import PlFMFactorVAE, CompactLatentWrapper
 from sonification.utils.misc import midi2frequency
 from sonification.utils.tensor import scale
 from sonification.utils.array import scale_array_exp
@@ -136,7 +136,7 @@ def handle_latent_code(unused_addr, *args):
     # decode the latent code
     with torch.no_grad():
         latent_code_scaled = scale(latent_code, -1, 1, z_min_all, z_max_all)
-        norm_predicted_params = model.model.decoder(latent_code.unsqueeze(0).to(device))
+        norm_predicted_params = model.model.decoder(latent_code_scaled.unsqueeze(0).to(device))
         predicted_params = model.scale_predicted_params(norm_predicted_params)
     # send back the parameters to Max
     client.send_message("/fmparams", predicted_params.squeeze(0).cpu().numpy().tolist())
@@ -161,6 +161,43 @@ finally:
     print("Server shutdown")
     server.server_close()
     print("Server closed")
+
+
+# %%
+# test wrapper
+
+wrapped_model = CompactLatentWrapper(model.model, args.latent_size)
+
+# create a batch of inputs
+with torch.no_grad():
+    norm_params, freqs, ratios, indices = model.sample_fm_params(64)
+    print(f"Sampled parameters: {norm_params.shape}, freqs: {freqs.shape}, ratios: {ratios.shape}, indices: {indices.shape}")
+    # synthesize
+    x = model.input_synth(freqs, ratios, indices)
+    # add channel dimension
+    in_wf = x.unsqueeze(1)
+    # get the mel spectrogram
+    in_spec = model.mel_spectrogram(in_wf)
+    # normalize it
+    in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+
+print(f"Input spectrogram shape: {in_spec.shape}")
+
+kld_per_dim, active_indices = wrapped_model.analyze_kld(in_spec, threshold=0.2)
+print(f"KLD per dimension: {kld_per_dim}")
+print(f"Active latent dimensions: {active_indices}")
+
+# %%
+# encode and decode a batch of data using the wrapper
+z_compact = wrapped_model.encode(in_spec)
+print(f"Encoded compact latent code shape: {z_compact.shape}")
+
+norm_predicted_params = wrapped_model.decode(z_compact)
+predicted_params = model.scale_predicted_params(norm_predicted_params)
+print(f"Predicted parameters shape: {predicted_params.shape}")
+
+
+#####################################################################
 
 # %%
 def _scale(x, in_low, in_high, out_low, out_high, exp: float=1.0):
