@@ -173,6 +173,19 @@ for i in range(num_images):
 plt.show()
 
 # %%
+# per-dim scaling to 10-90th percentiles
+percentile_low = 10
+percentile_high = 90
+z_all_mins, z_all_maxs = torch.zeros(num_dims), torch.zeros(num_dims)
+for dim in range(num_dims):
+    dim_min = np.percentile(z_all[:, dim], percentile_low)
+    dim_max = np.percentile(z_all[:, dim], percentile_high)
+    print(f"Dim {dim}: min={dim_min}, max={dim_max}")
+    z_all_mins[dim] = float(dim_min)
+    z_all_maxs[dim] = float(dim_max)
+z_all_mins, z_all_maxs
+
+# %%
 # set up an OSC server to receive latent codes from Max and send back decoded images
 
 client = udp_client.SimpleUDPClient("127.0.0.1", 12345)
@@ -182,7 +195,8 @@ def handle_latent_code(unused_addr, *args):
     latent_code = torch.tensor(args, dtype=torch.float32)
     # decode the latent code
     with torch.no_grad():
-        latent_code_scaled = scale(latent_code, -1, 1, z_all_min, z_all_max)
+        # latent_code_scaled = scale(latent_code, -1, 1, z_all_min, z_all_max)
+        latent_code_scaled = scale(latent_code, -1, 1, z_all_mins, z_all_maxs)
         predicted_images = model.model.decoder(latent_code_scaled.unsqueeze(0).to(device))
 
     # Flatten the image to a 1D list of floats 
