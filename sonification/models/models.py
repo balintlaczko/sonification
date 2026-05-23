@@ -3641,3 +3641,74 @@ class PlFMEmbedder(LightningModule):
             optimizer, mode='min', factor=self.lr_decay, patience=100000)
         # return the optimizers and schedulers
         return [optimizer], [scheduler]
+    
+
+class CompactLatentWrapper:
+    def __init__(self, model, latent_dim):
+        """
+        Initializes the wrapper with the trained FactorVAE model.
+        """
+        self.model = model
+        self.latent_dim = latent_dim
+        self.active_indices = None
+        self.device = next(model.parameters()).device
+
+    def analyze_kld(self, data_batch, threshold=0.1):
+        """
+        Computes the KLD for each latent dimension over a sample batch.
+        Dimensions with a mean KLD above the threshold are marked active.
+        """
+        self.model.eval()
+        with torch.no_grad():
+            # Assume encoder returns mu and logvar
+            mu, logvar = self.model.encode(data_batch.to(self.device))
+            
+            # KLD formula for a standard normal prior: N(0, I)
+            # D_KL = -0.5 * (1 + log(sigma^2) - mu^2 - sigma^2)
+            kld_per_dim = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp(), dim=0)
+            
+            # Store indices of dimensions exceeding the KLD threshold
+            self.active_indices = torch.where(kld_per_dim > threshold)[0]
+            
+        return kld_per_dim, self.active_indices
+    
+    def encode(self, x, sample=True):
+        """
+        Encodes the input and returns only the active latent dimensions.
+        """
+        if self.active_indices is None:
+            raise RuntimeError("Run analyze_kld() prior to encoding.")
+        
+        self.model.eval()
+        with torch.no_grad():
+            mu, logvar = self.model.encode(x.to(self.device))
+            # Sample from the posterior or just use the mean, or
+            # use mean for deterministic synthesis post-training.
+            if sample:
+                z_compact = self.model.reparameterize(mu[:, self.active_indices], logvar[:, self.active_indices])
+            else:
+                z_compact = mu[:, self.active_indices]
+            
+        return z_compact
+
+    def decode(self, z_compact):
+        """
+        Reconstructs the full latent vector by padding inactive dimensions 
+        with noise, then decodes it.
+        """
+        if self.active_indices is None:
+            raise RuntimeError("Run analyze_kld() prior to decoding.")
+        
+        batch_size = z_compact.shape[0]
+        
+        # Sample noise from the prior distribution N(0, I) for collapsed dimensions
+        z_full = torch.randn(batch_size, self.latent_dim, device=self.device)
+        
+        # Overwrite the noise at active indices with the provided compact vector
+        z_full[:, self.active_indices] = z_compact
+        
+        self.model.eval()
+        with torch.no_grad():
+            output = self.model.decoder(z_full)
+            
+        return output
