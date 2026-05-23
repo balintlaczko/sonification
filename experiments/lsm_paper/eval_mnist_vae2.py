@@ -174,13 +174,12 @@ plt.show()
 
 # %%
 # per-dim scaling to 10-90th percentiles
-percentile_low = 10
-percentile_high = 90
+percentile_low = 5
+percentile_high = 95
 z_all_mins, z_all_maxs = torch.zeros(num_dims), torch.zeros(num_dims)
 for dim in range(num_dims):
     dim_min = np.percentile(z_all[:, dim], percentile_low)
     dim_max = np.percentile(z_all[:, dim], percentile_high)
-    print(f"Dim {dim}: min={dim_min}, max={dim_max}")
     z_all_mins[dim] = float(dim_min)
     z_all_maxs[dim] = float(dim_max)
 z_all_mins, z_all_maxs
