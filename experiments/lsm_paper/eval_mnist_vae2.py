@@ -5,7 +5,7 @@ import os
 import torch
 import numpy as np
 import pandas as pd
-from sonification.models.models import PlImgFactorVAE
+from sonification.models.models import PlImgFactorVAE, CompactLatentWrapper
 from sonification.datasets import MNISTPairDataset
 from sonification.utils.tensor import scale
 from torch.utils.data import DataLoader
@@ -224,6 +224,39 @@ finally:
     print("Server shutdown")
     server.server_close()
     print("Server closed")
+    
+
+# %%
+# test the wrapper
+
+wrapped_model = CompactLatentWrapper(model.model, args.latent_size)
+
+# analyze KLD on a batch of data
+data_batch = next(iter(dataloader))
+print(data_batch[0].shape)
+
+kld_per_dim, active_indices = wrapped_model.analyze_kld(data_batch[0], threshold=0.1)
+print(f"KLD per dimension: {kld_per_dim}")
+print(f"Active latent dimensions: {active_indices}")
+
+
+# %%
+# encode and decode a batch of data using the wrapper
+z_compact = wrapped_model.encode(data_batch[0])
+print(f"Compact latent representation shape: {z_compact.shape}")
+
+decoded_output = wrapped_model.decode(z_compact)
+print(f"Decoded output shape: {decoded_output.shape}")
+
+# plot the original and decoded images side by side
+fig, axes = plt.subplots(2, 8, figsize=(20, 5))
+for i in range(8):
+    axes[0, i].imshow(data_batch[0][i, 0, ...].cpu().numpy(), cmap="gray")
+    axes[0, i].set_title(f"Original {i}")
+    axes[1, i].imshow(decoded_output[i, 0, ...].cpu().numpy(), cmap="gray")
+    axes[1, i].set_title(f"Decoded {i}")
+plt.show()
+
 
 ########################################################################
 
