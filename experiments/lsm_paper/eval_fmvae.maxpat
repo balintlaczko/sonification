@@ -68,7 +68,7 @@
                         "valueof": {
                             "parameter_longname": "Carrier Frequency",
                             "parameter_mmax": 1200.0,
-                            "parameter_mmin": 100.0,
+                            "parameter_mmin": 60.0,
                             "parameter_modmode": 3,
                             "parameter_shortname": "CarrFreq",
                             "parameter_type": 0,
