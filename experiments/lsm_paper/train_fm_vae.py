@@ -65,7 +65,7 @@ def main():
     parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
     # contrastive loss params
-    parser.add_argument("--contrastive_regularization", type=int, default=1, help="Use contrastive regularization (default: 0 = no contrastive regularization)")
+    parser.add_argument("--contrastive_regularization", type=int, default=0, help="Use contrastive regularization (default: 0 = no contrastive regularization)")
     parser.add_argument("--dynamic_contrastive", type=int, default=1, help="non-zero will use dynamic contrastive")
     parser.add_argument("--contrastive_weight_max", type=float, default=5, help="Maximum weight for contrastive loss")
     parser.add_argument("--contrastive_weight_min", type=float, default=0.1, help="Minimum weight for contrastive loss")
@@ -80,9 +80,9 @@ def main():
     parser.add_argument("--steps_per_epoch", type=int, default=200)
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v5.10")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v5.11")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="v5.8 refined again")
+    parser.add_argument("--comment", type=str, default="like v5.10 but without contrastive")
 
     args = parser.parse_args()
 
