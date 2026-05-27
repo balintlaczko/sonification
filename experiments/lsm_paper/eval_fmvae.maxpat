@@ -13,6 +13,16 @@
         "boxes": [
             {
                 "box": {
+                    "id": "obj-4",
+                    "local": 1,
+                    "maxclass": "ezdac~",
+                    "numinlets": 2,
+                    "numoutlets": 0,
+                    "patching_rect": [ 700.0, 295.0, 45.0, 45.0 ]
+                }
+            },
+            {
+                "box": {
                     "id": "obj-13",
                     "maxclass": "live.dial",
                     "numinlets": 1,
@@ -601,6 +611,20 @@
                 "patchline": {
                     "destination": [ "obj-43", 0 ],
                     "source": [ "obj-59", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-4", 1 ],
+                    "order": 0,
+                    "source": [ "obj-6", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-4", 0 ],
+                    "order": 1,
+                    "source": [ "obj-6", 0 ]
                 }
             },
             {
