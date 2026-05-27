@@ -29,7 +29,7 @@ def main():
     parser.add_argument("--d_num_layers", type=int, default=5)
 
     # training params
-    parser.add_argument('--batch_size', type=int, default=16, help='batch size')
+    parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument("--warmup_epochs", type=int, default=10)
     parser.add_argument('--train_epochs', type=int, default=10000000, help='number of training epochs')
     # locality loss params
@@ -56,14 +56,14 @@ def main():
     parser.add_argument("--lr_decay_d", type=float, default=0.85)
 
     # image model
-    parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/mnist_vae2/v3.5/v3.5_last_epoch=4215.ckpt', help='image model checkpoint path')
+    parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/mnist_vae/v3.5/v3.5_last_epoch=4215.ckpt', help='image model checkpoint path')
 
     # audio model
-    parser.add_argument('--audio_model_ckpt_path', type=str, default='./ckpt/fm_vae/imv_v5.10/imv_v5.10_last_epoch=7950.ckpt', help='sound model checkpoint path')
+    parser.add_argument('--audio_model_ckpt_path', type=str, default='./ckpt/fm_vae/imv_v5.11/imv_v5.11_last_epoch=9667.ckpt', help='sound model checkpoint path')
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper_exp2', help='checkpoint path')
-    parser.add_argument('--ckpt_name', type=str, default='mapper_exp2_v0_test', help='checkpoint name')
+    parser.add_argument('--ckpt_name', type=str, default='v1.0', help='checkpoint name')
     parser.add_argument('--logdir', type=str, default='./logs/mapper_exp2', help='log directory')
 
     # quick comment
@@ -219,7 +219,7 @@ def main():
     # create logger
     logger = WandbLogger(
         name=args.ckpt_name,
-        project="mapper_exp1",
+        project="mapper_exp2",
         save_dir=logdir,
         offline=False,
         settings=wandb.Settings(_disable_stats=True),
