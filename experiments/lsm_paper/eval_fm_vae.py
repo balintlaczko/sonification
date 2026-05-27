@@ -16,7 +16,7 @@ from torchaudio.transforms import MelSpectrogram
 
 # %%
 ckpt_path = '../../ckpt/fm_vae'
-ckpt_name = 'imv_v5.10'
+ckpt_name = 'imv_v5.11'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -166,7 +166,7 @@ finally:
 # %%
 # test wrapper
 
-wrapped_model = CompactLatentWrapper(model.model, args.latent_size)
+model.model = CompactLatentWrapper(model.model, args.latent_size)
 
 # create a batch of inputs
 with torch.no_grad():
@@ -183,18 +183,20 @@ with torch.no_grad():
 
 print(f"Input spectrogram shape: {in_spec.shape}")
 
-kld_per_dim, active_indices = wrapped_model.analyze_kld(in_spec, threshold=0.2)
+kld_per_dim, active_indices = model.model.analyze_kld(in_spec, threshold=0.2)
 print(f"KLD per dimension: {kld_per_dim}")
 print(f"Active latent dimensions: {active_indices}")
 
 # %%
 # encode and decode a batch of data using the wrapper
-z_compact = wrapped_model.encode(in_spec)
-print(f"Encoded compact latent code shape: {z_compact.shape}")
+with torch.no_grad():
+    mu, logvar = model.model.encode(in_spec)
+    z_compact = model.model.reparameterize(mu, logvar)
+    print(f"Encoded compact latent code shape: {z_compact.shape}")
 
-norm_predicted_params = wrapped_model.decode(z_compact)
-predicted_params = model.scale_predicted_params(norm_predicted_params)
-print(f"Predicted parameters shape: {predicted_params.shape}")
+    norm_predicted_params = model.model.decoder(z_compact)
+    predicted_params = model.scale_predicted_params(norm_predicted_params)
+    print(f"Predicted parameters shape: {predicted_params.shape}")
 
 
 #####################################################################
