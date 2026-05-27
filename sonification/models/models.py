@@ -1295,7 +1295,7 @@ class PlMapper(LightningModule):
         scaled_locality_loss = self.locality_weight * locality_loss
 
         # mapper TC loss
-        scaled_tc_loss = 0
+        scaled_tc_loss, tc_loss, tc_scale = 0, 0, 0
         if self.tc_weight_max > 0:
             d_z = self.D(z_2)
             tc_loss = F.cross_entropy(d_z, ones)
@@ -1351,11 +1351,11 @@ class PlMapper(LightningModule):
             d_tc_loss = 0.5 * (F.cross_entropy(d_z_2_detached, zeros) +
                             F.cross_entropy(d_z_2b_perm, ones))
 
-        # Discriminator backward pass
-        d_optimizer.zero_grad()
-        self.manual_backward(d_tc_loss)
-        d_optimizer.step()
-        d_scheduler.step(d_tc_loss.item())
+            # Discriminator backward pass
+            d_optimizer.zero_grad()
+            self.manual_backward(d_tc_loss)
+            d_optimizer.step()
+            d_scheduler.step(d_tc_loss.item())
 
         # log losses
         self.log_dict({
