@@ -1191,6 +1191,7 @@ class PlMapper(LightningModule):
         self.locality_weight = args.locality_weight
         self.mmd_weight = args.mmd_weight
         self.callback_get_target_domain_latents = None # this will point to a callback function in the trainer script that gets the target domain latents for the mmd loss
+        self.callback_post_decoder_hook = None # this will point to a callback function in the trainer script that applies any transformations to the output of the decoder before it is re-encoded by the out_model for the cycle consistency loss
         self.cycle_consistency_loss = nn.MSELoss() if self.args.cycle_consistency_loss_type == "mse" else nn.L1Loss()
         self.cycle_consistency_weight = args.cycle_consistency_weight_start # initialize to start
         self.cycle_consistency_weight_start = args.cycle_consistency_weight_start
@@ -1221,7 +1222,9 @@ class PlMapper(LightningModule):
         self.out_model = args.out_model
         self.in_model.eval()
         self.out_model.eval()
-        self.D = LinearDiscriminator(self.out_model.args.latent_size, self.d_hidden_size, 2, self.d_num_layers)
+        # for a CompactLatentWrapper the latent size is determined by the number of active indices, for a regular VAE it's just the latent size
+        out_latent_size = len(self.out_model.model.active_indices) if hasattr(self.out_model.model, "active_indices") else self.out_model.args.latent_size
+        self.D = LinearDiscriminator(out_latent_size, self.d_hidden_size, 2, self.d_num_layers)
 
         def init_weights_kaiming(m):
             if isinstance(m, (nn.Conv1d, nn.ConvTranspose1d, nn.Linear)):  # Apply to conv and linear layers
@@ -1261,6 +1264,10 @@ class PlMapper(LightningModule):
 
         # decode with output model
         x_hat = self.out_model.model.decoder(z_2)
+
+        # apply post-decoder hook
+        if self.callback_post_decoder_hook is not None:
+            x_hat = self.callback_post_decoder_hook(x_hat)
 
         # re-encode with output model
         mu, logvar = self.out_model.model.encode(x_hat.detach())
@@ -1947,7 +1954,11 @@ class ParamDecoder(nn.Module):
 
         pre_decoder_num_blocks = int(np.log2(decoder_features) - np.log2(latent_size))
         pre_decoder_blocks = []
-        pre_decoder_layers_features = [latent_size * (2 ** i) for i in range(pre_decoder_num_blocks + 1)]
+        # pre_decoder_layers_features = [latent_size * (2 ** i) for i in range(pre_decoder_num_blocks + 1)]
+        pre_decoder_layers_features = [latent_size] + [
+            2 ** int(np.ceil(np.log2(latent_size * (2 ** i)))) 
+            for i in range(1, pre_decoder_num_blocks + 1)
+        ]
         for i in range(pre_decoder_num_blocks):
             num_groups = max(1, pre_decoder_layers_features[i + 1] // self.chans_per_group)
             block = [
@@ -3643,30 +3654,27 @@ class PlFMEmbedder(LightningModule):
         return [optimizer], [scheduler]
     
 
-class CompactLatentWrapper:
-    def __init__(self, model, latent_dim):
+class CompactLatentWrapper(nn.Module):
+    def __init__(self, inner_model, latent_dim):
         """
         Initializes the wrapper with the trained FactorVAE model.
         """
-        self.model = model
+        super().__init__()
+        self.inner_model = inner_model
         self.latent_dim = latent_dim
         self.active_indices = None
-        self.device = next(model.parameters()).device
+        # self.device = next(self.inner_model.parameters()).device
 
     def analyze_kld(self, data_batch, threshold=0.1):
         """
         Computes the KLD for each latent dimension over a sample batch.
         Dimensions with a mean KLD above the threshold are marked active.
         """
-        self.model.eval()
+        self.inner_model.eval()
+        device = next(self.inner_model.parameters()).device
         with torch.no_grad():
-            # Assume encoder returns mu and logvar
-            mu, logvar = self.model.encode(data_batch.to(self.device))
-            
-            # KLD formula for a standard normal prior: N(0, I)
-            # D_KL = -0.5 * (1 + log(sigma^2) - mu^2 - sigma^2)
+            mu, logvar = self.inner_model.encode(data_batch.to(device))
             kld_per_dim = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp(), dim=0)
-            
             # Store indices of dimensions exceeding the KLD threshold
             self.active_indices = torch.where(kld_per_dim > threshold)[0]
             
@@ -3678,37 +3686,23 @@ class CompactLatentWrapper:
         """
         if self.active_indices is None:
             raise RuntimeError("Run analyze_kld() prior to encoding.")
-        
-        self.model.eval()
-        with torch.no_grad():
-            mu, logvar = self.model.encode(x.to(self.device))
-            # Sample from the posterior or just use the mean, or
-            # use mean for deterministic synthesis post-training.
-            if sample:
-                z_compact = self.model.reparameterize(mu[:, self.active_indices], logvar[:, self.active_indices])
-            else:
-                z_compact = mu[:, self.active_indices]
-            
-        return z_compact
+        mu, logvar = self.inner_model.encode(x)
+        return mu[:, self.active_indices], logvar[:, self.active_indices]
+    
+    def reparameterize(self, mu_compact, logvar_compact):
+        return self.inner_model.reparameterize(mu_compact, logvar_compact)
 
-    def decode(self, z_compact):
+    def decoder(self, z_compact):
         """
-        Reconstructs the full latent vector by padding inactive dimensions 
-        with noise, then decodes it.
+        Pads the compact vector back to full size using noise, then decodes.
         """
         if self.active_indices is None:
             raise RuntimeError("Run analyze_kld() prior to decoding.")
         
         batch_size = z_compact.shape[0]
-        
-        # Sample noise from the prior distribution N(0, I) for collapsed dimensions
-        z_full = torch.randn(batch_size, self.latent_dim, device=self.device)
-        
-        # Overwrite the noise at active indices with the provided compact vector
+        device = z_compact.device
+
+        z_full = torch.randn(batch_size, self.latent_dim, device=device)
         z_full[:, self.active_indices] = z_compact
         
-        self.model.eval()
-        with torch.no_grad():
-            output = self.model.decoder(z_full)
-            
-        return output
+        return self.inner_model.decoder(z_full)
