@@ -2,7 +2,7 @@ import argparse
 import os
 # os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 import random
 import numpy as np
 from lightning.pytorch import Trainer
@@ -44,13 +44,13 @@ def main():
     parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=0, help='cycle consistency start epoch')
     parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=1)
     # # tc loss params
-    parser.add_argument('--tc_weight_max', type=float, default=10, help='tc weight at the end of the warmup')
-    parser.add_argument('--tc_weight_min', type=float, default=10, help='tc weight at the start of the warmup')
+    parser.add_argument('--tc_weight_max', type=float, default=0, help='tc weight at the end of the warmup')
+    parser.add_argument('--tc_weight_min', type=float, default=0, help='tc weight at the start of the warmup')
     parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
 
     # optimizer params
-    parser.add_argument("--lr", type=float, default=0.0005)
+    parser.add_argument("--lr", type=float, default=0.0001)
     parser.add_argument("--lr_decay", type=float, default=0.85)
     parser.add_argument("--lr_d", type=float, default=0.000005)
     parser.add_argument("--lr_decay_d", type=float, default=0.85)
@@ -63,11 +63,11 @@ def main():
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper_exp2', help='checkpoint path')
-    parser.add_argument('--ckpt_name', type=str, default='v1.2', help='checkpoint name')
+    parser.add_argument('--ckpt_name', type=str, default='v1.4', help='checkpoint name')
     parser.add_argument('--logdir', type=str, default='./logs/mapper_exp2', help='log directory')
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='batch_size: 1024, tc_weight: 10', help='add a comment if needed')
+    parser.add_argument('--comment', type=str, default='lr: 0.0001', help='add a comment if needed')
 
     args = parser.parse_args()
 
@@ -103,7 +103,10 @@ def main():
         transforms.Resize((in_model_args.img_size, in_model_args.img_size)),
         transforms.ToTensor()
     ])
-    dataset = MNISTPairDataset(root='./data', train=False, download=True, transform=transform)
+    dataset_train = MNISTPairDataset(root='./data', train=True, download=True, transform=transform)
+    dataset_val = MNISTPairDataset(root='./data', train=False, download=True, transform=transform)
+    dataset = ConcatDataset([dataset_train, dataset_val])
+    print("Image dataset created")
     # create image dataloader
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=4, persistent_workers=True)
     print("Image dataloader created")
