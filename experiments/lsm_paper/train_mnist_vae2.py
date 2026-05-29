@@ -16,7 +16,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     # model params
-    parser.add_argument("--latent_size", type=int, default=8)
+    parser.add_argument("--latent_size", type=int, default=4)
     parser.add_argument("--img_size", type=int, default=32)
     parser.add_argument("--output_channels", type=int, default=1)
     parser.add_argument("--encoder_channels", type=int, default=64)
@@ -61,9 +61,9 @@ def main():
 
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/mnist_vae")
-    parser.add_argument("--ckpt_name", type=str, default="v3.5")
+    parser.add_argument("--ckpt_name", type=str, default="v3.6")
     parser.add_argument("--logdir", type=str, default="./logs/mnist_vae")
-    parser.add_argument("--comment", type=str, default="latent_size: 8, encoder_channels: 64, decoder_channels: 64, encoder_n_res_channel: 32, decoder_n_res_channel: 32, batch_size: 512, vae_lr_patience: 10000, d_lr_patience: 20000")
+    parser.add_argument("--comment", type=str, default="latent_size: 4")
 
     args = parser.parse_args()
 
