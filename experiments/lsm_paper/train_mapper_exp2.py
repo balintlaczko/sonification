@@ -33,7 +33,7 @@ def main():
     parser.add_argument("--warmup_epochs", type=int, default=10)
     parser.add_argument('--train_epochs', type=int, default=10000000, help='number of training epochs')
     # locality loss params
-    parser.add_argument('--locality_loss_type', type=str, default='mse', help='locality loss type: l1 or mse')
+    parser.add_argument('--locality_loss_type', type=str, default='l1', help='locality loss type: l1 or mse')
     parser.add_argument('--locality_weight', type=float, default=100)
     # mmd loss params
     parser.add_argument('--mmd_weight', type=float, default=50)
@@ -52,22 +52,24 @@ def main():
     # optimizer params
     parser.add_argument("--lr", type=float, default=0.0001)
     parser.add_argument("--lr_decay", type=float, default=0.85)
+    parser.add_argument("--lr_patience", type=float, default=2000)
     parser.add_argument("--lr_d", type=float, default=0.000005)
     parser.add_argument("--lr_decay_d", type=float, default=0.85)
+    parser.add_argument("--lr_d_patience", type=float, default=10000)
 
     # image model
-    parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/mnist_vae/v3.5/v3.5_last_epoch=4215.ckpt', help='image model checkpoint path')
+    parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/mnist_vae/v3.6/v3.6_last_epoch=5930.ckpt', help='image model checkpoint path')
 
     # audio model
     parser.add_argument('--audio_model_ckpt_path', type=str, default='./ckpt/fm_vae/imv_v5.11/imv_v5.11_last_epoch=9667.ckpt', help='sound model checkpoint path')
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper_exp2', help='checkpoint path')
-    parser.add_argument('--ckpt_name', type=str, default='v1.4', help='checkpoint name')
+    parser.add_argument('--ckpt_name', type=str, default='v1.6', help='checkpoint name')
     parser.add_argument('--logdir', type=str, default='./logs/mapper_exp2', help='log directory')
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='lr: 0.0001', help='add a comment if needed')
+    parser.add_argument('--comment', type=str, default='locality loss type: l1, new patience params', help='add a comment if needed')
 
     args = parser.parse_args()
 

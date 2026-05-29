@@ -1386,9 +1386,9 @@ class PlMapper(LightningModule):
         d_optimizer = torch.optim.AdamW(
             self.D.parameters(), lr=self.lr_d)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=self.lr_decay, patience=20000)
+            optimizer, mode='min', factor=self.lr_decay, patience=self.args.lr_patience)
         d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            d_optimizer, mode='min', factor=self.lr_decay_d, patience=40000)
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=self.args.lr_d_patience)
         # return the optimizers and schedulers
         return [optimizer, d_optimizer], [scheduler, d_scheduler]
         # return [optimizer], [scheduler]
