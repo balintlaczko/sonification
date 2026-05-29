@@ -1979,7 +1979,7 @@ class ParamDecoder(nn.Module):
         post_decoder_num_blocks = int(np.log2(decoder_features) - np.log2(post_decoder_target_n_features))
         post_decoder_blocks = []
         post_decoder_layers_features = [decoder_features // (2 ** i) for i in range(post_decoder_num_blocks + 1)]
-        print("post_decoder layers features: ", post_decoder_layers_features)
+        # print("post_decoder layers features: ", post_decoder_layers_features)
         for i in range(post_decoder_num_blocks):
             num_groups = max(1, post_decoder_layers_features[i + 1] // self.chans_per_group)
             block = [
