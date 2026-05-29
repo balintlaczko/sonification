@@ -1757,10 +1757,11 @@ class MelSpecEncoder(nn.Module):
         self.post_encoder = nn.Sequential(*post_encoder_blocks)
 
         post_encoder_n_features = encoder_channels * target_width # 256
-        target_n_features = latent_size * 2 # 16
+        target_n_features = 2 ** int(np.ceil(np.log2(latent_size * 2))) # 16
         mlp_layers = []
         num_mlp_blocks = int(np.log2(post_encoder_n_features) - np.log2(target_n_features)) # 256 -> 16 = 4 blocks
         mlp_layers_features = [post_encoder_n_features // (2 ** i) for i in range(num_mlp_blocks + 1)]
+        # print("mlp layers features: ", mlp_layers_features)
         for i in range(num_mlp_blocks):
             num_groups = max(1, mlp_layers_features[i + 1] // self.chans_per_group)
             block = [
@@ -1959,6 +1960,7 @@ class ParamDecoder(nn.Module):
             2 ** int(np.ceil(np.log2(latent_size * (2 ** i)))) 
             for i in range(1, pre_decoder_num_blocks + 1)
         ]
+        # print("pre_decoder layers features: ", pre_decoder_layers_features)
         for i in range(pre_decoder_num_blocks):
             num_groups = max(1, pre_decoder_layers_features[i + 1] // self.chans_per_group)
             block = [
@@ -1977,6 +1979,7 @@ class ParamDecoder(nn.Module):
         post_decoder_num_blocks = int(np.log2(decoder_features) - np.log2(post_decoder_target_n_features))
         post_decoder_blocks = []
         post_decoder_layers_features = [decoder_features // (2 ** i) for i in range(post_decoder_num_blocks + 1)]
+        print("post_decoder layers features: ", post_decoder_layers_features)
         for i in range(post_decoder_num_blocks):
             num_groups = max(1, post_decoder_layers_features[i + 1] // self.chans_per_group)
             block = [
@@ -2023,7 +2026,12 @@ class ImageDecoder(nn.Module):
         target_n_features = 64
         num_mlp_blocks = int(np.log2(target_n_features) - np.log2(latent_size))  # 64 -> 16 = 3 blocks
         mlp_layers = []
-        mlp_layers_features = [latent_size * (2 ** i) for i in range(num_mlp_blocks + 1)]
+        # mlp_layers_features = [latent_size * (2 ** i) for i in range(num_mlp_blocks + 1)]
+        mlp_layers_features = [latent_size] + [
+            2 ** int(np.ceil(np.log2(latent_size * (2 ** i)))) 
+            for i in range(1, num_mlp_blocks + 1)
+        ]
+        # print("mlp layers features: ", mlp_layers_features)
         for i in range(num_mlp_blocks):
             num_groups = max(1, mlp_layers_features[i + 1] // self.chans_per_group)
             block = [

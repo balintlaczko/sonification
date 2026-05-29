@@ -11,12 +11,13 @@ from sonification.datasets import MNISTPairDataset
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import wandb
+from torchinfo import summary
 
 def main():
     parser = argparse.ArgumentParser()
 
     # model params
-    parser.add_argument("--latent_size", type=int, default=4)
+    parser.add_argument("--latent_size", type=int, default=3)
     parser.add_argument("--img_size", type=int, default=32)
     parser.add_argument("--output_channels", type=int, default=1)
     parser.add_argument("--encoder_channels", type=int, default=64)
@@ -24,7 +25,7 @@ def main():
     parser.add_argument("--encoder_n_res_block", type=int, default=12)
     parser.add_argument("--encoder_n_res_channel", type=int, default=32)
     parser.add_argument("--decoder_channels", type=int, default=64)
-    parser.add_argument("--decoder_n_res_block", type=int, default=12)
+    parser.add_argument("--decoder_n_res_block", type=int, default=8)
     parser.add_argument("--decoder_n_res_channel", type=int, default=32)
     parser.add_argument("--d_hidden_size", type=int, default=128)
     parser.add_argument("--d_num_layers", type=int, default=5)
@@ -61,9 +62,9 @@ def main():
 
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/mnist_vae")
-    parser.add_argument("--ckpt_name", type=str, default="v3.6")
+    parser.add_argument("--ckpt_name", type=str, default="v3.7")
     parser.add_argument("--logdir", type=str, default="./logs/mnist_vae")
-    parser.add_argument("--comment", type=str, default="latent_size: 4")
+    parser.add_argument("--comment", type=str, default="latent_size: 3, decoder_n_res_block: 8")
 
     args = parser.parse_args()
 
@@ -90,6 +91,7 @@ def main():
 
     # create model
     model = PlImgFactorVAE(args)
+    summary(model, input_size=(args.batch_size, 1, args.img_size, args.img_size), depth=6)
 
     # checkpoint callbacks
     checkpoint_path = os.path.join(args.ckpt_path, args.ckpt_name)
