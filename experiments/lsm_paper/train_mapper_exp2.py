@@ -44,8 +44,8 @@ def main():
     parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=0, help='cycle consistency start epoch')
     parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=1)
     # # tc loss params
-    parser.add_argument('--tc_weight_max', type=float, default=0, help='tc weight at the end of the warmup')
-    parser.add_argument('--tc_weight_min', type=float, default=0, help='tc weight at the start of the warmup')
+    parser.add_argument('--tc_weight_max', type=float, default=10, help='tc weight at the end of the warmup')
+    parser.add_argument('--tc_weight_min', type=float, default=10, help='tc weight at the start of the warmup')
     parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
 
@@ -55,21 +55,21 @@ def main():
     parser.add_argument("--lr_patience", type=float, default=2000)
     parser.add_argument("--lr_d", type=float, default=0.000005)
     parser.add_argument("--lr_decay_d", type=float, default=0.85)
-    parser.add_argument("--lr_d_patience", type=float, default=10000)
+    parser.add_argument("--lr_d_patience", type=float, default=20000)
 
     # image model
-    parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/mnist_vae/v3.6/v3.6_last_epoch=5930.ckpt', help='image model checkpoint path')
+    parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/mnist_vae/v3.7/v3.7_last_epoch=6322.ckpt', help='image model checkpoint path')
 
     # audio model
     parser.add_argument('--audio_model_ckpt_path', type=str, default='./ckpt/fm_vae/imv_v5.11/imv_v5.11_last_epoch=9667.ckpt', help='sound model checkpoint path')
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper_exp2', help='checkpoint path')
-    parser.add_argument('--ckpt_name', type=str, default='v1.6', help='checkpoint name')
+    parser.add_argument('--ckpt_name', type=str, default='v1.7', help='checkpoint name')
     parser.add_argument('--logdir', type=str, default='./logs/mapper_exp2', help='log directory')
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='locality loss type: l1, new patience params', help='add a comment if needed')
+    parser.add_argument('--comment', type=str, default='new img model, tc: 10', help='add a comment if needed')
 
     args = parser.parse_args()
 
