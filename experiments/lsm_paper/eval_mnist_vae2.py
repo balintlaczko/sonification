@@ -20,7 +20,7 @@ from pythonosc import dispatcher, osc_server, udp_client
 
 # %%
 ckpt_path = '../../ckpt/mnist_vae2'
-model_version = '3.5'
+model_version = '3.7'
 ckpt_name = 'v' + model_version
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" or "best" in it
@@ -243,7 +243,7 @@ print(f"Active latent dimensions: {active_indices}")
 # %%
 # encode and decode a batch of data using the wrapper
 with torch.no_grad():
-    mu, logvar = model.model.encode(data_batch[0])
+    mu, logvar = model.model.encode(data_batch[0].to(device))
     z_compact = model.model.reparameterize(mu, logvar)
     print(f"Compact latent representation shape: {z_compact.shape}")
 
