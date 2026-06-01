@@ -9,7 +9,7 @@ from lightning.pytorch.loggers import WandbLogger
 from sonification.models.models import PlImgFactorVAE
 from sonification.datasets import MNISTPairDataset
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
+from torchvision import transforms
 import wandb
 from torchinfo import summary
 
@@ -39,6 +39,8 @@ def main():
     parser.add_argument("--recon_loss_weight_end", type=float, default=200)
     parser.add_argument("--recon_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--recon_loss_weight_ramp_end_epoch", type=int, default=1)
+    parser.add_argument('--use_msssim', type=int, default=0, help='whether to use msssim loss in addition to pixel-wise loss')
+    parser.add_argument('--msssim_alpha', type=float, default=0.84, help='the alpha parameter for the msssim loss, between 0 and 1, where 1 means only msssim loss and 0 means only pixel-wise loss')
     parser.add_argument('--target_recon_loss', type=float, default=0.03, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')

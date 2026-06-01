@@ -24,6 +24,7 @@ from copy import deepcopy
 from collections import OrderedDict
 from sys import stderr
 import math
+from pytorch_msssim import MS_SSIM
 
 
 class AE(nn.Module):
@@ -3083,6 +3084,8 @@ class PlImgFactorVAE(LightningModule):
         # losses
         self.recon_loss = nn.MSELoss() if self.args.recon_loss_type == 'mse' else nn.L1Loss()
         self.recon_loss.eval()
+        if self.args.use_msssim > 0:
+            self.msssim_loss = MS_SSIM(data_range=1.0, size_average=True, channel=1)
         self.kld = kld_loss
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
@@ -3151,6 +3154,10 @@ class PlImgFactorVAE(LightningModule):
 
         # VAE recon_loss
         recon_loss = self.recon_loss(predicted_img, x1)
+        msssim_loss = 0
+        if self.args.use_msssim > 0:
+            msssim_loss = 1 - self.msssim_loss(predicted_img, x1)
+            recon_loss = self.args.msssim_alpha * msssim_loss + (1 - self.args.msssim_alpha) * recon_loss
         # calculate current recon loss weight
         current_epoch = self.trainer.current_epoch
         if current_epoch < self.recon_loss_weight_ramp_start_epoch:
@@ -3175,51 +3182,57 @@ class PlImgFactorVAE(LightningModule):
         scaled_kld_loss = kld_loss * kld_scale
 
         # VAE TC loss
-        d_z = self.D(z)
-        vae_tc_loss = F.cross_entropy(d_z, ones)
+        # we only calculate the TC loss (and train the D) if tc_scale > 0
+        scaled_vae_tc_loss = 0
         tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
             min(1.0, (epoch_idx - self.tc_start_epoch) /
             self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
-        scaled_vae_tc_loss = vae_tc_loss * tc_scale
+        if tc_scale > 0:
+            d_z = self.D(z)
+            vae_tc_loss = F.cross_entropy(d_z, ones)
+            scaled_vae_tc_loss = vae_tc_loss * tc_scale
 
         # VAE total loss
         vae_loss = scaled_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
 
         # VAE backward pass
         vae_optimizer.zero_grad()
-        self.manual_backward(vae_loss, retain_graph=True)
+        self.manual_backward(vae_loss, retain_graph=tc_scale > 0) # only retain graph if we need to do D step
         self.clip_gradients(vae_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
 
         vae_optimizer.step()
         vae_scheduler.step(vae_loss.item())
 
         # Discriminator forward pass
-        # encode with the VAE
-        self.model.eval()
-        mu_2, logvar_2 = self.model.encode(x2)
-        # reparameterize
-        z_2 = self.model.reparameterize(mu_2, logvar_2)
-        z_2_perm = permute_dims(z_2)
-        # get the discriminator output
-        d_z_detached = self.D(z.detach())
-        d_z_2_perm = self.D(z_2_perm.detach())
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
-                           F.cross_entropy(d_z_2_perm, ones))
+        d_tc_loss = 0
+        if tc_scale > 0:
+            # encode with the VAE
+            self.model.eval()
+            mu_2, logvar_2 = self.model.encode(x2)
+            # reparameterize
+            z_2 = self.model.reparameterize(mu_2, logvar_2)
+            z_2_perm = permute_dims(z_2)
+            # get the discriminator output
+            d_z_detached = self.D(z.detach())
+            d_z_2_perm = self.D(z_2_perm.detach())
+            d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
+                            F.cross_entropy(d_z_2_perm, ones))
 
-        # Discriminator backward pass
-        d_optimizer.zero_grad()
-        self.manual_backward(d_tc_loss)
-        self.clip_gradients(d_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+            # Discriminator backward pass
+            d_optimizer.zero_grad()
+            self.manual_backward(d_tc_loss)
+            self.clip_gradients(d_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
 
-        # D step
-        d_optimizer.step()
-        d_scheduler.step(d_tc_loss.item())
+            # D step
+            d_optimizer.step()
+            d_scheduler.step(d_tc_loss.item())
 
         # log losses
         self.last_recon_loss = recon_loss # using it for dynamic kld threshold
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_recon_loss": recon_loss,
+            "vae_msssim_loss": msssim_loss,
             "vae_kld_loss": kld_loss,
             "vae_tc_loss": vae_tc_loss,
             "d_tc_loss": d_tc_loss,
@@ -3255,6 +3268,10 @@ class PlImgFactorVAE(LightningModule):
 
         # VAE recon_loss
         recon_loss = self.recon_loss(predicted_img, x1)
+        msssim_loss = 0
+        if self.args.use_msssim > 0:
+            msssim_loss = 1 - self.msssim_loss(predicted_img, x1)
+            recon_loss = self.args.msssim_alpha * msssim_loss + (1 - self.args.msssim_alpha) * recon_loss
         # calculate current recon loss weight
         current_epoch = self.trainer.current_epoch
         if current_epoch < self.recon_loss_weight_ramp_start_epoch:
@@ -3279,33 +3296,38 @@ class PlImgFactorVAE(LightningModule):
         scaled_kld_loss = kld_loss * kld_scale
 
         # VAE TC loss
-        d_z = self.D(z)
-        vae_tc_loss = F.cross_entropy(d_z, ones)
+        scaled_vae_tc_loss = 0
         tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
             min(1.0, (epoch_idx - self.tc_start_epoch) /
             self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
-        scaled_vae_tc_loss = vae_tc_loss * tc_scale
+        if tc_scale > 0:
+            d_z = self.D(z)
+            vae_tc_loss = F.cross_entropy(d_z, ones)
+            scaled_vae_tc_loss = vae_tc_loss * tc_scale
 
         # VAE total loss
         vae_loss = scaled_recon_loss + scaled_kld_loss + scaled_vae_tc_loss
 
         # Discriminator forward pass
-        # encode with the VAE
-        self.model.eval()
-        mu_2, logvar_2 = self.model.encode(x2)
-        # reparameterize
-        z_2 = self.model.reparameterize(mu_2, logvar_2)
-        z_2_perm = permute_dims(z_2)
-        # get the discriminator output
-        d_z_detached = self.D(z.detach())
-        d_z_2_perm = self.D(z_2_perm.detach())
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
-                           F.cross_entropy(d_z_2_perm, ones))
+        d_tc_loss = 0
+        if tc_scale > 0:
+            # encode with the VAE
+            self.model.eval()
+            mu_2, logvar_2 = self.model.encode(x2)
+            # reparameterize
+            z_2 = self.model.reparameterize(mu_2, logvar_2)
+            z_2_perm = permute_dims(z_2)
+            # get the discriminator output
+            d_z_detached = self.D(z.detach())
+            d_z_2_perm = self.D(z_2_perm.detach())
+            d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
+                            F.cross_entropy(d_z_2_perm, ones))
 
         # log losses
         self.log_dict({
             "val_vae_loss": vae_loss,
             "val_vae_recon_loss": recon_loss,
+            "val_vae_msssim_loss": msssim_loss,
             "val_vae_kld_loss": kld_loss,
             "val_vae_tc_loss": vae_tc_loss,
             "val_d_tc_loss": d_tc_loss,
