@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     # model params
-    parser.add_argument("--latent_size", type=int, default=3)
+    parser.add_argument("--latent_size", type=int, default=8)
     parser.add_argument("--img_size", type=int, default=32)
     parser.add_argument("--output_channels", type=int, default=1)
     parser.add_argument("--encoder_channels", type=int, default=64)
@@ -39,8 +39,8 @@ def main():
     parser.add_argument("--recon_loss_weight_end", type=float, default=200)
     parser.add_argument("--recon_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--recon_loss_weight_ramp_end_epoch", type=int, default=1)
-    parser.add_argument('--use_msssim', type=int, default=0, help='whether to use msssim loss in addition to pixel-wise loss')
-    parser.add_argument('--msssim_alpha', type=float, default=0.84, help='the alpha parameter for the msssim loss, between 0 and 1, where 1 means only msssim loss and 0 means only pixel-wise loss')
+    parser.add_argument('--use_ssim', type=int, default=1, help='whether to use ssim loss in addition to pixel-wise loss')
+    parser.add_argument('--ssim_alpha', type=float, default=0.84, help='the alpha parameter for the ssim loss, between 0 and 1, where 1 means only ssim loss and 0 means only pixel-wise loss')
     parser.add_argument('--target_recon_loss', type=float, default=0.03, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
@@ -51,8 +51,8 @@ def main():
     # tc loss params
     parser.add_argument('--tc_weight_max', type=float, default=10, help='tc weight at the end of the warmup')
     parser.add_argument('--tc_weight_min', type=float, default=0, help='tc weight at the start of the warmup')
-    parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
+    parser.add_argument('--tc_start_epoch', type=int, default=2000, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
+    parser.add_argument('--tc_warmup_epochs', type=int, default=2000, help='the number of epochs to warmup the tc weight')
     # optimizer params
     parser.add_argument("--lr_vae", type=float, default=0.0005)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
@@ -64,9 +64,9 @@ def main():
 
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/mnist_vae")
-    parser.add_argument("--ckpt_name", type=str, default="v3.7")
+    parser.add_argument("--ckpt_name", type=str, default="v3.8")
     parser.add_argument("--logdir", type=str, default="./logs/mnist_vae")
-    parser.add_argument("--comment", type=str, default="latent_size: 3, decoder_n_res_block: 8")
+    parser.add_argument("--comment", type=str, default="latent_size: 8, ssim first try, delayed tc loss")
 
     args = parser.parse_args()
 
@@ -85,11 +85,11 @@ def main():
 
     # Download and load training dataset
     train_dataset = MNISTPairDataset(root='./data', train=True, download=True, transform=transform)
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=16)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=16, persistent_workers=True)
 
     # Download and load validation dataset
     val_dataset = MNISTPairDataset(root='./data', train=False, download=True, transform=transform)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, num_workers=8)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, num_workers=8, persistent_workers=True)
 
     # create model
     model = PlImgFactorVAE(args)

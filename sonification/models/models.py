@@ -10,7 +10,7 @@ from lightning.pytorch import LightningModule
 from ..utils.tensor import permute_dims, midi2frequency, scale
 from ..utils.misc import kl_scheduler, ema
 from ..utils.dsp import transposition2duration
-from .loss import kld_loss, latent_consistency_loss, mmd_loss, pearson_correlation_loss
+from .loss import kld_loss, latent_consistency_loss, mmd_loss
 import matplotlib.pyplot as plt
 import os
 import matplotlib.gridspec as gridspec
@@ -24,7 +24,7 @@ from copy import deepcopy
 from collections import OrderedDict
 from sys import stderr
 import math
-from pytorch_msssim import MS_SSIM
+from pytorch_msssim import SSIM
 
 
 class AE(nn.Module):
@@ -3084,8 +3084,8 @@ class PlImgFactorVAE(LightningModule):
         # losses
         self.recon_loss = nn.MSELoss() if self.args.recon_loss_type == 'mse' else nn.L1Loss()
         self.recon_loss.eval()
-        if self.args.use_msssim > 0:
-            self.msssim_loss = MS_SSIM(data_range=1.0, size_average=True, channel=1)
+        if self.args.use_ssim > 0:
+            self.ssim_loss = SSIM(data_range=1.0, size_average=True, channel=1)
         self.kld = kld_loss
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
@@ -3154,10 +3154,10 @@ class PlImgFactorVAE(LightningModule):
 
         # VAE recon_loss
         recon_loss = self.recon_loss(predicted_img, x1)
-        msssim_loss = 0
-        if self.args.use_msssim > 0:
-            msssim_loss = 1 - self.msssim_loss(predicted_img, x1)
-            recon_loss = self.args.msssim_alpha * msssim_loss + (1 - self.args.msssim_alpha) * recon_loss
+        ssim_loss = 0
+        if self.args.use_ssim > 0:
+            ssim_loss = 1 - self.ssim_loss(predicted_img, x1)
+            recon_loss = self.args.ssim_alpha * ssim_loss + (1 - self.args.ssim_alpha) * recon_loss
         # calculate current recon loss weight
         current_epoch = self.trainer.current_epoch
         if current_epoch < self.recon_loss_weight_ramp_start_epoch:
@@ -3183,7 +3183,7 @@ class PlImgFactorVAE(LightningModule):
 
         # VAE TC loss
         # we only calculate the TC loss (and train the D) if tc_scale > 0
-        scaled_vae_tc_loss = 0
+        vae_tc_loss, scaled_vae_tc_loss = 0, 0
         tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
             min(1.0, (epoch_idx - self.tc_start_epoch) /
             self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
@@ -3232,7 +3232,7 @@ class PlImgFactorVAE(LightningModule):
         self.log_dict({
             "vae_loss": vae_loss,
             "vae_recon_loss": recon_loss,
-            "vae_msssim_loss": msssim_loss,
+            "vae_ssim_loss": ssim_loss,
             "vae_kld_loss": kld_loss,
             "vae_tc_loss": vae_tc_loss,
             "d_tc_loss": d_tc_loss,
@@ -3268,10 +3268,10 @@ class PlImgFactorVAE(LightningModule):
 
         # VAE recon_loss
         recon_loss = self.recon_loss(predicted_img, x1)
-        msssim_loss = 0
-        if self.args.use_msssim > 0:
-            msssim_loss = 1 - self.msssim_loss(predicted_img, x1)
-            recon_loss = self.args.msssim_alpha * msssim_loss + (1 - self.args.msssim_alpha) * recon_loss
+        ssim_loss = 0
+        if self.args.use_ssim > 0:
+            ssim_loss = 1 - self.ssim_loss(predicted_img, x1)
+            recon_loss = self.args.ssim_alpha * ssim_loss + (1 - self.args.ssim_alpha) * recon_loss
         # calculate current recon loss weight
         current_epoch = self.trainer.current_epoch
         if current_epoch < self.recon_loss_weight_ramp_start_epoch:
@@ -3296,7 +3296,7 @@ class PlImgFactorVAE(LightningModule):
         scaled_kld_loss = kld_loss * kld_scale
 
         # VAE TC loss
-        scaled_vae_tc_loss = 0
+        vae_tc_loss, scaled_vae_tc_loss = 0, 0
         tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
             min(1.0, (epoch_idx - self.tc_start_epoch) /
             self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
@@ -3327,7 +3327,7 @@ class PlImgFactorVAE(LightningModule):
         self.log_dict({
             "val_vae_loss": vae_loss,
             "val_vae_recon_loss": recon_loss,
-            "val_vae_msssim_loss": msssim_loss,
+            "val_vae_ssim_loss": ssim_loss,
             "val_vae_kld_loss": kld_loss,
             "val_vae_tc_loss": vae_tc_loss,
             "val_d_tc_loss": d_tc_loss,
