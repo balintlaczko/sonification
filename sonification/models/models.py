@@ -2612,9 +2612,11 @@ class PlFMFactorVAE(LightningModule):
         self.spectrogram_w = self.n_samples // (self.n_fft // 2) + 1
         self.use_curriculum = args.use_curriculum > 0
         self.min_harm_ratio = args.min_harm_ratio
-        self.max_harm_ratio = max(6, self.min_harm_ratio * 2) if self.use_curriculum else args.max_harm_ratio
+        max_harm_ratio = max(6, self.min_harm_ratio * 2) if self.use_curriculum else args.max_harm_ratio
+        self.register_buffer("max_harm_ratio", torch.tensor(max_harm_ratio, dtype=torch.float32))
         self.min_mod_idx = args.min_mod_idx
-        self.max_mod_idx = max(6, self.min_mod_idx * 2) if self.use_curriculum else args.max_mod_idx
+        max_mod_idx = max(6, self.min_mod_idx * 2) if self.use_curriculum else args.max_mod_idx
+        self.register_buffer("max_mod_idx", torch.tensor(max_mod_idx, dtype=torch.float32))
         self.latent_size = args.latent_size
         self.logdir = args.logdir
         self.d_hidden_size = args.d_hidden_size
@@ -2635,7 +2637,8 @@ class PlFMFactorVAE(LightningModule):
         self.recon_weight = args.recon_weight
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
-        self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        # self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        self.register_buffer("kld_weight_dynamic", torch.tensor(args.kld_weight_min, dtype=torch.float32))
         self.kld_start_epoch = args.kld_start_epoch
         self.kld_warmup_epochs = args.kld_warmup_epochs
         self.tc_weight_max = args.tc_weight_max
@@ -2645,7 +2648,7 @@ class PlFMFactorVAE(LightningModule):
         self.contrastive_regularization = args.contrastive_regularization > 0
         self.contrastive_weight_max = args.contrastive_weight_max
         self.contrastive_weight_min = args.contrastive_weight_min
-        self.contrastive_weight_dynamic = args.contrastive_weight_min  # initialize to min
+        self.register_buffer("contrastive_weight_dynamic", torch.tensor(args.contrastive_weight_min, dtype=torch.float32))
         self.contrastive_start_epoch = args.contrastive_start_epoch
         self.contrastive_warmup_epochs = args.contrastive_warmup_epochs
 
@@ -3089,7 +3092,8 @@ class PlImgFactorVAE(LightningModule):
         self.kld = kld_loss
         self.kld_weight_max = args.kld_weight_max
         self.kld_weight_min = args.kld_weight_min
-        self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        # self.kld_weight_dynamic = args.kld_weight_min  # initialize to min
+        self.register_buffer("kld_weight_dynamic", torch.tensor(args.kld_weight_min, dtype=torch.float32))
         self.kld_start_epoch = args.kld_start_epoch
         self.kld_warmup_epochs = args.kld_warmup_epochs
         self.tc_weight_max = args.tc_weight_max
