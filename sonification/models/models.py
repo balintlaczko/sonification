@@ -2842,12 +2842,15 @@ class PlFMFactorVAE(LightningModule):
         scaled_kld_loss = kld_loss * kld_scale
 
         # VAE TC loss
-        d_z = self.D(z)
-        vae_tc_loss = F.cross_entropy(d_z, ones)
+        # we only calculate the TC loss (and train the D) if tc_scale > 0
+        vae_tc_loss, scaled_vae_tc_loss = 0, 0
         tc_scale = (self.tc_weight_max - self.tc_weight_min) * \
             min(1.0, (epoch_idx - self.tc_start_epoch) /
             self.tc_warmup_epochs) + self.tc_weight_min if epoch_idx > self.tc_start_epoch else self.tc_weight_min
-        scaled_vae_tc_loss = vae_tc_loss * tc_scale
+        if tc_scale > 0:
+            d_z = self.D(z)
+            vae_tc_loss = F.cross_entropy(d_z, ones)
+            scaled_vae_tc_loss = vae_tc_loss * tc_scale
 
         # VAE contrastive loss
         triplet_loss, scaled_triplet_loss, triplet_loss_scale = 0, 0, 0
@@ -2901,64 +2904,64 @@ class PlFMFactorVAE(LightningModule):
 
         # VAE backward pass
         vae_optimizer.zero_grad()
-        self.manual_backward(vae_loss, retain_graph=True)
+        self.manual_backward(vae_loss, retain_graph=tc_scale > 0) # only retain graph if we need to do D backward pass
         self.clip_gradients(vae_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
 
         vae_optimizer.step()
         vae_scheduler.step(vae_loss.item())
 
-        # get another batch for D
-        norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
-        x = self.input_synth(freqs, ratios, indices).detach()
-        in_wf = x.unsqueeze(1)
-        # select a random slice of self.n_samples
-        start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
-        x = x[:, start_idx:start_idx + self.n_samples]
-        # add random phase flip
-        phase_flip = torch.rand(self.batch_size, 1, device=self.device)
-        phase_flip = torch.where(phase_flip > 0.5, 1, -1)
-        x = x * phase_flip
-        # add random noise
-        noise = torch.randn_like(x, device=self.device)
-        noise = (noise - noise.min()) / (noise.max() - noise.min())
-        noise = noise * 2 - 1
-        noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
-        noise = noise * noise_coeff
-        x = x + noise
-        in_wf_slice = x.unsqueeze(1)
-        # get the mel spectrogram
-        in_spec = self.mel_spectrogram(in_wf_slice.detach())
-        # # normalize per sample (and channel) over spatial dims (H, W)
-        # reduce_dims = (2, 3)
-        # mins = in_spec.amin(dim=reduce_dims, keepdim=True)
-        # maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
-        # den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
-        # in_spec = (in_spec - mins) / den
-        # normalize it
-        in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
-        # encode with the VAE
-        self.model.eval()
-        mu_2, logvar_2 = self.model.encode(in_spec)
-        # reparameterize
-        z_2 = self.model.reparameterize(mu_2, logvar_2)
-        z_2_perm = permute_dims(z_2)
-        # get the discriminator output
-        d_z_detached = self.D(z.detach())
-        d_z_2_perm = self.D(z_2_perm.detach())
-        d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
-                           F.cross_entropy(d_z_2_perm, ones))
+        # Discriminator forward pass
+        d_tc_loss = 0
+        if tc_scale > 0:
+            # get another batch for D
+            norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
+            x = self.input_synth(freqs, ratios, indices).detach()
+            in_wf = x.unsqueeze(1)
+            # select a random slice of self.n_samples
+            start_idx = torch.randint(0, self.sr - self.n_samples, (1,))
+            x = x[:, start_idx:start_idx + self.n_samples]
+            # add random phase flip
+            phase_flip = torch.rand(self.batch_size, 1, device=self.device)
+            phase_flip = torch.where(phase_flip > 0.5, 1, -1)
+            x = x * phase_flip
+            # add random noise
+            noise = torch.randn_like(x, device=self.device)
+            noise = (noise - noise.min()) / (noise.max() - noise.min())
+            noise = noise * 2 - 1
+            noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * 0.001
+            noise = noise * noise_coeff
+            x = x + noise
+            in_wf_slice = x.unsqueeze(1)
+            # get the mel spectrogram
+            in_spec = self.mel_spectrogram(in_wf_slice.detach())
+            # # normalize per sample (and channel) over spatial dims (H, W)
+            # reduce_dims = (2, 3)
+            # mins = in_spec.amin(dim=reduce_dims, keepdim=True)
+            # maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
+            # den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
+            # in_spec = (in_spec - mins) / den
+            # normalize it
+            in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+            # encode with the VAE
+            self.model.eval()
+            mu_2, logvar_2 = self.model.encode(in_spec)
+            # reparameterize
+            z_2 = self.model.reparameterize(mu_2, logvar_2)
+            z_2_perm = permute_dims(z_2)
+            # get the discriminator output
+            d_z_detached = self.D(z.detach())
+            d_z_2_perm = self.D(z_2_perm.detach())
+            d_tc_loss = 0.5 * (F.cross_entropy(d_z_detached, zeros) +
+                            F.cross_entropy(d_z_2_perm, ones))
 
-        # Discriminator backward pass
-        d_optimizer.zero_grad()
-        self.manual_backward(d_tc_loss)
-        self.clip_gradients(d_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+            # Discriminator backward pass
+            d_optimizer.zero_grad()
+            self.manual_backward(d_tc_loss)
+            self.clip_gradients(d_optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
 
-        # VAE step
-        # vae_optimizer.step()
-        # vae_scheduler.step(vae_loss.item())
-        # D step
-        d_optimizer.step()
-        d_scheduler.step(d_tc_loss.item())
+            # D step
+            d_optimizer.step()
+            d_scheduler.step(d_tc_loss.item())
 
         # log losses
         # self.last_recon_loss = vae_recon_loss
@@ -3057,9 +3060,9 @@ class PlFMFactorVAE(LightningModule):
         d_optimizer = torch.optim.AdamW(
             self.D.parameters(), lr=self.lr_d)
         vae_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=20000)
+            vae_optimizer, mode='min', factor=self.lr_decay_vae, patience=self.args.vae_lr_patience)
         d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            d_optimizer, mode='min', factor=self.lr_decay_d, patience=20000)
+            d_optimizer, mode='min', factor=self.lr_decay_d, patience=self.args.d_lr_patience)
         # return the optimizers and schedulers
         return [vae_optimizer, d_optimizer], [vae_scheduler, d_scheduler]
     
