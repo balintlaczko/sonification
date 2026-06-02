@@ -28,7 +28,11 @@ def wrap(
 
 
 def scale(x, in_low, in_high, out_low, out_high, exp=1):
-    if in_low == in_high:
+    is_equal = (in_low == in_high)
+    if isinstance(is_equal, torch.Tensor):
+        is_equal = is_equal.all().item()
+
+    if is_equal:
         return torch.ones_like(x) * out_high
     return torch.where(
         (x-in_low)/(in_high-in_low) == 0,
