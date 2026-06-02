@@ -37,6 +37,24 @@ args = ckpt["hyper_parameters"]['args']
 # print(args)
 
 # %%
+# add missing keys in args if necessary
+potentially_missing_keys = ["use_ssim"]
+for key in potentially_missing_keys:
+    if not hasattr(args, key):
+        print(f"Key '{key}' not found in args. Adding it with default value 0.")
+        setattr(args, key, 0)
+
+
+# %%
+# add missing keys in state dict if necessary
+state_dict = ckpt['state_dict']
+potentially_missing_keys = ["kld_weight_dynamic"]
+for key in potentially_missing_keys:
+    if key not in state_dict:
+        print(f"Key '{key}' not found in state dict. Adding it with default value 0.0.")
+        state_dict[key] = torch.tensor(0.0)
+
+# %%
 # create model with args and load state dict
 model = PlImgFactorVAE(args)
 model.load_state_dict(ckpt['state_dict'])
@@ -202,15 +220,28 @@ def handle_latent_code(unused_addr, *args):
     # send back the decoded images to Max
     client.send_message("/decoded_images", flat_image)
 
+def handle_input_img(unused_addr, *args):
+    # args is a tuple of the input image
+    input_image = torch.tensor(args, dtype=torch.float32).reshape(1, 1, img_size, img_size)
+    with torch.no_grad():
+        # encode the input image to the latent space
+        x_recon, mean, logvar, z = model(input_image.to(device))
+    # scale the latent code to -1 to 1 using the global min and max
+    z_scaled = scale(z.squeeze().cpu(), z_all_mins, z_all_maxs, -1, 1)
+    # send back the latent code to Max
+    client.send_message("/latent_code", z_scaled.numpy().tolist())
+
 # create a dispatcher
 d = dispatcher.Dispatcher()
 # map the OSC address to the function
 d.map("/latent_code", handle_latent_code)
+d.map("/input_img", handle_input_img)
 
 # create an OSC server
 ip = "127.0.0.1"
 port = 12346
 server = osc_server.ThreadingOSCUDPServer((ip, port), d)
+server.max_packet_size = 65536 # Increase size to 64KB
 print(f"Serving on {server.server_address}")
 # start the server
 try:
