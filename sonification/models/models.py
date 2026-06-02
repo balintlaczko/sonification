@@ -3335,6 +3335,15 @@ class PlImgFactorVAE(LightningModule):
         prog_bar=True)
 
 
+    def on_train_start(self):
+        # Force the loaded schedulers to adopt the new patience from args
+        vae_scheduler, d_scheduler = self.lr_schedulers()      
+        if isinstance(vae_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            vae_scheduler.patience = self.args.vae_lr_patience            
+        if isinstance(d_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            d_scheduler.patience = getattr(self.args, "d_lr_patience", d_scheduler.patience)
+
+
     def on_train_epoch_end(self):
         change_patience = False
         if change_patience:
