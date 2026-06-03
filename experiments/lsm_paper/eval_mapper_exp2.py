@@ -192,29 +192,33 @@ if num_pairs > 0:
 
 # %%
 # create a scatter plot color coded by distance between points in z_1 and corresponding points in z_2
-z_1_all_cpu = z_1_all.cpu().numpy()
-z_2_all_cpu = z_2_all.cpu().numpy()
-z_dist = np.linalg.norm(z_2_all_cpu - z_1_all_cpu, axis=1)
-z_diff_mean = np.mean(np.abs(z_2_all_cpu - z_1_all_cpu), axis=1)
-if num_pairs > 0:
-    fig, axes = plt.subplots(num_pairs, 1, figsize=(10, 5 * num_pairs), squeeze=False)
+# only if the latent spaces are the same size, otherwise we can't directly compare them
+if z_1_all.shape[1] != z_2_all.shape[1]:
+    print("Latent spaces have different sizes, cannot directly compare. Skipping scatter plot colored by mapping displacement.")
+else:
+    z_1_all_cpu = z_1_all.cpu().numpy()
+    z_2_all_cpu = z_2_all.cpu().numpy()
+    z_dist = np.linalg.norm(z_2_all_cpu - z_1_all_cpu, axis=1)
+    z_diff_mean = np.mean(np.abs(z_2_all_cpu - z_1_all_cpu), axis=1)
+    if num_pairs > 0:
+        fig, axes = plt.subplots(num_pairs, 1, figsize=(10, 5 * num_pairs), squeeze=False)
 
-    epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
-    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Mapping Displacement")
+        epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
+        fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Mapping Displacement")
 
-    for i, (dim1, dim2) in enumerate(dim_pairs):
-        ax = axes[i, 0]
+        for i, (dim1, dim2) in enumerate(dim_pairs):
+            ax = axes[i, 0]
 
-        # Scatter plot colored by Mapping Displacement
-        sc = ax.scatter(z_all[:, dim1], z_all[:, dim2], c=z_diff_mean, cmap='viridis', s=3)
-        fig.colorbar(sc, ax=ax, label='Mapping Displacement', shrink=0.8)
-        ax.set_title(f"Latent Dims {dim1} vs {dim2} by Mapping Displacement")
-        ax.set_xlabel(f"Latent Dim {dim1}")
-        ax.set_ylabel(f"Latent Dim {dim2}")
-        ax.set_aspect('equal', adjustable='box')
+            # Scatter plot colored by Mapping Displacement
+            sc = ax.scatter(z_all[:, dim1], z_all[:, dim2], c=z_diff_mean, cmap='viridis', s=3)
+            fig.colorbar(sc, ax=ax, label='Mapping Displacement', shrink=0.8)
+            ax.set_title(f"Latent Dims {dim1} vs {dim2} by Mapping Displacement")
+            ax.set_xlabel(f"Latent Dim {dim1}")
+            ax.set_ylabel(f"Latent Dim {dim2}")
+            ax.set_aspect('equal', adjustable='box')
 
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.show()
 
 # %%
 # create a scatter plot color coded by the diff between the relative positions of points in z_1 and corresponding points in z_2
@@ -297,8 +301,9 @@ z_1_all_mins, z_1_all_maxs
 
 # %%
 # set the FM synth model's maximum harmonicity ratio and modulation index to what is specified in the training params, not the starting one (because curriculum learning was used)
-model.out_model.max_harm_ratio = model.out_model.args.max_harm_ratio
-model.out_model.max_mod_idx = model.out_model.args.max_mod_idx
+# check if they are buffers, then they must be fine (new versions) if not, then overwrite from args (old versions)
+model.out_model.max_harm_ratio = torch.tensor(model.out_model.args.max_harm_ratio).to(device)
+model.out_model.max_mod_idx = torch.tensor(model.out_model.args.max_mod_idx).to(device)
 
 
 # %%
@@ -334,11 +339,23 @@ def handle_img_latent_code(unused_addr, *args):
     # send back the predicted parameters to Max
     client.send_message("/fm_params", scaled_predicted_params.squeeze().cpu().numpy().tolist())
 
+def handle_input_img(unused_addr, *args):
+    # args is a tuple of the input image
+    input_image = torch.tensor(args, dtype=torch.float32).reshape(1, 1, model.in_model.args.img_size, model.in_model.args.img_size)
+    with torch.no_grad():
+        # encode the input image to the latent space
+        mean, logvar = model.in_model.model.encode(input_image.to(device))
+        z = model.in_model.model.reparameterize(mean, logvar)
+    # scale the latent code to -1 to 1 using the global min and max
+    z_scaled = scale(z.squeeze().cpu(), z_1_all_mins, z_1_all_maxs, -1, 1)
+    # send back the latent code to Max
+    client.send_message("/img_latent_code", z_scaled.numpy().tolist())
 
 # create an OSC receiver and start it
 # create a dispatcher
 d = dispatcher.Dispatcher()
 d.map("/img_latent_code", handle_img_latent_code)
+d.map("/input_img", handle_input_img)
 # create a server
 ip = "127.0.0.1"
 port = 12346

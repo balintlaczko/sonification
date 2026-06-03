@@ -86,7 +86,8 @@ dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last
 # %%
 # get the cuda/mps device
 device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-# print(f"Using device: {device}")
+# device = torch.device("cpu")
+print(f"Using device: {device}")
 # move model to device
 model = model.to(device)
 
@@ -261,10 +262,11 @@ if not isinstance(model.model, CompactLatentWrapper):
     model.model = CompactLatentWrapper(model.model, args.latent_size)
 
 # analyze KLD on a batch of data
-data_batch = next(iter(dataloader))
+test_dataloader = DataLoader(dataset, batch_size=1024, shuffle=False, drop_last=False)
+data_batch = next(iter(test_dataloader))
 print(data_batch[0].shape)
 
-kld_per_dim, active_indices = model.model.analyze_kld(data_batch[0], threshold=0.1)
+kld_per_dim, active_indices = model.model.analyze_kld(data_batch[0], threshold=0.5)
 print(f"KLD per dimension: {kld_per_dim}")
 print(f"Active latent dimensions: {active_indices}")
 

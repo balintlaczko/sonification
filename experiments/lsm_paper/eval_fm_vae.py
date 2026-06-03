@@ -256,10 +256,13 @@ if not isinstance(model.model, CompactLatentWrapper):
 
 # create a batch of inputs
 with torch.no_grad():
-    norm_params, freqs, ratios, indices = model.sample_fm_params(64)
+    norm_params, freqs, ratios, indices = model.sample_fm_params(1024)
     print(f"Sampled parameters: {norm_params.shape}, freqs: {freqs.shape}, ratios: {ratios.shape}, indices: {indices.shape}")
     # synthesize
     x = model.input_synth(freqs, ratios, indices)
+    # select a random slice of model.n_samples
+    start_idx = torch.randint(0, model.sr - model.n_samples, (1,))
+    x = x[:, start_idx:start_idx + model.n_samples]
     # add channel dimension
     in_wf = x.unsqueeze(1)
     # get the mel spectrogram
@@ -269,7 +272,7 @@ with torch.no_grad():
 
 print(f"Input spectrogram shape: {in_spec.shape}")
 
-kld_per_dim, active_indices = model.model.analyze_kld(in_spec, threshold=0.5)
+kld_per_dim, active_indices = model.model.analyze_kld(in_spec, threshold=1.4)
 print(f"KLD per dimension: {kld_per_dim}")
 print(f"Active latent dimensions: {active_indices}")
 
