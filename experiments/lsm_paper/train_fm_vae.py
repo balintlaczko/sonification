@@ -51,7 +51,7 @@ def main():
     parser.add_argument("--param_loss_weight_end", type=int, default=500)
     parser.add_argument("--param_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--param_loss_weight_ramp_end_epoch", type=int, default=1)
-    parser.add_argument("--recon_weight", type=int, default=1)
+    parser.add_argument("--recon_weight", type=int, default=3)
     parser.add_argument('--target_recon_loss', type=float, default=1.5, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
@@ -62,8 +62,8 @@ def main():
     # tc loss params
     parser.add_argument('--tc_weight_max', type=float, default=10, help='tc weight at the end of the warmup')
     parser.add_argument('--tc_weight_min', type=float, default=0, help='tc weight at the start of the warmup')
-    parser.add_argument('--tc_start_epoch', type=int, default=500, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=2000, help='the number of epochs to warmup the tc weight')
+    parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
+    parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
     # contrastive loss params
     parser.add_argument("--contrastive_regularization", type=int, default=1, help="Use contrastive regularization (default: 0 = no contrastive regularization)")
     parser.add_argument("--dynamic_contrastive", type=int, default=1, help="non-zero will use dynamic contrastive")
@@ -72,19 +72,19 @@ def main():
     parser.add_argument("--contrastive_start_epoch", type=int, default=1500, help="The epoch at which to start the contrastive warmup from contrastive_weight_min to contrastive_weight_max")
     parser.add_argument("--contrastive_warmup_epochs", type=int, default=3000, help="The number of epochs to warmup the contrastive weight")
     # optimizer params
-    parser.add_argument("--lr_vae", type=float, default=0.0002)
-    parser.add_argument("--lr_decay_vae", type=float, default=0.85)
-    parser.add_argument("--lr_d", type=float, default=0.0001)
+    parser.add_argument("--lr_vae", type=float, default=0.0001)
+    parser.add_argument("--lr_decay_vae", type=float, default=0.9)
+    parser.add_argument("--lr_d", type=float, default=0.00005)
     parser.add_argument("--lr_decay_d", type=float, default=0.85)
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=200)
-    parser.add_argument("--vae_lr_patience", type=int, default=6000)
+    parser.add_argument("--vae_lr_patience", type=int, default=10000)
     parser.add_argument("--d_lr_patience", type=int, default=20000)
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_vae")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v5.12")
+    parser.add_argument("--ckpt_name", type=str, default="imv_v5.14")
     parser.add_argument("--logdir", type=str, default="./logs/fm_vae")
-    parser.add_argument("--comment", type=str, default="like v5.11, but with contrastive, latent_size: 8, and tc warmup")
+    parser.add_argument("--comment", type=str, default="like 5.13 but with immediate tc")
 
     args = parser.parse_args()
 
