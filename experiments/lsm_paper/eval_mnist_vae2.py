@@ -18,7 +18,7 @@ from pythonosc import dispatcher, osc_server, udp_client
 
 # %%
 ckpt_path = '../../ckpt/mnist_vae2'
-model_version = '3.8'
+model_version = '4.0'
 ckpt_name = 'v' + model_version
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" or "best" in it

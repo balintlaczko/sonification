@@ -18,7 +18,7 @@ import math
 # %%
 # find the latest mapper checkpoint
 ckpt_path = '../../ckpt/mapper_exp2'
-model_version = '1.7'
+model_version = '1.9'
 ckpt_name = 'v' + model_version
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it

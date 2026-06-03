@@ -1466,7 +1466,7 @@
                     "patching_rect": [ 29.0, 338.0, 554.0, 201.0 ],
                     "setstyle": 1,
                     "signed": 1,
-                    "size": 7
+                    "size": 3
                 }
             },
             {
@@ -1855,7 +1855,15 @@
             },
             {
                 "patchline": {
+                    "destination": [ "obj-17", 0 ],
+                    "order": 0,
+                    "source": [ "obj-57", 0 ]
+                }
+            },
+            {
+                "patchline": {
                     "destination": [ "obj-59", 0 ],
+                    "order": 1,
                     "source": [ "obj-57", 0 ]
                 }
             },
