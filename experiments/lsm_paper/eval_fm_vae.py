@@ -13,10 +13,13 @@ from tqdm import tqdm
 from pythonosc import dispatcher, osc_server, udp_client
 import nn_tilde
 from torchaudio.transforms import MelSpectrogram
+import matplotlib.pyplot as plt
+import itertools
+import math
 
 # %%
 ckpt_path = '../../ckpt/fm_vae'
-ckpt_name = 'imv_v5.11'
+ckpt_name = 'imv_v5.12'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -92,6 +95,7 @@ model.mel_spectrogram.to(device)  # move mel spectrogram to device
 batch_size = 64
 n_batches = len(df) // batch_size #+ 1
 print(f"Number of batches: {n_batches}, batch size: {batch_size}")
+z_all = torch.zeros((len(df), args.latent_size))
 z_min_all = torch.ones(args.latent_size) * 1000
 z_max_all = torch.ones(args.latent_size) * -1000
 with torch.no_grad():
@@ -118,12 +122,84 @@ with torch.no_grad():
         mu, logvar = model.model.encode(in_spec)
         z = model.model.reparameterize(mu, logvar)
         # update min and max
+        z_all[i * batch_size: (i + 1) * batch_size] = z.cpu()
         z_min_all = torch.min(z_min_all, z.min(dim=0).values.cpu())
         z_max_all = torch.max(z_max_all, z.max(dim=0).values.cpu())
 
 
 # %%
 z_min_all, z_max_all
+
+# %%
+# create a scatter plot of the latent space
+num_dims = z_all.shape[1]
+dim_pairs = list(itertools.combinations(range(num_dims), 2))
+num_pairs = len(dim_pairs)
+
+if num_pairs > 0:
+    cols = math.ceil(math.sqrt(num_pairs))
+    rows = math.ceil(num_pairs / cols)
+
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))
+
+    # Flatten the axes array to make it easy to iterate over 1D index
+    axes = np.atleast_1d(axes).flatten()
+
+    # Set font properties for the plot
+    plt.rcParams.update({
+        'font.family': 'serif',
+        'font.serif': ['Times New Roman'],
+        'font.size': 12
+    })
+
+    # --- Calculate global min and max for consistent axis scaling ---
+    global_min = z_all.min()
+    global_max = z_all.max()
+    # Add a 5% margin so points don't sit exactly on the plot boundaries
+    margin = (global_max - global_min) * 0.05
+    axis_min = global_min - margin
+    axis_max = global_max + margin
+
+    for i, (dim1, dim2) in enumerate(dim_pairs):
+        ax = axes[i]
+
+        # Consider lowering size (s) and adding alpha for better visibility if data is dense
+        ax.scatter(z_all[:, dim1], z_all[:, dim2], s=1, alpha=0.5)
+        ax.set_xlabel(f"Dim {dim1}")
+        ax.set_ylabel(f"Dim {dim2}")
+        ax.set_aspect('equal', adjustable='datalim') 
+
+        # --- Apply the global axis limits ---
+        ax.set_xlim(axis_min, axis_max)
+        ax.set_ylim(axis_min, axis_max)
+        
+        # Optional: Disable axis ticks if it gets too cluttered
+        # ax.set_xticks([])
+        # ax.set_yticks([])
+
+    # Hide any extra subplots in the grid that aren't used
+    for i in range(num_pairs, len(axes)):
+        axes[i].axis('off')
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    # plt.subplots_adjust(wspace=0.3) 
+    plt.show()
+    # plt.savefig("mnist_model_latent_space.png", dpi=300)
+
+    # Reset rcParams to default to not affect other plots
+    plt.rcdefaults()
+
+# %%
+# per-dim scaling to 10-90th percentiles
+percentile_low = 5
+percentile_high = 95
+z_all_mins, z_all_maxs = torch.zeros(num_dims), torch.zeros(num_dims)
+for dim in range(num_dims):
+    dim_min = np.percentile(z_all[:, dim], percentile_low)
+    dim_max = np.percentile(z_all[:, dim], percentile_high)
+    z_all_mins[dim] = float(dim_min)
+    z_all_maxs[dim] = float(dim_max)
+z_all_mins, z_all_maxs
 
 # %%
 # set up an OSC server to receive latent codes from Max and send back the synth parameters
@@ -135,7 +211,7 @@ def handle_latent_code(unused_addr, *args):
     latent_code = torch.tensor(args, dtype=torch.float32)
     # decode the latent code
     with torch.no_grad():
-        latent_code_scaled = scale(latent_code, -1, 1, z_min_all, z_max_all)
+        latent_code_scaled = scale(latent_code, -1, 1, z_all_mins, z_all_maxs)
         norm_predicted_params = model.model.decoder(latent_code_scaled.unsqueeze(0).to(device))
         predicted_params = model.scale_predicted_params(norm_predicted_params)
     # send back the parameters to Max
