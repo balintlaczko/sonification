@@ -44,8 +44,8 @@ def main():
     parser.add_argument('--cycle_consistency_ramp_start_epoch', type=int, default=0, help='cycle consistency start epoch')
     parser.add_argument('--cycle_consistency_ramp_end_epoch', type=int, default=1)
     # # tc loss params
-    parser.add_argument('--tc_weight_max', type=float, default=10, help='tc weight at the end of the warmup')
-    parser.add_argument('--tc_weight_min', type=float, default=10, help='tc weight at the start of the warmup')
+    parser.add_argument('--tc_weight_max', type=float, default=1, help='tc weight at the end of the warmup')
+    parser.add_argument('--tc_weight_min', type=float, default=1, help='tc weight at the start of the warmup')
     parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
     parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
 
@@ -61,15 +61,15 @@ def main():
     parser.add_argument('--img_model_ckpt_path', type=str, default='./ckpt/mnist_vae/v3.7/v3.7_last_epoch=6322.ckpt', help='image model checkpoint path')
 
     # audio model
-    parser.add_argument('--audio_model_ckpt_path', type=str, default='./ckpt/fm_vae/imv_v5.11/imv_v5.11_last_epoch=9667.ckpt', help='sound model checkpoint path')
+    parser.add_argument('--audio_model_ckpt_path', type=str, default='./ckpt/fm_vae/imv_v5.10/imv_v5.10_last_epoch=7950.ckpt', help='sound model checkpoint path')
 
     # checkpoint & logging
     parser.add_argument('--ckpt_path', type=str, default='./ckpt/mapper_exp2', help='checkpoint path')
-    parser.add_argument('--ckpt_name', type=str, default='v1.7', help='checkpoint name')
+    parser.add_argument('--ckpt_name', type=str, default='v1.9', help='checkpoint name')
     parser.add_argument('--logdir', type=str, default='./logs/mapper_exp2', help='log directory')
 
     # quick comment
-    parser.add_argument('--comment', type=str, default='new img model, tc: 10', help='add a comment if needed')
+    parser.add_argument('--comment', type=str, default='img model w/o SSIM (3ch/3), old best FM vae (w contrastive) (16ch/3), with tc', help='add a comment if needed')
 
     args = parser.parse_args()
 
@@ -84,6 +84,21 @@ def main():
     ckpt = torch.load(args.img_model_ckpt_path, map_location='cpu')
     in_model_args = ckpt["hyper_parameters"]['args']
 
+    # add missing keys in args if necessary
+    potentially_missing_keys = ["use_ssim"]
+    for key in potentially_missing_keys:
+        if not hasattr(in_model_args, key):
+            print(f"Key '{key}' not found in args. Adding it with default value 0.")
+            setattr(in_model_args, key, 0)
+
+    # add missing keys in state dict if necessary
+    state_dict = ckpt['state_dict']
+    potentially_missing_keys = ["kld_weight_dynamic"]
+    for key in potentially_missing_keys:
+        if key not in state_dict:
+            print(f"Key '{key}' not found in state dict. Adding it with default value 0.0.")
+            state_dict[key] = torch.tensor(0.0)
+
     # create in model with args and load state dict
     in_model = PlImgFactorVAE(in_model_args)
     in_model.load_state_dict(ckpt['state_dict'])
@@ -93,6 +108,14 @@ def main():
     # load out model checkpoint and extract saved args
     ckpt = torch.load(args.audio_model_ckpt_path, map_location='cpu')
     out_model_args = ckpt["hyper_parameters"]['args']
+
+    # add missing keys in state dict if necessary
+    state_dict = ckpt['state_dict']
+    potentially_missing_keys = ["max_harm_ratio", "max_mod_idx", "kld_weight_dynamic", "contrastive_weight_dynamic"]
+    for key in potentially_missing_keys:
+        if key not in state_dict:
+            print(f"Key '{key}' not found in state dict. Adding it with default value 0.0.")
+            state_dict[key] = torch.tensor(0.0)
 
     # create out model with args and load state dict
     out_model = PlFMFactorVAE(out_model_args)
@@ -111,6 +134,7 @@ def main():
     print("Image dataset created")
     # create image dataloader
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=4, persistent_workers=True)
+    val_dataloader = DataLoader(dataset_val, batch_size=1024, shuffle=False, drop_last=False)
     print("Image dataloader created")
 
     def get_fm_synth_batch(model, batch_size):
@@ -145,8 +169,9 @@ def main():
         print("Determining in features for the image model...")
         in_model.model = CompactLatentWrapper(in_model.model, in_model_args.latent_size)
         # analyze KLD on a batch of data
-        data_batch = next(iter(dataloader))
-        kld_per_dim, active_indices = in_model.model.analyze_kld(data_batch[0], threshold=0.1)
+        data_batch = next(iter(val_dataloader))
+        print(f"Data batch shape: {data_batch[0].shape}")
+        kld_per_dim, active_indices = in_model.model.analyze_kld(data_batch[0], threshold=0.5)
         print(f"KLD per dimension: {kld_per_dim}")
         print(f"Active latent dimensions: {active_indices}")
         args.in_features = len(active_indices)
@@ -155,13 +180,20 @@ def main():
         print("Determining out features for the audio model...")
         out_model.model = CompactLatentWrapper(out_model.model, out_model_args.latent_size)
         # generate a batch of input samples
-        in_spec = get_fm_synth_batch(out_model, args.batch_size)
-        kld_per_dim, active_indices = out_model.model.analyze_kld(in_spec, threshold=0.2)
+        in_spec = get_fm_synth_batch(out_model, 1024)
+        print(f"Input spectrogram shape for KLD analysis: {in_spec.shape}")
+        kld_per_dim, active_indices = out_model.model.analyze_kld(in_spec, threshold=1.6)
         print(f"KLD per dimension: {kld_per_dim}")
         print(f"Active latent dimensions: {active_indices}")
         args.out_features = len(active_indices)
 
         print(f"Determined in features: {args.in_features}, out features: {args.out_features}")
+
+        # ask user if they want to proceed with these features
+        proceed = input(f"Proceed with in_features={args.in_features} and out_features={args.out_features}? (y/n): ")
+        if proceed.lower() != 'y':
+            print("Exiting. Adjust the threshold or check the models and try again.")
+            return
 
     # create mapper model where args also references the in and out models
     args.in_model = in_model
