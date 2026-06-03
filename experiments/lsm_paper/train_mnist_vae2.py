@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     # model params
-    parser.add_argument("--latent_size", type=int, default=8)
+    parser.add_argument("--latent_size", type=int, default=3)
     parser.add_argument("--img_size", type=int, default=32)
     parser.add_argument("--output_channels", type=int, default=1)
     parser.add_argument("--encoder_channels", type=int, default=64)
@@ -40,7 +40,7 @@ def main():
     parser.add_argument("--recon_loss_weight_ramp_start_epoch", type=int, default=0)
     parser.add_argument("--recon_loss_weight_ramp_end_epoch", type=int, default=1)
     parser.add_argument('--use_ssim', type=int, default=1, help='whether to use ssim loss in addition to pixel-wise loss')
-    parser.add_argument('--ssim_alpha', type=float, default=0.84, help='the alpha parameter for the ssim loss, between 0 and 1, where 1 means only ssim loss and 0 means only pixel-wise loss')
+    parser.add_argument('--ssim_alpha', type=float, default=0.5, help='the alpha parameter for the ssim loss, between 0 and 1, where 1 means only ssim loss and 0 means only pixel-wise loss')
     parser.add_argument('--target_recon_loss', type=float, default=0.1, help='target recon loss to keep in case of dynamic kld')
     # kld loss params
     parser.add_argument('--dynamic_kld', type=int, default=1, help='non-zero will use dynamic kld')
@@ -50,9 +50,9 @@ def main():
     parser.add_argument('--kld_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the kld weight')
     # tc loss params
     parser.add_argument('--tc_weight_max', type=float, default=10, help='tc weight at the end of the warmup')
-    parser.add_argument('--tc_weight_min', type=float, default=0, help='tc weight at the start of the warmup')
-    parser.add_argument('--tc_start_epoch', type=int, default=500, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
-    parser.add_argument('--tc_warmup_epochs', type=int, default=2000, help='the number of epochs to warmup the tc weight')
+    parser.add_argument('--tc_weight_min', type=float, default=10, help='tc weight at the start of the warmup')
+    parser.add_argument('--tc_start_epoch', type=int, default=0, help='the epoch at which to start the tc warmup from tc_weight_min to tc_weight_max')
+    parser.add_argument('--tc_warmup_epochs', type=int, default=1, help='the number of epochs to warmup the tc weight')
     # optimizer params
     parser.add_argument("--lr_vae", type=float, default=0.0005)
     parser.add_argument("--lr_decay_vae", type=float, default=0.75)
@@ -64,9 +64,9 @@ def main():
 
     # checkpointing & logging
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/mnist_vae")
-    parser.add_argument("--ckpt_name", type=str, default="v3.8")
+    parser.add_argument("--ckpt_name", type=str, default="v4.0")
     parser.add_argument("--logdir", type=str, default="./logs/mnist_vae")
-    parser.add_argument("--comment", type=str, default="target_recon_loss=0.1, tc_start_epoch=500, tc_warmup_epochs=2000, vae_lr_patience=5000")
+    parser.add_argument("--comment", type=str, default="ssim_alpha: 0.5")
 
     args = parser.parse_args()
 
