@@ -257,8 +257,8 @@ finally:
 
 # %%
 # test the wrapper
-
-model.model = CompactLatentWrapper(model.model, args.latent_size)
+if not isinstance(model.model, CompactLatentWrapper):
+    model.model = CompactLatentWrapper(model.model, args.latent_size)
 
 # analyze KLD on a batch of data
 data_batch = next(iter(dataloader))

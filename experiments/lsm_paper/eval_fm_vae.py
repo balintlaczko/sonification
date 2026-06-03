@@ -19,7 +19,7 @@ import math
 
 # %%
 ckpt_path = '../../ckpt/fm_vae'
-ckpt_name = 'imv_v5.12'
+ckpt_name = 'imv_v5.10'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -33,7 +33,17 @@ print(f"Checkpoint file found: {ckpt_path}")
 # load checkpoint and extract saved args
 ckpt = torch.load(ckpt_path, map_location='cpu')
 args = ckpt["hyper_parameters"]['args']
-print(args)
+# print(args)
+
+
+# %%
+# add missing keys in state dict if necessary
+state_dict = ckpt['state_dict']
+potentially_missing_keys = ["max_harm_ratio", "max_mod_idx", "kld_weight_dynamic", "contrastive_weight_dynamic"]
+for key in potentially_missing_keys:
+    if key not in state_dict:
+        print(f"Key '{key}' not found in state dict. Adding it with default value 0.0.")
+        state_dict[key] = torch.tensor(0.0)
 
 # %%
 # create model with args and load state dict
@@ -241,8 +251,8 @@ finally:
 
 # %%
 # test wrapper
-
-model.model = CompactLatentWrapper(model.model, args.latent_size)
+if not isinstance(model.model, CompactLatentWrapper):
+    model.model = CompactLatentWrapper(model.model, args.latent_size)
 
 # create a batch of inputs
 with torch.no_grad():
@@ -259,7 +269,7 @@ with torch.no_grad():
 
 print(f"Input spectrogram shape: {in_spec.shape}")
 
-kld_per_dim, active_indices = model.model.analyze_kld(in_spec, threshold=0.2)
+kld_per_dim, active_indices = model.model.analyze_kld(in_spec, threshold=0.5)
 print(f"KLD per dimension: {kld_per_dim}")
 print(f"Active latent dimensions: {active_indices}")
 
