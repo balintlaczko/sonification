@@ -168,8 +168,8 @@ if num_pairs > 0:
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.subplots_adjust(wspace=0.3) 
-    # plt.show()
-    plt.savefig("sound_model_latent_space.png", dpi=300)
+    plt.show()
+    # plt.savefig("sound_model_latent_space.png", dpi=300)
     # Reset rcParams to default to not affect other plots
     plt.rcdefaults()
 
@@ -215,8 +215,8 @@ ax.matshow(input_samples.squeeze(1).cpu().numpy().T, aspect='auto', origin='lowe
 ax.set_xlabel("Sample Index")
 ax.set_ylabel("Mel Bin")
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-# plt.show()
-plt.savefig("sound_samples.png", dpi=300)
+plt.show()
+# plt.savefig("sound_samples.png", dpi=300)
 # Reset rcParams to default to not affect other plots
 plt.rcdefaults()
 
@@ -224,8 +224,8 @@ plt.rcdefaults()
 
 # %%
 # set percentiles
-percentile_low = 1
-percentile_high = 99
+percentile_low = 5
+percentile_high = 95
 steps = 64
 
 z_x_min = np.percentile(z_all[:, 0], percentile_low)
@@ -271,8 +271,8 @@ plt.subplots_adjust(wspace=0.1, hspace=0.1)
 plt.tight_layout()
 # remove white background
 fig.patch.set_visible(False)
-# plt.savefig("traverse_latent_space_sinewave_testY.png")
-plt.show()
+plt.savefig("traverse_latent_space_sinewave_testY.png", dpi=300)
+# plt.show()
 
 # %%
 # create a plot for traversing in the latent space through X
