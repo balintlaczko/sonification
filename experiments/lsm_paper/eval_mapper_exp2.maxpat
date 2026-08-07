@@ -13,6 +13,17 @@
         "boxes": [
             {
                 "box": {
+                    "id": "obj-26",
+                    "linecount": 9,
+                    "maxclass": "comment",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 249.0, 109.0, 303.0, 127.0 ],
+                    "text": "v3.8 dims:\n0: (noise)\n1: curve left side (e.g., 6) vs. curve right side (e.g., 3)\n2: italics? (rotation?)\n3: curved lines (e.g., cursive 2) vs straight lines (e.g., 4)\n4: thickness\n5: stretch vert vs stretch horiz\n6: width?\n7: curve at top vs curve at bottom"
+                }
+            },
+            {
+                "box": {
                     "id": "obj-27",
                     "maxclass": "newobj",
                     "numinlets": 1,
@@ -1466,7 +1477,7 @@
                     "patching_rect": [ 29.0, 338.0, 554.0, 201.0 ],
                     "setstyle": 1,
                     "signed": 1,
-                    "size": 3
+                    "size": 7
                 }
             },
             {
