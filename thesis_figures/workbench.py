@@ -627,20 +627,20 @@ data_mcadams = {
     'tpt':   [-2.6,  -1.9,  0.4], # Trumpet
     'tbn':   [-2.4, 1.7, - 1.2], # Trombone
     'hrp':   [3.0, 1.7, -0.4], # Harp
-    '"tpr"':   [-0.1, -2.7, 0.1], # "Trumpar"
-    '"ols"':   [3.0, 1.7, 0.7], # "Oboleste"
+    "``tpr''":   [-0.1, -2.7, 0.1], # "Trumpar"
+    "``ols''":   [3.0, 1.7, 0.7], # "Oboleste"
     'vbn':   [3.8, 1.8, 1.3], # Vibraphone
-    '"sno"':   [-1.4, -0.9, 1.6], # "Striano"
+    "``sno''":   [-1.4, -0.9, 1.6], # "Striano"
     'hcd':   [3.6, -2.8, 0.5], # Harpsichord
     'ehn':   [-1.9, -1.5, -1.9], # English Horn
     'bsn':   [-2.4, -1.8, -2.0], # Bassoon
     'cnt':   [-2.4, 1.9, 0.5], # Clarinet
-    '"vbn"':   [0.7, 2.3, -1.6], # "Vibrone"
-    '"obc"':   [2.5, -2.3, -2.7], # "Obochord"
+    "``vbn''":   [0.7, 2.3, -1.6], # "Vibrone"
+    "``obc''":   [2.5, -2.3, -2.7], # "Obochord"
     'gtr':   [2.9, 0.2, 2.4], # Guitar
     'stg':   [-2.4, -1.4, 1.4], # String
     'pno':   [1.3, 1.3, 0.2], # Piano
-    '"gnt"':   [-1.8, 1.2, 2.0], # "Guitarnet"
+    "``gnt''":   [-1.8, 1.2, 2.0], # "Guitarnet"
 }
 
 names = list(data_mcadams.keys())
@@ -730,7 +730,7 @@ ax.set_zlabel('\nDimension 1\n(rise time)', linespacing=2, labelpad=10)
 ax.view_init(elev=18, azim=-50)
 
 plt.tight_layout()
-filename = 'mcadams_timbre_space.pdf'
+filename = 'mcadams_timbre_space_mod.pdf'
 plt.savefig(filename, dpi=300, format='pdf')
 print(f"Saved {filename}")
 
