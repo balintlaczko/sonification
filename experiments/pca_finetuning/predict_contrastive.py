@@ -18,7 +18,7 @@ from sklearn.decomposition import PCA
 # %%
 # grab checkpoint
 ckpt_path = '../../ckpt/fm_embedder'
-ckpt_name = 'imv_v4.9'
+ckpt_name = 'revive_test_v1.0'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -133,7 +133,7 @@ print(f"Explained variance ratio for PCA with {pca_dims} components: {explained_
 
 # %%
 # UMAP
-mode = 'robustscaled'  # 'standardized', 'robustscaled', 'pca' or 'raw'
+mode = 'standardized'  # 'standardized', 'robustscaled', 'pca' or 'raw'
 if mode == 'standardized':
     Z = z_all_standardized.detach().cpu().numpy()
 elif mode == 'robustscaled':
@@ -151,9 +151,9 @@ else:
     idx = np.arange(n)
 
 n_components = 3  # 3 for 3D UMAP
-n_neighbors = 5
+n_neighbors = 32
 min_dist = 0.1  # minimum distance between points in UMAP
-metric = 'euclidean'  # distance metric for UMAP
+metric = 'cosine'#'euclidean'  # distance metric for UMAP
 emb = umap.UMAP(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, metric=metric).fit_transform(Z[idx])
 
 # Build RGB colors from dataframe x, y, z columns
