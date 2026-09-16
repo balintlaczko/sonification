@@ -186,36 +186,65 @@ if num_pairs > 0:
     plt.show()
 
 # %%
+# plot proportionality loss between z_1 and z_2
+# Set font properties for the plot
+plt.rcParams.update({
+    'font.family': 'serif',
+    'font.serif': ['Times New Roman'],
+    'font.size': 12
+})
 # create a scatter plot color coded by the diff between the relative positions of points in z_1 and corresponding points in z_2
 z_1_dist = torch.cdist(z_1_all, z_1_all, p=2).cpu().numpy()
 z_2_dist = torch.cdist(z_2_all, z_2_all, p=2).cpu().numpy()
-# normalize the distance matrices to [0, 1]
-z_1_dist = z_1_dist / np.mean(z_1_dist)
-z_2_dist = z_2_dist / np.mean(z_2_dist)
-# measure vector norm of the difference between the distance matrices
-z_rel_diff = np.linalg.norm(z_2_dist - z_1_dist, axis=1)
+# # normalize the distance matrices to [0, 1]
+# z_1_dist = z_1_dist / np.mean(z_1_dist)
+# z_2_dist = z_2_dist / np.mean(z_2_dist)
+# # measure vector norm of the difference between the distance matrices
+# z_rel_diff = np.linalg.norm(z_2_dist - z_1_dist, axis=1)
+
+# normalize the distance matrices strictly to [0, 1]
+z_1_dist = z_1_dist / np.max(z_1_dist)
+z_2_dist = z_2_dist / np.max(z_2_dist)
+# measure vector norm and divide by the max possible norm (sqrt of the number of elements)
+num_points = z_1_dist.shape[1]
+z_rel_diff = np.linalg.norm(z_2_dist - z_1_dist, axis=1) / np.sqrt(num_points)
+
 if num_pairs > 0:
     fig, axes = plt.subplots(num_pairs, 1, figsize=(10, 5 * num_pairs), squeeze=False)
 
     epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
-    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Locality Loss", fontsize=16)
+    # fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Proportionality Loss", fontsize=16)
 
     for i, (dim1, dim2) in enumerate(dim_pairs):
         ax = axes[i, 0]
 
-        # Scatter plot colored by Locality Loss
+        # Scatter plot colored by Proportionality Loss
         sc = ax.scatter(z_all[:, dim1], z_all[:, dim2], c=z_rel_diff, cmap='viridis', s=3)
-        fig.colorbar(sc, ax=ax, label='Locality Loss', shrink=0.8)
-        ax.set_title(f"Latent Dims {dim1} vs {dim2} by Locality Loss")
-        ax.set_xlabel(f"Latent Dim {dim1}")
-        ax.set_ylabel(f"Latent Dim {dim2}")
+        cbar = fig.colorbar(sc, ax=ax, shrink=0.8, pad=0.02)
+        cbar.set_label('Proportionality Loss', labelpad=15)
+        # ax.set_title(f"Latent Dims {dim1} vs {dim2} by Proportionality Loss")
+        ax.set_xlabel(f"Latent Dimension {dim1}")
+        ax.set_ylabel(f"Latent Dimension {dim2}")
         ax.set_aspect('equal', adjustable='box')
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
+    plt.subplots_adjust(wspace=0.3) 
+    # plt.show()
+    plt.savefig("proportionality_loss.png", dpi=300)
+    plt.rcdefaults()
+
+# %%
+print(f"Mean proportionality loss: {np.mean(z_rel_diff)}, std: {np.std(z_rel_diff)}, min: {np.min(z_rel_diff)}, max: {np.max(z_rel_diff)}, median: {np.median(z_rel_diff)}")
 
 
 # %%
+# plot cycle consistency loss between z_2 and z_3
+# Set font properties for the plot
+plt.rcParams.update({
+    'font.family': 'serif',
+    'font.serif': ['Times New Roman'],
+    'font.size': 12
+})
 # create a scatter plot color coded by the cycle consistency loss between z_2 and z_3
 z_2_all_cpu = z_2_all.cpu().numpy()
 z_3_all_cpu = z_3_all.cpu().numpy()
@@ -224,21 +253,28 @@ if num_pairs > 0:
     fig, axes = plt.subplots(num_pairs, 1, figsize=(10, 5 * num_pairs), squeeze=False)
 
     epoch_idx = ckpt_file.split('_')[-1].split('.')[0].split("=")[-1]
-    fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Cycle Consistency Loss")
+    # fig.suptitle(f"Model v{model_version} - Epoch {epoch_idx} | Cycle Consistency Loss")
 
     for i, (dim1, dim2) in enumerate(dim_pairs):
         ax = axes[i, 0]
 
         # Scatter plot colored by Cycle Consistency Loss
         sc = ax.scatter(z_all[:, dim1], z_all[:, dim2], c=z_dist, cmap='viridis', s=3)
-        fig.colorbar(sc, ax=ax, label='Cycle Consistency Loss', shrink=0.8)
-        ax.set_title(f"Latent Dims {dim1} vs {dim2} by Cycle Consistency Loss")
-        ax.set_xlabel(f"Latent Dim {dim1}")
-        ax.set_ylabel(f"Latent Dim {dim2}")
+        cbar = fig.colorbar(sc, ax=ax, shrink=0.8, pad=0.02)
+        cbar.set_label('Cycle Consistency Loss', labelpad=15)
+        # ax.set_title(f"Latent Dims {dim1} vs {dim2} by Cycle Consistency Loss")
+        ax.set_xlabel(f"Latent Dimension {dim1}")
+        ax.set_ylabel(f"Latent Dimension {dim2}")
         ax.set_aspect('equal', adjustable='box')
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
+    plt.subplots_adjust(wspace=0.3)
+    # plt.show()
+    plt.savefig("cycle_consistency_loss.png", dpi=300)
+    plt.rcdefaults()
+
+# %%
+print(f"Mean cycle consistency loss: {np.mean(z_dist)}, std: {np.std(z_dist)}, min: {np.min(z_dist)}, max: {np.max(z_dist)}, median: {np.median(z_dist)}")
 
 # %%
 # measure the total correlation between the dimensions of z_2

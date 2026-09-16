@@ -35,6 +35,24 @@ args = ckpt["hyper_parameters"]['args']
 # print(args)
 
 # %%
+# add missing keys in args if necessary
+potentially_missing_keys = ["use_ssim"]
+for key in potentially_missing_keys:
+    if not hasattr(args, key):
+        print(f"Key '{key}' not found in args. Adding it with default value 0.")
+        setattr(args, key, 0)
+
+
+# %%
+# add missing keys in state dict if necessary
+state_dict = ckpt['state_dict']
+potentially_missing_keys = ["kld_weight_dynamic"]
+for key in potentially_missing_keys:
+    if key not in state_dict:
+        print(f"Key '{key}' not found in state dict. Adding it with default value 0.0.")
+        state_dict[key] = torch.tensor(0.0)
+
+# %%
 # create model with args and load state dict
 model = PlImgFactorVAE(args)
 model.load_state_dict(ckpt['state_dict'])
@@ -60,7 +78,7 @@ dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last
 # %%
 # get the cuda/mps device
 device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-# print(f"Using device: {device}")
+print(f"Using device: {device}")
 # move model to device
 model = model.to(device)
 
@@ -120,8 +138,8 @@ if num_pairs > 0:
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.subplots_adjust(wspace=0.3) 
-    # plt.show()
-    plt.savefig("image_model_latent_space.png", dpi=300)
+    plt.show()
+    # plt.savefig("image_model_latent_space.png", dpi=300)
     # Reset rcParams to default to not affect other plots
     plt.rcdefaults()
 
@@ -176,9 +194,9 @@ plt.rcdefaults()
 
 # %%
 # set percentiles
-percentile_low = 1
-percentile_high = 99
-steps = 20
+percentile_low = 5
+percentile_high = 95
+steps = 8
 
 z_x_min = np.percentile(z_all[:, 0], percentile_low)
 z_x_max = np.percentile(z_all[:, 0], percentile_high)
@@ -187,6 +205,8 @@ z_y_max = np.percentile(z_all[:, 1], percentile_high)
 
 x_steps = torch.linspace(z_x_min, z_x_max, steps)
 y_steps = torch.linspace(z_y_min, z_y_max, steps)
+# reverse y steps
+y_steps = y_steps.flip(0)
 
 z_x_min, z_x_max, z_y_min, z_y_max
 
@@ -208,8 +228,8 @@ for y_idx, y_step in enumerate(y_steps):
 plt.subplots_adjust(wspace=0.1, hspace=0.1)
 # reduce the overall margins
 plt.tight_layout()
-# plt.savefig("traverse_latent_space_64x2.png")
-plt.show()
+plt.savefig("traverse_latent_space_128x2_8x8.png", dpi=300)
+# plt.show()
 
 # %%
 # plot 8 samples from the dataset
