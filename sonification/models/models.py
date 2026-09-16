@@ -3437,7 +3437,7 @@ class PlFMEmbedder(LightningModule):
         self.noise_max_amp = args.noise_max_amp
         self.latent_size = args.latent_size
         self.center_momentum = args.center_momentum
-        self.register_buffer("center", torch.zeros(1, self.latent_size, device=self.device))
+        self.register_buffer("center", torch.zeros(1, self.latent_size, device=self.device)) # TODO: zeros or randn?
         self.ema_decay_min = args.ema_decay_min
         self.ema_decay_max = args.ema_decay_max
         self.ema_decay_ramp_start_epoch = args.ema_decay_ramp_start_epoch
@@ -3462,9 +3462,11 @@ class PlFMEmbedder(LightningModule):
             f_min=args.f_min,
             f_max=args.f_max,
             n_mels=args.n_mels,
-            power=args.power,
+            power=2.0, # args.power,
             normalized=args.normalized > 0,
         )
+        self.spec_floor_db = -80.0
+
         self.model = MelSpecEncoder(
             input_width=args.n_mels,
             encoder_channels=args.encoder_channels,
@@ -3480,6 +3482,28 @@ class PlFMEmbedder(LightningModule):
             if isinstance(m, (nn.Conv2d, nn.Linear)):  # Apply to conv and linear layers
                 nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
         self.model.apply(init_weights_kaiming)
+
+
+    def preprocess_audio(self, waveform):
+        # waveform: (B, T)
+        spectrogram = self.mel_spectrogram(
+            waveform.unsqueeze(1)
+        )  # (B, 1, n_mels, time)
+
+        # Fixed-reference power-to-dB conversion.
+        # The reference is power=1, not each sample's maximum.
+        eps = torch.finfo(spectrogram.dtype).eps
+        spectrogram_db = 10.0 * torch.log10(
+            spectrogram.clamp_min(eps)
+        )
+
+        # Fixed global range: [-80 dB, 0 dB] -> [0, 1].
+        spectrogram_db = spectrogram_db.clamp(
+            min=self.spec_floor_db,
+            max=0.0,
+        )
+
+        return (spectrogram_db - self.spec_floor_db) / -self.spec_floor_db
 
 
     def create_shadow_model(self):
@@ -3555,15 +3579,11 @@ class PlFMEmbedder(LightningModule):
 
     def forward(self, x):
         # print("entering PlFMEmbedder forward")
-        in_wf = x.unsqueeze(1)
+        # in_wf = x.unsqueeze(1)
         # get the mel spectrogram
-        in_spec = self.mel_spectrogram(in_wf)
-        # normalize per sample (and channel) over spatial dims (H, W)
-        reduce_dims = (2, 3)
-        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
-        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
-        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
-        in_spec = (in_spec - mins) / den
+        # in_spec = self.mel_spectrogram(in_wf)
+        # in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
+        in_spec = self.preprocess_audio(x)
         # predict the embedding
         if self.training:
             # print("training, using the main model")
@@ -3630,13 +3650,9 @@ class PlFMEmbedder(LightningModule):
         # forward pass
         # TEACHER
         # get the mel spectrograms
-        in_spec_x = self.mel_spectrogram(x.unsqueeze(1).detach())
-        # normalize per sample (and channel) over spatial dims (H, W)
-        reduce_dims = (2, 3)
-        mins = in_spec.amin(dim=reduce_dims, keepdim=True)
-        maxs = in_spec.amax(dim=reduce_dims, keepdim=True)
-        den = (maxs - mins).clamp_min(torch.finfo(in_spec.dtype).eps)
-        in_spec = (in_spec - mins) / den
+        # in_spec_x = self.mel_spectrogram(x.unsqueeze(1).detach())
+        # in_spec_x = scale(in_spec_x, in_spec_x.min(), in_spec_x.max(), 0, 1)
+        in_spec_x = self.preprocess_audio(x.detach())
         # predict the embeddings
         teacher_x, _ = self.shadow(in_spec_x)  # teacher output
         teacher_x = teacher_x.detach()  # detach the teacher output to avoid gradients flowing back to the shadow model
@@ -3650,15 +3666,17 @@ class PlFMEmbedder(LightningModule):
         total_loss = 0.0
         for x_a in views:
             # get the mel spectrogram
-            in_spec_x_a = self.mel_spectrogram(x_a.unsqueeze(1).detach())
-            in_spec_x_a = scale(in_spec_x_a, in_spec_x_a.min(), in_spec_x_a.max(), 0, 1)
+            # in_spec_x_a = self.mel_spectrogram(x_a.unsqueeze(1).detach())
+            # in_spec_x_a = scale(in_spec_x_a, in_spec_x_a.min(), in_spec_x_a.max(), 0, 1)
+            in_spec_x_a = self.preprocess_audio(x_a.detach())
 
             student_x_a, _ = self.model(in_spec_x_a)
             student_x_a = student_x_a / self.student_temperature
 
             # calculate the loss
             # cross entropy loss between teacher and student (DINO-style)
-            loss = torch.sum(-teacher_x_centered * F.log_softmax(student_x_a, dim=-1), dim=-1)
+            # loss = torch.sum(-teacher_x_centered * F.log_softmax(student_x_a, dim=-1), dim=-1)
+            loss = F.cross_entropy(student_x_a, teacher_x_centered, reduction="none")
             total_loss += loss.mean()
         total_loss /= len(views)  # average over the views
 
