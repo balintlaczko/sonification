@@ -19,44 +19,44 @@ def main():
     parser.add_argument("--length_samps", type=int, default=8192)
     parser.add_argument("--n_fft", type=int, default=4096)
     parser.add_argument("--f_min", type=float, default=20)
-    parser.add_argument("--f_max", type=float, default=16000)
-    parser.add_argument("--n_mels", type=int, default=512)
+    parser.add_argument("--f_max", type=float, default=10000)
+    parser.add_argument("--n_mels", type=int, default=128)
     parser.add_argument("--power", type=float, default=1)
     parser.add_argument("--normalized", type=int, default=1)
-    parser.add_argument("--max_harm_ratio", type=int, default=14)
-    parser.add_argument("--max_mod_idx", type=int, default=14)
+    parser.add_argument("--max_harm_ratio", type=int, default=10)
+    parser.add_argument("--max_mod_idx", type=int, default=10)
     parser.add_argument("--num_views", type=int, default=8)  # number of views for contrastive learning
     parser.add_argument("--apply_transposition", type=int, default=1)
     parser.add_argument("--transposition_range", type=float, default=3.0)  # range for pitch transposition: 3 == -3 —> +3
     parser.add_argument("--noise_max_amp", type=float, default=0.01)  # max amplitude for noise augmentation
     # model params
     parser.add_argument("--latent_size", type=int, default=8)
-    parser.add_argument("--center_momentum", type=float, default=0.9)
-    parser.add_argument("--ema_decay_min", type=float, default=0.996)
+    parser.add_argument("--center_momentum", type=float, default=0.996)
+    parser.add_argument("--ema_decay_min", type=float, default=0.99)
     parser.add_argument("--ema_decay_max", type=float, default=0.999)
-    parser.add_argument("--ema_decay_ramp_start_epoch", type=int, default=0)
+    parser.add_argument("--ema_decay_ramp_start_epoch", type=int, default=1000)
     parser.add_argument("--ema_decay_ramp_num_epochs", type=int, default=3000)
     parser.add_argument("--student_temperature", type=float, default=0.1)
     parser.add_argument("--teacher_temperature_min", type=float, default=0.04)
     parser.add_argument("--teacher_temperature_max", type=float, default=0.07)
     parser.add_argument("--teacher_temperature_ramp_start_epoch", type=int, default=0)
-    parser.add_argument("--teacher_temperature_ramp_num_epochs", type=int, default=500)
-    parser.add_argument("--encoder_channels", type=int, default=128)
+    parser.add_argument("--teacher_temperature_ramp_num_epochs", type=int, default=3000)
+    parser.add_argument("--encoder_channels", type=int, default=64)
     parser.add_argument("--encoder_kernels", type=int, nargs='*', default=[3, 5])
-    parser.add_argument("--encoder_n_res_block", type=int, default=24)
-    parser.add_argument("--encoder_n_res_channel", type=int, default=64)
+    parser.add_argument("--encoder_n_res_block", type=int, default=8)
+    parser.add_argument("--encoder_n_res_channel", type=int, default=32)
     parser.add_argument("--dropout", type=float, default=0.0)
     # training params
-    parser.add_argument("--batch_size", type=int, default=512)
+    parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--warmup_epochs", type=int, default=10)
-    parser.add_argument("--lr", type=float, default=0.001)
+    parser.add_argument("--lr", type=float, default=0.0001)
     parser.add_argument("--lr_decay", type=float, default=0.75)
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_embedder")
-    parser.add_argument("--ckpt_name", type=str, default="imv_v4.9")
+    parser.add_argument("--ckpt_name", type=str, default="revive_test_v1.1")
     parser.add_argument("--logdir", type=str, default="./logs/fm_embedder")
-    parser.add_argument("--comment", type=str, default="transp 3 | dim 8 | teacher 0.04-0.07")
+    parser.add_argument("--comment", type=str, default="ema 0.99, center momentum 0.996")
     
     args = parser.parse_args()
 
@@ -116,49 +116,7 @@ def main():
     )
 
     # save hyperparameters
-    hyperparams = dict(
-        sr=args.sr,
-        resample_base=args.resample_base,
-        length_samps=args.length_samps,
-        n_fft=args.n_fft,
-        f_min=args.f_min,
-        f_max=args.f_max,
-        n_mels=args.n_mels,
-        power=args.power,
-        normalized=args.normalized,
-        max_harm_ratio=args.max_harm_ratio,
-        max_mod_idx=args.max_mod_idx,
-        num_views=args.num_views,
-        apply_transposition=args.apply_transposition,
-        transposition_range=args.transposition_range,
-        noise_max_amp=args.noise_max_amp,
-        center_momentum=args.center_momentum,
-        ema_decay_min=args.ema_decay_min,
-        ema_decay_max=args.ema_decay_max,
-        ema_decay_ramp_start_epoch=args.ema_decay_ramp_start_epoch,
-        ema_decay_ramp_num_epochs=args.ema_decay_ramp_num_epochs,
-        student_temperature=args.student_temperature,
-        teacher_temperature_min=args.teacher_temperature_min,
-        teacher_temperature_max=args.teacher_temperature_max,
-        teacher_temperature_ramp_start_epoch=args.teacher_temperature_ramp_start_epoch,
-        teacher_temperature_ramp_num_epochs=args.teacher_temperature_ramp_num_epochs,
-        latent_size=args.latent_size,
-        encoder_channels=args.encoder_channels,
-        encoder_kernels=args.encoder_kernels,
-        encoder_n_res_block=args.encoder_n_res_block,
-        encoder_n_res_channel=args.encoder_n_res_channel,
-        dropout=args.dropout,
-        lr=args.lr,
-        lr_decay=args.lr_decay,
-        warmup_epochs=args.warmup_epochs,
-        train_epochs=args.train_epochs,
-        steps_per_epoch=args.steps_per_epoch,
-        batch_size=args.batch_size,
-        ckpt_path=args.ckpt_path,
-        ckpt_name=args.ckpt_name,
-        logdir=args.logdir,
-        comment=args.comment,
-    )
+    hyperparams = vars(args).copy()
     trainer.logger.log_hyperparams(hyperparams)
 
     # train model
