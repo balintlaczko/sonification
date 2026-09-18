@@ -18,7 +18,7 @@ from sklearn.decomposition import PCA
 # %%
 # grab checkpoint
 ckpt_path = '../../ckpt/fm_embedder'
-ckpt_name = 'imv-new_v1.3'
+ckpt_name = 'byol_v1.0'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
