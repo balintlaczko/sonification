@@ -18,7 +18,7 @@ from sklearn.decomposition import PCA
 # %%
 # grab checkpoint
 ckpt_path = '../../ckpt/fm_embedder'
-ckpt_name = 'revive_test_v1.0'
+ckpt_name = 'imv-new_v1.3'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -133,7 +133,7 @@ print(f"Explained variance ratio for PCA with {pca_dims} components: {explained_
 
 # %%
 # UMAP
-mode = 'standardized'  # 'standardized', 'robustscaled', 'pca' or 'raw'
+mode = 'raw'  # 'standardized', 'robustscaled', 'pca' or 'raw'
 if mode == 'standardized':
     Z = z_all_standardized.detach().cpu().numpy()
 elif mode == 'robustscaled':

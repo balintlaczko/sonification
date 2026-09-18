@@ -329,6 +329,7 @@
                 <label>Trajectory Space:</label>
                 <select id="trajectory-space" style="flex:1; background:#1a1a1a; color:#e0e0e0; border:1px solid #444; border-radius:4px; padding:6px;">
                     <option value="embedding" selected>Model Embeddings</option>
+                    <option value="coordinates" selected>Projection Coordinates</option>
                     <option value="fm">FM Parameters</option>
                 </select>
             </div>
@@ -459,6 +460,7 @@
     let trajectoryPointMaterial = null; // material for nodes
     let isTrajectoryPlaying = false;
     let trajectoryTimer = null;
+    let parsedCoordinatesCache = null;
     let parsedEmbeddingsCache = null; // cached embedding vectors as arrays
     let parsedFmParamsCache = null;   // cached fm parameter vectors as arrays
 
@@ -1187,6 +1189,7 @@
                 showLoading(true);
                 try {
                     coordinates = await loadJSON(e.target.files[0]);
+                    parsedCoordinatesCache = parseFluCoMaData(coordinates).map(e => e.values);
                     createPointCloud();
                 } catch (err) {
                     console.error('Error loading coordinates:', err);
@@ -1469,6 +1472,11 @@
             return parsedEmbeddingsCache[index] || null;
         }
 
+        function getCoordinateVec(index) {
+            if (!parsedCoordinatesCache) return null;
+            return parsedCoordinatesCache[index] || null;
+        }
+
         function getFmParamsVec(index) {
             if (!parsedFmParamsCache) return null;
             return parsedFmParamsCache[index] || null;
@@ -1487,7 +1495,9 @@
         }
 
         function nearestIndexInSpace(vec, space) {
-            const cache = (space === 'fm') ? parsedFmParamsCache : parsedEmbeddingsCache;
+            const cache = space === 'fm'
+                ? parsedFmParamsCache
+                : space === 'coordinates' ? parsedCoordinatesCache : parsedEmbeddingsCache;
             if (!cache) return -1;
             let best = -1, bestDist = Infinity;
             for (let i = 0; i < cache.length; i++) {
@@ -1516,14 +1526,18 @@
             const space = (document.getElementById('trajectory-space')?.value || 'embedding');
             if (!coordinates) { alert('Load coordinates first.'); return; }
             if (space === 'embedding' && !parsedEmbeddingsCache) { alert('Load embeddings first.'); return; }
+            if (space === 'coordinates' && !parsedCoordinatesCache) { alert('Load coordinates first.'); return; }
             if (space === 'fm' && !parsedFmParamsCache) { alert('Load FM parameters first.'); return; }
             if (trajA == null || trajB == null) {
                 alert('Set both A and B.');
                 return;
             }
             const steps = parseInt(document.getElementById('trajectory-steps').value, 10) || 30;
-            const a = space === 'fm' ? getFmParamsVec(trajA) : getEmbeddingVec(trajA);
-            const b = space === 'fm' ? getFmParamsVec(trajB) : getEmbeddingVec(trajB);
+            const getVector = space === 'fm'
+                ? getFmParamsVec
+                : space === 'coordinates' ? getCoordinateVec : getEmbeddingVec;
+            const a = getVector(trajA);
+            const b = getVector(trajB);
             if (!a || !b) { alert('Missing vectors for A or B in selected space.'); return; }
             const interps = linearInterpolateEmbeddings(a, b, steps);
             const indices = interps.map(v => nearestIndexInSpace(v, space));
