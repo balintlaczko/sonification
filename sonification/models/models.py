@@ -3437,7 +3437,7 @@ class PlFMEmbedder(LightningModule):
         self.noise_max_amp = args.noise_max_amp
         self.latent_size = args.latent_size
         self.center_momentum = args.center_momentum
-        self.register_buffer("center", torch.zeros(1, self.latent_size, device=self.device)) # TODO: zeros or randn?
+        self.register_buffer("center", torch.zeros(1, self.latent_size, device=self.device))
         self.ema_decay_min = args.ema_decay_min
         self.ema_decay_max = args.ema_decay_max
         self.ema_decay_ramp_start_epoch = args.ema_decay_ramp_start_epoch
@@ -3447,6 +3447,7 @@ class PlFMEmbedder(LightningModule):
         self.teacher_temperature_max = args.teacher_temperature_max
         self.teacher_temperature_ramp_start_epoch = args.teacher_temperature_ramp_start_epoch
         self.teacher_temperature_ramp_num_epochs = args.teacher_temperature_ramp_num_epochs
+        self.mode = args.mode.lower() # dino or byol
         self.logdir = args.logdir
 
         # learning rate
@@ -3477,11 +3478,19 @@ class PlFMEmbedder(LightningModule):
             latent_size=self.latent_size,
             dropout=args.dropout
         )
+        if self.mode == "byol":
+            self.predictor = LinearProjector(
+                in_features=self.latent_size,
+                out_features=self.latent_size,
+                hidden_layers_features=args.predictor_hidden_layers_features,
+            )
 
         def init_weights_kaiming(m):
             if isinstance(m, (nn.Conv2d, nn.Linear)):  # Apply to conv and linear layers
                 nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
         self.model.apply(init_weights_kaiming)
+        if self.mode == "byol":
+            self.predictor.apply(init_weights_kaiming)
 
 
     def preprocess_audio(self, waveform):
@@ -3489,20 +3498,17 @@ class PlFMEmbedder(LightningModule):
         spectrogram = self.mel_spectrogram(
             waveform.unsqueeze(1)
         )  # (B, 1, n_mels, time)
-
         # Fixed-reference power-to-dB conversion.
         # The reference is power=1, not each sample's maximum.
         eps = torch.finfo(spectrogram.dtype).eps
         spectrogram_db = 10.0 * torch.log10(
             spectrogram.clamp_min(eps)
         )
-
         # Fixed global range: [-80 dB, 0 dB] -> [0, 1].
         spectrogram_db = spectrogram_db.clamp(
             min=self.spec_floor_db,
             max=0.0,
         )
-
         return (spectrogram_db - self.spec_floor_db) / -self.spec_floor_db
 
 
@@ -3578,25 +3584,20 @@ class PlFMEmbedder(LightningModule):
     
 
     def forward(self, x):
-        # print("entering PlFMEmbedder forward")
-        # in_wf = x.unsqueeze(1)
-        # get the mel spectrogram
-        # in_spec = self.mel_spectrogram(in_wf)
-        # in_spec = scale(in_spec, in_spec.min(), in_spec.max(), 0, 1)
         in_spec = self.preprocess_audio(x)
         # predict the embedding
         if self.training:
-            # print("training, using the main model")
             mu, logvar = self.model(in_spec)
+            if self.mode == "byol":
+                mu = self.predictor(mu)
         else:
-            # print("not training, using the shadow model")
-            # use the shadow model for inference
             mu, logvar = self.shadow(in_spec)
-        return mu #+ logvar
-
+        return mu
 
     def training_step(self, batch, batch_idx):
         self.model.train()
+        if self.mode == "byol":
+            self.predictor.train()
         self.shadow.eval()
 
         # get the optimizers and schedulers
@@ -3622,11 +3623,7 @@ class PlFMEmbedder(LightningModule):
                 new_sr = int(round(self.sr * float(target_dur) / self.resample_base) * self.resample_base)
                 new_sr = max(1, new_sr)
                 # apply the transposition
-                # x_a = x_a.unsqueeze(1) # (batch_size, 1, n_samples)
-                # x_a = torch.nn.functional.interpolate(x_a, scale_factor=target_dur, mode='linear')
-                # print(x_a.shape, self.sr, target_dur, new_sr, new_sr / self.sr)
                 x_a = resample(x_a, self.sr, new_sr, lowpass_filter_width=128)
-                # x_a = x_a.squeeze(1) # (batch_size, n_samples)
 
             # apply common augmentations: random slice, random phase flip, random noise
             # select a random slice of self.n_samples
@@ -3643,40 +3640,42 @@ class PlFMEmbedder(LightningModule):
             noise_coeff = torch.rand(self.batch_size, 1, device=self.device) * self.noise_max_amp
             noise = noise * noise_coeff
             x_a = x_a + noise
-            # x_a = x_a.unsqueeze(1) # (batch_size, 1, n_samples)
             # add to the views
             views.append(x_a)
 
         # forward pass
         # TEACHER
         # get the mel spectrograms
-        # in_spec_x = self.mel_spectrogram(x.unsqueeze(1).detach())
-        # in_spec_x = scale(in_spec_x, in_spec_x.min(), in_spec_x.max(), 0, 1)
         in_spec_x = self.preprocess_audio(x.detach())
         # predict the embeddings
         teacher_x, _ = self.shadow(in_spec_x)  # teacher output
         teacher_x = teacher_x.detach()  # detach the teacher output to avoid gradients flowing back to the shadow model
-        current_teacher_temperature = (self.teacher_temperature_max - self.teacher_temperature_min) * \
-            min(1.0, (self.trainer.current_epoch - self.teacher_temperature_ramp_start_epoch) /
-            self.teacher_temperature_ramp_num_epochs) + self.teacher_temperature_min if self.trainer.current_epoch > self.teacher_temperature_ramp_start_epoch else self.teacher_temperature_min
-        # center and sharpen DINO-style
-        teacher_x_centered = F.softmax((teacher_x - self.center) / current_teacher_temperature, dim=-1).detach()
+        if self.mode == "dino":
+            current_teacher_temperature = (self.teacher_temperature_max - self.teacher_temperature_min) * \
+                min(1.0, (self.trainer.current_epoch - self.teacher_temperature_ramp_start_epoch) /
+                self.teacher_temperature_ramp_num_epochs) + self.teacher_temperature_min if self.trainer.current_epoch > self.teacher_temperature_ramp_start_epoch else self.teacher_temperature_min
+            # center and sharpen DINO-style
+            teacher_x_centered = F.softmax((teacher_x - self.center) / current_teacher_temperature, dim=-1).detach()
 
         # STUDENT
         total_loss = 0.0
         for x_a in views:
             # get the mel spectrogram
-            # in_spec_x_a = self.mel_spectrogram(x_a.unsqueeze(1).detach())
-            # in_spec_x_a = scale(in_spec_x_a, in_spec_x_a.min(), in_spec_x_a.max(), 0, 1)
             in_spec_x_a = self.preprocess_audio(x_a.detach())
 
             student_x_a, _ = self.model(in_spec_x_a)
-            student_x_a = student_x_a / self.student_temperature
+            if self.mode == "dino":
+                student_x_a = student_x_a / self.student_temperature
+            elif self.mode == "byol":
+                student_x_a = self.predictor(student_x_a)
 
             # calculate the loss
-            # cross entropy loss between teacher and student (DINO-style)
-            # loss = torch.sum(-teacher_x_centered * F.log_softmax(student_x_a, dim=-1), dim=-1)
-            loss = F.cross_entropy(student_x_a, teacher_x_centered, reduction="none")
+            if self.mode == "dino":
+                # cross entropy loss between teacher and student (DINO-style)
+                loss = F.cross_entropy(student_x_a, teacher_x_centered, reduction="none")
+            elif self.mode == "byol":
+                # mean squared error loss between the l2-normalized teacher and student (BYOL-style)
+                loss = 2 - 2 * F.cosine_similarity(student_x_a, teacher_x, dim=1)
             total_loss += loss.mean()
         total_loss /= len(views)  # average over the views
 
@@ -3690,15 +3689,22 @@ class PlFMEmbedder(LightningModule):
 
         # update the EMA
         self.ema_update()
-        # update the center
-        self.update_center(teacher_x)
+        # update the center for DINO-style
+        if self.mode == "dino":
+            self.update_center(teacher_x)
 
         # log losses
-        self.log_dict({
-            "loss": total_loss,
-            "lr": scheduler.get_last_lr()[0],
-            "teacher_temperature": current_teacher_temperature,
-        }, prog_bar=True)
+        if self.mode == "dino":
+            self.log_dict({
+                "loss": total_loss,
+                "lr": scheduler.get_last_lr()[0],
+                "teacher_temperature": current_teacher_temperature,
+            }, prog_bar=True)
+        elif self.mode == "byol":
+            self.log_dict({
+                "loss": total_loss,
+                "lr": scheduler.get_last_lr()[0],
+            }, prog_bar=True)
         
 
     def on_train_batch_start(self, batch, batch_idx):
@@ -3710,8 +3716,10 @@ class PlFMEmbedder(LightningModule):
 
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(
-            self.model.parameters(), lr=self.lr)
+        parameters = list(self.model.parameters())
+        if self.mode == "byol":
+            parameters += list(self.predictor.parameters())
+        optimizer = torch.optim.AdamW(parameters, lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=self.lr_decay, patience=100000)
         # return the optimizers and schedulers
