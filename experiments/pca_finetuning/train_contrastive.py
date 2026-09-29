@@ -31,12 +31,12 @@ def main():
     parser.add_argument("--noise_max_amp", type=float, default=0.01)  # max amplitude for noise augmentation
     # model params
     parser.add_argument("--mode", type=str, default="byol")  # dino or byol
-    parser.add_argument("--latent_size", type=int, default=8)
+    parser.add_argument("--latent_size", type=int, default=4)
     parser.add_argument("--predictor_hidden_layers_features", type=int, nargs='*', default=[32, 64, 32])
     parser.add_argument("--center_momentum", type=float, default=0.996)
-    parser.add_argument("--ema_decay_min", type=float, default=0.99)
+    parser.add_argument("--ema_decay_min", type=float, default=0.9)
     parser.add_argument("--ema_decay_max", type=float, default=0.999)
-    parser.add_argument("--ema_decay_ramp_start_epoch", type=int, default=1000)
+    parser.add_argument("--ema_decay_ramp_start_epoch", type=int, default=3000)
     parser.add_argument("--ema_decay_ramp_num_epochs", type=int, default=3000)
     parser.add_argument("--student_temperature", type=float, default=0.1)
     parser.add_argument("--teacher_temperature_min", type=float, default=0.04)
@@ -51,14 +51,14 @@ def main():
     # training params
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--warmup_epochs", type=int, default=10)
-    parser.add_argument("--lr", type=float, default=0.0001)
+    parser.add_argument("--lr", type=float, default=0.00001)
     parser.add_argument("--lr_decay", type=float, default=0.75)
     parser.add_argument("--train_epochs", type=int, default=100000)
     parser.add_argument("--steps_per_epoch", type=int, default=100)
     parser.add_argument("--ckpt_path", type=str, default="./ckpt/fm_embedder")
-    parser.add_argument("--ckpt_name", type=str, default="byol_v1.0")
+    parser.add_argument("--ckpt_name", type=str, default="byol_v1.2")
     parser.add_argument("--logdir", type=str, default="./logs/fm_embedder")
-    parser.add_argument("--comment", type=str, default="checking implementation")
+    parser.add_argument("--comment", type=str, default="faster ema, slower lr, lower dims")
     
     args = parser.parse_args()
 
