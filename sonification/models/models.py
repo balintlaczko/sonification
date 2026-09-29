@@ -3436,6 +3436,7 @@ class PlFMEmbedder(LightningModule):
         self.transposition_range = args.transposition_range
         self.noise_max_amp = args.noise_max_amp
         self.latent_size = args.latent_size
+        self.use_centering = args.use_centering > 0
         self.center_momentum = args.center_momentum
         self.register_buffer("center", torch.zeros(1, self.latent_size, device=self.device))
         self.ema_decay_min = args.ema_decay_min
@@ -3592,6 +3593,7 @@ class PlFMEmbedder(LightningModule):
                 mu = self.predictor(mu)
         else:
             mu, logvar = self.shadow(in_spec)
+            mu = mu - self.center if self.use_centering else mu # center the output if use_centering is True
         return mu
 
     def training_step(self, batch, batch_idx):
@@ -3650,12 +3652,16 @@ class PlFMEmbedder(LightningModule):
         # predict the embeddings
         teacher_x, _ = self.shadow(in_spec_x)  # teacher output
         teacher_x = teacher_x.detach()  # detach the teacher output to avoid gradients flowing back to the shadow model
+        teacher_x_raw = teacher_x.clone() if self.use_centering else None  # store the raw teacher output for center update
+        # centering
+        if self.use_centering:
+            teacher_x = teacher_x - self.center
         if self.mode == "dino":
             current_teacher_temperature = (self.teacher_temperature_max - self.teacher_temperature_min) * \
                 min(1.0, (self.trainer.current_epoch - self.teacher_temperature_ramp_start_epoch) /
                 self.teacher_temperature_ramp_num_epochs) + self.teacher_temperature_min if self.trainer.current_epoch > self.teacher_temperature_ramp_start_epoch else self.teacher_temperature_min
-            # center and sharpen DINO-style
-            teacher_x_centered = F.softmax((teacher_x - self.center) / current_teacher_temperature, dim=-1).detach()
+            # sharpen DINO-style
+            teacher_x = F.softmax(teacher_x / current_teacher_temperature, dim=-1).detach()
 
         # STUDENT
         total_loss = 0.0
@@ -3672,7 +3678,7 @@ class PlFMEmbedder(LightningModule):
             # calculate the loss
             if self.mode == "dino":
                 # cross entropy loss between teacher and student (DINO-style)
-                loss = F.cross_entropy(student_x_a, teacher_x_centered, reduction="none")
+                loss = F.cross_entropy(student_x_a, teacher_x, reduction="none")
             elif self.mode == "byol":
                 # mean squared error loss between the l2-normalized teacher and student (BYOL-style)
                 loss = 2 - 2 * F.cosine_similarity(student_x_a, teacher_x, dim=1)
@@ -3689,23 +3695,26 @@ class PlFMEmbedder(LightningModule):
 
         # update the EMA
         self.ema_update()
-        # update the center for DINO-style
-        if self.mode == "dino":
-            self.update_center(teacher_x)
+        # update the center
+        if self.use_centering:
+            self.update_center(teacher_x_raw)
 
         # log losses
         if self.mode == "dino":
-            self.log_dict({
+            log_dict = {
                 "loss": total_loss,
                 "lr": scheduler.get_last_lr()[0],
                 "teacher_temperature": current_teacher_temperature,
-            }, prog_bar=True)
+            }
         elif self.mode == "byol":
-            self.log_dict({
+            log_dict = {
                 "loss": total_loss,
                 "lr": scheduler.get_last_lr()[0],
-            }, prog_bar=True)
-        
+            }
+        if self.use_centering:
+            vector_dict = {f"center/dim_{i}": val for i, val in enumerate(self.center.squeeze().tolist())}
+            log_dict.update(vector_dict)
+        self.log_dict(log_dict, prog_bar=True)
 
     def on_train_batch_start(self, batch, batch_idx):
         epoch = self.trainer.current_epoch
