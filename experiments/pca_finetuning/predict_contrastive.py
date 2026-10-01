@@ -18,7 +18,7 @@ from sklearn.decomposition import PCA
 # %%
 # grab checkpoint
 ckpt_path = '../../ckpt/fm_embedder'
-ckpt_name = 'byol_v1.0'
+ckpt_name = 'byol_v3.7'
 ckpt_path = os.path.join(ckpt_path, ckpt_name)
 # list files, find the one that has "last" in it
 ckpt_files = [f for f in os.listdir(ckpt_path) if 'last' in f]
@@ -42,6 +42,11 @@ model.load_state_dict(ckpt['state_dict'])
 model.eval()
 
 # %%
+# test centering
+print(model.use_centering)
+print(model.center)
+
+# %%
 # create a meshgrid of parameters to synthesize (SynthMaps style)
 
 # create ranges for each parameter
@@ -50,8 +55,8 @@ harm_ratio_steps = 51
 mod_idx_steps = 51
 pitches = np.linspace(38, 86, pitch_steps)
 freqs = midi2frequency(pitches)  # x
-ratios = np.linspace(0, 1, harm_ratio_steps) * args.max_harm_ratio  # y
-indices = np.linspace(0, 1, mod_idx_steps) * args.max_mod_idx  # z
+ratios = np.linspace(0.1, 1, harm_ratio_steps) * args.max_harm_ratio  # y
+indices = np.linspace(0.1, 1, mod_idx_steps) * args.max_mod_idx  # z
 
 # make into 3D mesh
 freqs, ratios, indices = np.meshgrid(freqs, ratios, indices)  # y, x, z!
@@ -108,40 +113,40 @@ with torch.no_grad():
 z_all.shape  # (n_samples, latent_size)
 
 # %%
-# standardize the embeddings
-z_mean = z_all.mean(dim=0, keepdim=True)
-z_std = z_all.std(dim=0, keepdim=True)
-z_all_standardized = (z_all - z_mean) / (z_std + 1e-6)  # avoid division by zero
-print(z_mean.shape, z_std.shape, z_all_standardized.shape)
+# # standardize the embeddings
+# z_mean = z_all.mean(dim=0, keepdim=True)
+# z_std = z_all.std(dim=0, keepdim=True)
+# z_all_standardized = (z_all - z_mean) / (z_std + 1e-6)  # avoid division by zero
+# print(z_mean.shape, z_std.shape, z_all_standardized.shape)
 
 # %%
-# robustscale embeddings
+# # robustscale embeddings
 
-scaler = RobustScaler()
-z_all_robustscaled = scaler.fit_transform(z_all.detach().cpu().numpy())
-print(z_all_robustscaled.shape)
+# scaler = RobustScaler()
+# z_all_robustscaled = scaler.fit_transform(z_all.detach().cpu().numpy())
+# print(z_all_robustscaled.shape)
 
 # %%
-# create a PCA projection for z_all
+# # create a PCA projection for z_all
 
-pca_dims = 7
-pca = PCA(n_components=pca_dims, whiten=True)
-z_all_pca = pca.fit_transform(z_all_robustscaled)
-# get the explained variance ratio
-explained_variance = pca.explained_variance_ratio_
-print(f"Explained variance ratio for PCA with {pca_dims} components: {explained_variance.sum() * 100:.2f}%")
+# pca_dims = 7
+# pca = PCA(n_components=pca_dims, whiten=True)
+# z_all_pca = pca.fit_transform(z_all_robustscaled)
+# # get the explained variance ratio
+# explained_variance = pca.explained_variance_ratio_
+# print(f"Explained variance ratio for PCA with {pca_dims} components: {explained_variance.sum() * 100:.2f}%")
 
 # %%
 # UMAP
 mode = 'raw'  # 'standardized', 'robustscaled', 'pca' or 'raw'
-if mode == 'standardized':
-    Z = z_all_standardized.detach().cpu().numpy()
-elif mode == 'robustscaled':
-    Z = z_all_robustscaled
-elif mode == 'pca':
-    Z = z_all_pca
-else:
-    Z = z_all.detach().cpu().numpy()
+# if mode == 'standardized':
+#     Z = z_all_standardized.detach().cpu().numpy()
+# elif mode == 'robustscaled':
+#     Z = z_all_robustscaled
+# elif mode == 'pca':
+#     Z = z_all_pca
+# else:
+Z = z_all.detach().cpu().numpy()
 n = Z.shape[0]
 max_points = 500000
 if n > max_points:
@@ -151,7 +156,7 @@ else:
     idx = np.arange(n)
 
 n_components = 3  # 3 for 3D UMAP
-n_neighbors = 32
+n_neighbors = 256
 min_dist = 0.1  # minimum distance between points in UMAP
 metric = 'cosine'#'euclidean'  # distance metric for UMAP
 emb = umap.UMAP(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, metric=metric).fit_transform(Z[idx])
@@ -221,6 +226,14 @@ if n_components == 2:
     emb = np.hstack((emb, x_scaled.reshape(-1, 1)))
 
 # %%
+# delete 3rd dim
+emb = emb[:, :2]
+
+# if UMAP is 2D, then add 0 as the 3rd column
+if n_components == 2:
+    emb = np.hstack((emb, np.zeros((emb.shape[0], 1))))
+
+# %%
 # save the umap embedding to a json file
 umap_embedding = array2fluid_dataset(emb)
 umap_json_path = os.path.join(predictions_dir, f"umap_embeddings_{mode}_{n_components}D_{n_neighbors}_min_dist_{min_dist}_metric_{metric}.json")
@@ -235,4 +248,5 @@ colors_json_path = os.path.join(predictions_dir, "colors.json")
 with open(colors_json_path, "w") as f:
     json.dump(colors_json, f)
 print(f"Colors saved to {colors_json_path}")
+
 # %%
