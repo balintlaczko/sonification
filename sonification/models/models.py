@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.distributions.beta import Beta
 from .layers import LinearEncoder, LinearDecoder, ResBlock, ResBlock1D, LinearResBlock, ConvEncoder, ConvDecoder, ConvEncoder1D, ConvDecoder1D, ConvEncoder1DRes, ConvDecoder1DRes, LinearDiscriminator, LinearProjector, LinearDiscriminator_w_dropout, MultiScaleEncoder
 from .ddsp import FMSynth, Sinewave
 from torchaudio.transforms import MelSpectrogram, AmplitudeToDB
@@ -3434,6 +3435,8 @@ class PlFMEmbedder(LightningModule):
         self.num_views = args.num_views
         self.apply_transposition = args.apply_transposition > 0
         self.transposition_range = args.transposition_range
+        self.transposition_use_beta = args.transposition_use_beta > 0
+        self.octave_transposition_prob = args.octave_transposition_prob
         self.noise_max_amp = args.noise_max_amp
         self.latent_size = args.latent_size
         self.use_centering = args.use_centering > 0
@@ -3582,6 +3585,16 @@ class PlFMEmbedder(LightningModule):
         ratios = ratios.unsqueeze(1).repeat(1, self.sr)
         indices = indices.unsqueeze(1).repeat(1, self.sr)
         return norm_params, freqs, ratios, indices
+
+
+    def get_transposition_beta(self, size, max_shift=12.0, alpha=5.0, beta=5.0):
+        # Beta(5, 5) produces a bell shape. Higher values = narrower bell.
+        dist = Beta(torch.tensor([alpha]), torch.tensor([beta]))
+        
+        # Samples are in [0, 1]. Multiply by total range, shift by min value.
+        total_range = max_shift * 2
+        shifts = (dist.sample(size).squeeze() * total_range) - max_shift
+        return shifts
     
 
     def forward(self, x):
@@ -3612,14 +3625,32 @@ class PlFMEmbedder(LightningModule):
         norm_params, freqs, ratios, indices = self.sample_fm_params(self.batch_size)
         x = self.input_synth(freqs, ratios, indices).detach() # (batch_size, n_samples)
         views = []
-        for _ in range(self.num_views):
+        
+        # calculate transpositions (if needed)
+        transpositions = None
+        if self.apply_transposition:
+            if self.transposition_use_beta:
+                transpositions = self.get_transposition_beta((self.num_views,), max_shift=self.transposition_range)
+            else:
+                transpositions = torch.rand(self.num_views) * (2 * self.transposition_range) - self.transposition_range
+            # determine if we should apply octave transposition (instead of semitone transposition) based on the probability
+            if self.octave_transposition_prob > 0:
+                octave_mask = torch.rand_like(transpositions) < self.octave_transposition_prob
+                octave_shifts = torch.where(
+                    torch.rand_like(transpositions) > 0.5,
+                    torch.tensor(12.0, device=transpositions.device, dtype=transpositions.dtype),
+                    torch.tensor(-12.0, device=transpositions.device, dtype=transpositions.dtype),
+                )
+                transpositions = torch.where(octave_mask, octave_shifts, transpositions)
+
+        for view_idx in range(self.num_views):
             # copy to x_a
             x_a = x.clone()
 
             # apply transposition augmentation for x_a
             if self.apply_transposition:
-                # get a random number between -2 and 2 for pitch transposition
-                transposition = torch.rand(1) * (2 * self.transposition_range) - self.transposition_range
+                # get a random number for pitch transposition
+                transposition = transpositions[view_idx].unsqueeze(0)
                 target_dur = transposition2duration(transposition.float())[0]
                 # Quantize new_sr to keep gcd(orig,new) large
                 new_sr = int(round(self.sr * float(target_dur) / self.resample_base) * self.resample_base)
