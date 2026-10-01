@@ -372,8 +372,8 @@
             </div>
             <div class="parameter-control">
                 <label>Trajectory Line Width:</label>
-                <input type="range" id="trajectory-linewidth" class="slider" min="0.02" max="2" value="0.12" step="0.02" style="width: 120px;">
-                <span id="trajectory-linewidth-value" class="parameter-value" style="width: 50px;">0.12</span>
+                <input type="range" id="trajectory-linewidth" class="slider" min="0.02" max="1" value="0.04" step="0.01" style="width: 120px;">
+                <span id="trajectory-linewidth-value" class="parameter-value" style="width: 50px;">0.04</span>
             </div>
             <div class="zoom-controls" style="margin-top: 10px;">
                 <button class="zoom-button" id="zoom-in">+</button>
@@ -432,7 +432,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ml-knn@3.0.0/lib/index.min.js"></script>
     <script>
         // Global variables
         let scene, camera, renderer, controls;
@@ -443,26 +442,25 @@
         let selectedPoint = null;
         let hoveredPoint = null;
         let pointCloudGroup; // Container for rotation
-        let knnClassifier = null; // KNN for point selection
-        let pointPositions2D = []; // Screen space positions for KNN
         let originalSizes = []; // Store original sizes for points
         let defaultCameraPosition = new THREE.Vector3(0, 0, 20);
         let defaultPointSize = 0.2; // Default size for points
         let defaultHighlightSize = 0.4; // Default size for highlight point
-
-    // Trajectory state
-    let trajA = null; // index of A
-    let trajB = null; // index of B
-    let trajectoryIndices = []; // array of point indices along the path
-    let trajectoryGroup = null; // container for trajectory visuals
-    let trajectorySegmentsGroup = null; // Group of cylinder segments for thick line
-    let trajectoryPoints = null; // THREE.Points for nodes (sprite-like)
-    let trajectoryPointMaterial = null; // material for nodes
-    let isTrajectoryPlaying = false;
-    let trajectoryTimer = null;
-    let parsedCoordinatesCache = null;
-    let parsedEmbeddingsCache = null; // cached embedding vectors as arrays
-    let parsedFmParamsCache = null;   // cached fm parameter vectors as arrays
+        
+        // Trajectory state
+        let trajA = null; // index of A
+        let trajB = null; // index of B
+        let trajectoryIndices = []; // array of point indices along the path
+        let trajectoryGroup = null; // container for trajectory visuals
+        let trajectorySegmentsGroup = null; // Group of cylinder segments for thick line
+        let trajectoryPoints = null; // THREE.Points for nodes (sprite-like)
+        let trajectoryPointMaterial = null; // material for nodes
+        let isTrajectoryPlaying = false;
+        let trajectoryTimer = null;
+        let parsedCoordinatesCache = null;
+        let parsedEmbeddingsCache = null; // cached embedding vectors as arrays
+        let parsedFmParamsCache = null;   // cached fm parameter vectors as arrays
+        let kdtree = null; // For nearest neighbor search
 
         // Data storage
         let coordinates = null;
@@ -489,15 +487,15 @@
         };
         let dataBBox = null; // THREE.Box3 in data/original attribute space
         
-    // Crop visualization (wireframe box shown during slider interaction)
-    let cropBoxGroup = null;      // Group containing fill + edges + grids + axes
-    let cropBoxFill = null;       // Semi-transparent fill mesh
-    let cropBoxEdges = null;      // Wireframe edges
-    let cropFaceGrids = [];       // 6 custom grid line meshes (one per face)
-    let gridDivisions = 8;        // Grid resolution per face (u and v)
-    let gridMaterial = null;      // Shared material for grids
-    let axisCornerGroups = [];    // 8 groups, each with 3 arrows + 3 labels
-    let cropBoxHideTimer = null;  // Auto-hide timer
+        // Crop visualization (wireframe box shown during slider interaction)
+        let cropBoxGroup = null;      // Group containing fill + edges + grids + axes
+        let cropBoxFill = null;       // Semi-transparent fill mesh
+        let cropBoxEdges = null;      // Wireframe edges
+        let cropFaceGrids = [];       // 6 custom grid line meshes (one per face)
+        let gridDivisions = 8;        // Grid resolution per face (u and v)
+        let gridMaterial = null;      // Shared material for grids
+        let axisCornerGroups = [];    // 8 groups, each with 3 arrows + 3 labels
+        let cropBoxHideTimer = null;  // Auto-hide timer
         
         // Initialize Three.js scene
         function initScene() {
@@ -1911,6 +1909,199 @@
         animate(0);
         
         console.log('SynthMaps initialized. Please load your data files.');
+
+
+        //////////////////////////////////////////////
+        //// AI-translated code from Flucoma KDTree: https://github.com/flucoma/flucoma-core/blob/main/include/flucoma/algorithms/public/KDTree.hpp
+        class MaxHeap {
+            constructor() {
+                this.heap = [];
+            }
+
+            push(val) {
+                this.heap.push(val);
+                this._siftUp(this.heap.length - 1);
+            }
+
+            pop() {
+                if (this.heap.length === 0) return null;
+                const top = this.heap[0];
+                const bottom = this.heap.pop();
+                if (this.heap.length > 0) {
+                    this.heap[0] = bottom;
+                    this._siftDown(0);
+                }
+                return top;
+            }
+
+            peek() {
+                return this.heap.length > 0 ? this.heap[0] : null;
+            }
+
+            size() {
+                return this.heap.length;
+            }
+
+            _siftUp(idx) {
+                let parent = Math.floor((idx - 1) / 2);
+                while (idx > 0 && this.heap[idx].distance > this.heap[parent].distance) {
+                    [this.heap[idx], this.heap[parent]] = [this.heap[parent], this.heap[idx]];
+                    idx = parent;
+                    parent = Math.floor((idx - 1) / 2);
+                }
+            }
+
+            _siftDown(idx) {
+                const length = this.heap.length;
+                let maxIndex = idx;
+                
+                while (true) {
+                    let left = 2 * idx + 1;
+                    let right = 2 * idx + 2;
+
+                    if (left < length && this.heap[left].distance > this.heap[maxIndex].distance) {
+                        maxIndex = left;
+                    }
+                    if (right < length && this.heap[right].distance > this.heap[maxIndex].distance) {
+                        maxIndex = right;
+                    }
+                    if (maxIndex !== idx) {
+                        [this.heap[idx], this.heap[maxIndex]] = [this.heap[maxIndex], this.heap[idx]];
+                        idx = maxIndex;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        class Node {
+            constructor(id, data) {
+                this.id = id;          // String
+                this.data = data;      // Array of numbers
+                this.left = null;      // Node
+                this.right = null;     // Node
+            }
+        }
+
+        class KDTree {
+            /**
+             * @param {Array<{id: string, data: number[]}>} dataset 
+             */
+            constructor(dataset) {
+                this.mNPoints = dataset.length; 
+                this.mDims = dataset.length > 0 ? dataset[0].data.length : 0;
+                this.mRoot = null;
+                this.mInitialized = false;
+
+                if (this.mDims > 0 && this.mNPoints > 0) {
+                    this.mRoot = this._buildTree(dataset, 0);
+                    this.mInitialized = true;
+                }
+            }
+
+            _buildTree(points, depth) {
+                if (points.length === 0) return null;
+                if (points.length === 1) {
+                    return new Node(points[0].id, points[0].data);
+                }
+
+                const d = depth % this.mDims;
+                
+                points.sort((a, b) => a.data[d] - b.data[d]);
+                
+                const median = Math.floor(points.length / 2);
+                const current = new Node(points[median].id, points[median].data);
+
+                if (median > 0) {
+                    current.left = this._buildTree(points.slice(0, median), depth + 1);
+                }
+                if (points.length - median > 1) {
+                    current.right = this._buildTree(points.slice(median + 1), depth + 1);
+                }
+
+                return current;
+            }
+
+            addNode(id, data) {
+                this.mRoot = this._addNode(this.mRoot, id, data, 0);
+                this.mNPoints++;
+            }
+
+            _addNode(current, id, data, depth) {
+                if (current === null) {
+                    return new Node(id, data);
+                }
+
+                const d = depth % this.mDims;
+                if (data[d] < current.data[d]) {
+                    current.left = this._addNode(current.left, id, data, depth + 1);
+                } else {
+                    current.right = this._addNode(current.right, id, data, depth + 1);
+                }
+                return current;
+            }
+
+            _distance(p1, p2) {
+                let sum = 0;
+                for (let i = 0; i < p1.length; i++) {
+                    let diff = p1[i] - p2[i];
+                    sum += diff * diff;
+                }
+                return Math.sqrt(sum); // Euclidean distance calculation
+            }
+
+            kNearest(data, k = 1, radius = 0) {
+                if (data.length !== this.mDims) throw new Error("Dimension mismatch");
+                
+                const knn = new MaxHeap();
+
+                this._kNearest(this.mRoot, data, knn, k, radius, 0);
+
+                // Extract and sort results from heap (closest first)
+                const results = [];
+                while (knn.size() > 0) {
+                    results.push(knn.pop());
+                }
+                results.reverse(); 
+
+                return {
+                    distances: results.map(r => r.distance),
+                    ids: results.map(r => r.node.id)
+                };
+            }
+
+            _kNearest(current, data, knn, k, radius, depth) {
+                if (current === null) return;
+
+                const currentDist = this._distance(current.data, data);
+                const withinRadius = radius > 0 ? currentDist < radius : true;
+
+                if (withinRadius && (knn.size() < k || k === 0)) {
+                    knn.push({ distance: currentDist, node: current });
+                } else if (withinRadius && currentDist < knn.peek().distance) {
+                    knn.pop();
+                    knn.push({ distance: currentDist, node: current });
+                }
+
+                const d = depth % this.mDims;
+                const dimDif = current.data[d] - data[d];
+                
+                let firstBranch = current.left;
+                let secondBranch = current.right;
+
+                if (dimDif <= 0) {
+                    firstBranch = current.right;
+                    secondBranch = current.left;
+                }
+
+                this._kNearest(firstBranch, data, knn, k, radius, depth + 1);
+
+                if (k === 0 || knn.size() < k || Math.abs(dimDif) < knn.peek().distance) {
+                    this._kNearest(secondBranch, data, knn, k, radius, depth + 1);
+                }
+            }
+        }
     </script>
 </body>
 </html>
