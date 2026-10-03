@@ -668,9 +668,8 @@
             const intersects = raycaster.intersectObject(pointCloud);
             
             if (intersects.length > 0) {
-                const parsedCoords = parseFluCoMaData(coordinates);
                 for (const hit of intersects) {
-                    const c = parsedCoords[hit.index]?.values;
+                    const c = coordinates[hit.index];
                     if (c && isPointInCrop(c)) {
                         selectPoint(hit.index);
                         return;
@@ -679,17 +678,16 @@
             }
             
             // Method 2: Find nearest point in screen space
-            const parsedCoords = parseFluCoMaData(coordinates);
             let minDistance = Infinity;
             let nearestIndex = -1;
             
-            parsedCoords.forEach((coord, i) => {
-                if (!isPointInCrop(coord.values)) return; // skip cropped-out points
+            coordinates.forEach((coord, i) => {
+                if (!isPointInCrop(coord)) return; // skip cropped-out points
                 // Transform 3D point to screen space
                 const vector = new THREE.Vector3(
-                    coord.values[0] || 0,
-                    coord.values[1] || 0,
-                    coord.values[2] || 0
+                    coord[0] || 0,
+                    coord[1] || 0,
+                    coord[2] || 0
                 );
                 
                 // Apply the same transformations as the point cloud
@@ -783,25 +781,22 @@
                 pointsGeometry.dispose();
             }
             
-            const parsedCoords = parseFluCoMaData(coordinates);
-            const parsedColors = parseFluCoMaData(colors);
-            
             const positions = [];
             const colorsArray = [];
             
-            parsedCoords.forEach((coord, i) => {
+            coordinates.forEach((coord, i) => {
                 // Use 3D coordinates if available, otherwise use 2D with z=0
                 positions.push(
-                    coord.values[0] || 0,
-                    coord.values[1] || 0,
-                    coord.values[2] || 0
+                    coord[0] || 0,
+                    coord[1] || 0,
+                    coord[2] || 0
                 );
                 
-                if (parsedColors[i]) {
+                if (colors[i]) {
                     colorsArray.push(
-                        parsedColors[i].values[0] || 0.5,
-                        parsedColors[i].values[1] || 0.5,
-                        parsedColors[i].values[2] || 0.5
+                        colors[i][0] || 0.5,
+                        colors[i][1] || 0.5,
+                        colors[i][2] || 0.5
                     );
                 } else {
                     colorsArray.push(0.5, 0.5, 0.5);
@@ -816,8 +811,8 @@
             pointsGeometry.computeBoundingSphere();
             
             // Create size attribute for dynamic sizing
-            const sizes = new Float32Array(parsedCoords.length);
-            for (let i = 0; i < parsedCoords.length; i++) {
+            const sizes = new Float32Array(coordinates.length);
+            for (let i = 0; i < coordinates.length; i++) {
                 sizes[i] = 1.0; // Default size
             }
             pointsGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
@@ -934,9 +929,9 @@
             initializeCropUI(bbox);
             
             // Update UI
-            document.getElementById('point-count').textContent = parsedCoords.length;
+            document.getElementById('point-count').textContent = coordinates.length;
             
-            console.log(`Created point cloud with ${parsedCoords.length} points`);
+            console.log(`Created point cloud with ${coordinates.length} points`);
             console.log(`Bounding box size: x=${size.x.toFixed(2)}, y=${size.y.toFixed(2)}, z=${size.z.toFixed(2)}`);
             console.log(`Applied scale: ${scale.toFixed(4)}`);
             console.log(`Center: x=${center.x.toFixed(2)}, y=${center.y.toFixed(2)}, z=${center.z.toFixed(2)}`);
@@ -1021,10 +1016,8 @@
                 return;
             }
             
-            const parsedCoords = parseFluCoMaData(coordinates);
-            
-            if (parsedCoords[index]) {
-                const coord = parsedCoords[index].values;
+            if (coordinates[index]) {
+                const coord = coordinates[index];
                 // Hide if cropped out
                 if (!isPointInCrop(coord)) {
                     if (highlightPoint) highlightPoint.visible = false;
@@ -1187,7 +1180,8 @@
                 showLoading(true);
                 try {
                     coordinates = await loadJSON(e.target.files[0]);
-                    parsedCoordinatesCache = parseFluCoMaData(coordinates).map(e => e.values);
+                    coordinates = parseFluCoMaData(coordinates).map(e => e.values);
+                    // parsedCoordinatesCache = coordinates.map(e => e.values); // TODO
                     createPointCloud();
                 } catch (err) {
                     console.error('Error loading coordinates:', err);
@@ -1228,6 +1222,7 @@
                 showLoading(true);
                 try {
                     colors = await loadJSON(e.target.files[0]);
+                    colors = parseFluCoMaData(colors).map(e => e.values);
                     createPointCloud();
                 } catch (err) {
                     console.error('Error loading colors:', err);
